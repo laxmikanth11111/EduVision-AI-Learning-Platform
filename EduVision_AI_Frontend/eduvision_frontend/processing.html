@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Processing — EduVision AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="assets/style.css" rel="stylesheet">
+<style>
+.wrap{max-width:640px;margin:0 auto;padding:3.5rem 1rem}
+.step-row{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:.9rem}
+.step-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px}
+.step-done .step-icon{background:rgba(29,158,117,0.18);color:var(--teal)}
+.step-active .step-icon{background:rgba(242,166,35,0.18);color:var(--amber);animation:spin 1s linear infinite}
+.step-pending .step-icon{background:rgba(244,239,228,0.06);color:var(--muted)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.step-done span.label{color:var(--paper)}
+.step-active span.label{color:var(--paper);font-weight:600}
+.step-pending span.label{color:var(--muted)}
+.topic-row{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:2px;padding:10px 12px;margin-bottom:8px;opacity:0;animation:fieldIn .45s ease forwards}
+.type-select{font-size:.78rem;padding:.35rem .6rem;border-radius:2px;border:1px solid var(--line);background:transparent;color:var(--muted-strong)}
+#topics{display:none}
+</style>
+</head>
+<body>
+
+<nav class="navbar py-3">
+  <div class="container d-flex justify-content-between align-items-center">
+    <a href="index.html" style="text-decoration:none;color:inherit;" class="d-flex align-items-center gap-2">
+      <div class="brand-mark">EV</div>
+      <span class="display-font fw-bold" style="font-size:1.05rem;">EduVision AI</span>
+    </a>
+    <div class="avatar">JL</div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="d-flex align-items-center gap-2 mb-4 hero-anim">
+    <i class="ti ti-file-type-pdf" style="font-size:20px;color:var(--amber);"></i>
+    <div>
+      <p style="font-weight:500;font-size:.95rem;margin:0;">Computer_networks.pdf</p>
+      <p class="hint" style="margin:0;">4.2 MB &middot; 18 pages</p>
+    </div>
+  </div>
+
+  <div class="frame p-4 mb-4 hero-anim" style="animation-delay:.1s">
+    <p class="hint mb-2">Processing</p>
+    <div class="step-row step-done"><div class="step-icon"><i class="ti ti-check"></i></div><span class="label">File uploaded</span></div>
+    <div class="step-row step-done"><div class="step-icon"><i class="ti ti-check"></i></div><span class="label">Text extracted</span></div>
+    <div class="step-row step-active" id="row-identify"><div class="step-icon"><i class="ti ti-loader-2"></i></div><span class="label">Identifying topics</span></div>
+    <div class="step-row step-pending" id="row-ready"><div class="step-icon"><i class="ti ti-point"></i></div><span class="label">Ready for review</span></div>
+  </div>
+
+  <p class="hint mb-3" id="review-hint" style="display:none;">6 topics detected. Choose a visual type for each, or leave the suggested one.</p>
+  <div id="topics"></div>
+
+  <a href="player.html" class="btn-signal w-100 d-block text-center mt-3" id="start-btn" style="text-decoration:none;display:none;">Start <i class="ti ti-player-play" style="font-size:13px;"></i></a>
+</div>
+
+<footer style="text-align:center;">EduVision AI &mdash; no accounts required, no roles, just the idea, seen clearly.</footer>
+<script src="assets/app.js"></script>
+<script>
+const topics = [
+  { name: 'Network basics', type: 'Animation' },
+  { name: 'OSI model', type: 'Animation' },
+  { name: 'TCP/IP', type: 'Simulation' },
+  { name: 'Routing', type: 'Animation' },
+  { name: 'Switching', type: 'Image' },
+  { name: 'Network security', type: 'Video' }
+];
+
+setTimeout(() => {
+  document.getElementById('row-identify').className = 'step-row step-done';
+  document.getElementById('row-identify').querySelector('.step-icon').innerHTML = '<i class="ti ti-check"></i>';
+  document.getElementById('row-ready').className = 'step-row step-active';
+  document.getElementById('row-ready').querySelector('.step-icon').innerHTML = '<i class="ti ti-loader-2"></i>';
+
+  setTimeout(() => {
+    document.getElementById('row-ready').className = 'step-row step-done';
+    document.getElementById('row-ready').querySelector('.step-icon').innerHTML = '<i class="ti ti-check"></i>';
+    document.getElementById('review-hint').style.display = 'block';
+
+    const container = document.getElementById('topics');
+    container.style.display = 'block';
+    topics.forEach((t, i) => {
+      const row = document.createElement('div');
+      row.className = 'topic-row';
+      row.style.animationDelay = (i * 0.08) + 's';
+      row.innerHTML = `
+        <span style="font-size:.88rem;">${String(i+1).padStart(2,'0')}  ${t.name}</span>
+        <select class="type-select">
+          <option ${t.type==='Animation'?'selected':''}>Animation</option>
+          <option ${t.type==='Image'?'selected':''}>Image</option>
+          <option ${t.type==='Video'?'selected':''}>Video</option>
+          <option ${t.type==='Simulation'?'selected':''}>Simulation</option>
+        </select>`;
+      container.appendChild(row);
+    });
+    document.getElementById('start-btn').style.display = 'block';
+  }, 1400);
+}, 1600);
+</script>
+</body>
+</html>

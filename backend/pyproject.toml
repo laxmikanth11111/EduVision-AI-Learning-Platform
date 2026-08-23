@@ -1,0 +1,162 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eduvision-ai-backend"
+version = "1.0.0"
+description = "EduVision AI — AI-powered Interactive Learning Platform Backend"
+requires-python = ">=3.13"
+authors = [
+    { name = "EduVision AI Team" },
+]
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "email-validator>=2.2.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "redis[hiredis]>=5.2.0",
+    "celery>=5.4.0",
+    "boto3>=1.35.0",
+    "botocore>=1.35.0",
+    "python-multipart>=0.0.12",
+    "httpx>=0.28.0",
+    "python-jose[cryptography]>=3.3.0",
+    "argon2-cffi>=23.1.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-dotenv>=1.0.1",
+    "structlog>=24.4.0",
+    "tenacity>=9.0.0",
+    "orjson>=3.10.0",
+    "pypdf>=6.14.2",
+    "python-docx>=1.2.0",
+    "python-pptx>=1.0.2",
+    "opencv-python-headless>=4.10.0",
+    "numpy>=1.26.0",
+    "pillow>=10.4.0",
+    "imageio-ffmpeg>=0.5.1",
+    "gtts>=2.5.0",
+    "edge-tts>=6.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.28.0",
+    "ruff>=0.6.0",
+    "black>=24.10.0",
+    "isort>=5.13.0",
+    "mypy>=1.12.0",
+    "pre-commit>=4.0.0",
+    "factory-boy>=3.3.0",
+    "asgi-lifespan>=2.1.0",
+    "aiosqlite>=0.20.0",
+    "pytest-env>=1.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+fix = true
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "A", "C4",
+    "T10", "FA", "ISC", "ICN", "LOG", "G", "COM",
+    "PT", "SIM", "TID", "PIE", "FIX", "ERA",
+]
+ignore = [
+    "E501",
+    "COM812",
+    "ISC001",
+    "E712",
+    "B904",
+    "B008",
+    "A002",
+    "UP046",
+    "UP047",
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["F401", "S101", "PLR2004"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+disallow_untyped_defs = true
+disallow_any_unimported = false
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_configs = true
+exclude = [
+    "migrations/",
+    "tests/",
+    ".venv/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+markers = [
+    "integration: marks tests that require a PostgreSQL database (testcontainers or CI service)",
+    "unit: marks tests that run with SQLite (default for all tests)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::RuntimeWarning",
+]
+env = [
+    "APP_ENV=test",
+    "DATABASE_URL=sqlite+aiosqlite:///test.db",
+    "REDIS_URL=redis://localhost:6379/0",
+    "REDIS_SOCKET_TIMEOUT=1.0",
+    "S3_ENDPOINT_URL=http://localhost:9000",
+    "S3_ACCESS_KEY_ID=minioadmin",
+    "S3_SECRET_ACCESS_KEY=minioadmin",
+    "S3_BUCKET_NAME=eduvision-test",
+    "LOG_LEVEL=CRITICAL",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "tests/*",
+    "migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "def __repr__",
+    "def __str__",
+]

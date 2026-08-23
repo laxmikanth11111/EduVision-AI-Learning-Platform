@@ -1,0 +1,37 @@
+.venv
+.venv311
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.db
+uploads
+*.sqlite
+*.sqlite3
+.coverage
+storage-data
+
+# ── Secrets / env ──────────────────────────────────────────────────────────
+.env
+.env.*
+
+# ── Logs ───────────────────────────────────────────────────────────────────
+*.log
+dump.rdb
+
+# ── Dev / test artifacts ───────────────────────────────────────────────────
+tests/
+scripts/
+test_check.py
+test_sanity.py
+test_debug.py
+test_direct.py
+.pytest_cache/
+htmlcov/
+*.egg-info/
+celerybeat-schedule
+.git/
+.gitignore

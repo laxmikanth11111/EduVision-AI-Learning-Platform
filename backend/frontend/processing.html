@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Processing — EduVision AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+    --ink: #0E1A2B;
+    --paper: #F4EFE4;
+    --amber: #F2A623;
+    --teal: #1D9E75;
+    --coral: #D85A30;
+    --line: rgba(244,239,228,0.14);
+    --muted: rgba(244,239,228,0.55);
+    --muted-strong: rgba(244,239,228,0.72);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--ink); color: var(--paper); font-family: 'Manrope', sans-serif; min-height: 100vh; }
+h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+
+nav { border-bottom: 1px solid var(--line); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+.nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+.brand-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--amber); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink); font-family: 'Space Grotesk', sans-serif; }
+.hint { font-size: .8rem; color: var(--muted); }
+
+.wrap { max-width: 640px; margin: 0 auto; padding: 3.5rem 1.5rem; }
+
+.frame { border: 1px solid var(--line); padding: 1.5rem; background: rgba(244,239,228,0.02); position: relative; }
+.corner { position: absolute; width: 9px; height: 9px; border: 1px solid var(--amber); }
+.corner-tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+.corner-br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+.step-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: .9rem; }
+.step-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; }
+.step-done .step-icon { background: rgba(29,158,117,0.18); color: var(--teal); }
+.step-active .step-icon { background: rgba(242,166,35,0.18); color: var(--amber); animation: spin 1s linear infinite; }
+.step-pending .step-icon { background: rgba(244,239,228,0.06); color: var(--muted); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.step-done span.label { color: var(--paper); }
+.step-active span.label { color: var(--paper); font-weight: 600; }
+.step-pending span.label { color: var(--muted); }
+
+.topic-row { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 2px; padding: 10px 12px; margin-bottom: 8px; opacity: 0; animation: fieldIn .45s ease forwards; }
+@keyframes fieldIn { to { opacity: 1; transform: translateY(0); } }
+.topic-name { font-size: .88rem; color: var(--paper); }
+
+.btn-signal { background: var(--amber); color: var(--ink); border: none; font-weight: 700; padding: .8rem 1.5rem; border-radius: 2px; font-family: 'Space Grotesk', sans-serif; cursor: pointer; font-size: .95rem; transition: transform .2s, background .2s; width: 100%; display: none; text-align: center; text-decoration: none; }
+.btn-signal:hover { background: #ffbf47; color: var(--ink); }
+.btn-signal:active { transform: scale(.96); }
+
+footer { text-align: center; padding: 1.75rem 0; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 3rem; }
+</style>
+</head>
+<body>
+
+<nav>
+    <a href="/frontend/upload.html" class="nav-brand">
+        <div class="brand-mark">EV</div>
+        <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;">EduVision AI</span>
+    </a>
+    <span class="hint" id="fileInfo"></span>
+</nav>
+
+<div class="wrap">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem;">
+        <div style="font-size:1.3rem;">&#128196;</div>
+        <div>
+            <p style="font-weight:500;font-size:.95rem;margin:0;" id="deckTitle">Loading...</p>
+            <p class="hint" style="margin:0;" id="deckMeta"></p>
+        </div>
+    </div>
+
+    <div class="frame" style="padding:1.5rem;">
+        <div class="corner corner-tl"></div><div class="corner corner-br"></div>
+        <p class="hint" style="margin-bottom:.5rem;">Processing</p>
+        <div class="step-row step-done" id="row-upload"><div class="step-icon">&#10003;</div><span class="label">File uploaded</span></div>
+        <div class="step-row step-pending" id="row-extract"><div class="step-icon">&#9675;</div><span class="label">Text extracted</span></div>
+        <div class="step-row step-pending" id="row-topics"><div class="step-icon">&#9675;</div><span class="label">Identifying topics</span></div>
+        <div class="step-row step-pending" id="row-lesson"><div class="step-icon">&#9675;</div><span class="label">Generating descriptions</span></div>
+        <div class="step-row step-pending" id="row-ready"><div class="step-icon">&#9675;</div><span class="label">Ready for review</span></div>
+    </div>
+
+    <p class="hint" id="review-hint" style="margin-top:1.25rem;display:none;"></p>
+    <div id="topics" style="display:none;"></div>
+
+    <a href="#" class="btn-signal" id="start-btn">Start <span style="font-size:13px;">&#9654;</span></a>
+</div>
+
+<footer>EduVision AI &mdash; no accounts required, no roles, just the idea, seen clearly.</footer>
+
+<script>
+const API = '/api/v1';
+const user = JSON.parse(localStorage.getItem('user') || 'null');
+if (!user) { window.location.href = '/frontend/signin.html'; }
+
+function authHeaders() {
+    const token = localStorage.getItem('access_token');
+    return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+
+async function authFetch(url, opts = {}) {
+    if (!opts.headers) opts.headers = {};
+    Object.assign(opts.headers, authHeaders());
+    let res = await fetch(url, opts);
+    if (res.status === 401) {
+        try {
+            const refreshRes = await fetch(API + '/auth/refresh', { method: 'POST' });
+            if (refreshRes.ok) {
+                const refreshData = await refreshRes.json();
+                const newToken = refreshData.access_token || refreshData.data?.access_token || refreshData.tokens?.access_token;
+                if (newToken) {
+                    localStorage.setItem('access_token', newToken);
+                    if (refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token) {
+                        localStorage.setItem('refresh_token', refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token);
+                    }
+                    opts.headers['Authorization'] = 'Bearer ' + newToken;
+                    res = await fetch(url, opts);
+                }
+            }
+        } catch (e) { /* refresh failed */ }
+        if (res.status === 401) {
+            window.location.href = '/frontend/signin.html';
+            throw new Error('Session expired. Please sign in again.');
+        }
+    }
+    return res;
+}
+
+const params = new URLSearchParams(window.location.search);
+const deckId = params.get('id');
+if (!deckId) { window.location.href = '/frontend/upload.html'; }
+
+function setStep(id, state) {
+    const el = document.getElementById(id);
+    el.className = 'step-row step-' + state;
+    const icon = el.querySelector('.step-icon');
+    if (state === 'done') icon.innerHTML = '&#10003;';
+    else if (state === 'active') icon.innerHTML = '&#8987;';
+    else icon.innerHTML = '&#9675;';
+}
+
+let lessonId = null;
+
+let extractPolls = 0;
+const MAX_EXTRACT_POLL = 200;   // ~5 min at 1.5s
+
+let lessonPolls = 0;
+const MAX_LESSON_POLL = 400;    // ~10 min at 1.5s
+
+let lessonTriggered = false;
+
+async function triggerLessonGeneration() {
+    if (lessonTriggered) return;
+    lessonTriggered = true;
+    try {
+        const titleEl = document.getElementById('deckTitle');
+        const title = titleEl ? titleEl.textContent : 'Auto-generated lesson';
+        await authFetch(API + '/presentations/' + deckId + '/lessons', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ mode: 'slide', title: title }),
+        });
+    } catch (e) {
+        lessonTriggered = false;
+    }
+}
+
+async function poll() {
+    if (extractPolls++ > MAX_EXTRACT_POLL) {
+        const row = document.getElementById('row-extract');
+        row.className = 'step-row step-pending';
+        row.querySelector('.step-icon').innerHTML = '&#10007;';
+        row.querySelector('.label').textContent = 'Extraction timed out — refresh to retry';
+        return;
+    }
+
+    try {
+        const res = await authFetch(API + '/presentations/' + deckId);
+        if (!res.ok) throw new Error('Failed to fetch deck');
+        const data = await res.json();
+        const pres = data.data;
+
+        document.getElementById('deckTitle').textContent = pres.title;
+        document.getElementById('deckMeta').textContent = (pres.slide_count || 0) + ' topics';
+
+        const ext = pres.extraction_status || 'none';
+
+        if (ext === 'none' || ext === 'processing') {
+            setStep('row-upload', 'done');
+            setStep('row-extract', 'active');
+            setTimeout(poll, 1500);
+        } else if (ext === 'ready') {
+            setStep('row-upload', 'done');
+            setStep('row-extract', 'done');
+            setStep('row-topics', 'done');
+            await pollLesson();
+        } else if (ext === 'failed') {
+            setStep('row-extract', 'pending');
+            document.getElementById('row-extract').querySelector('.label').textContent = 'Extraction failed';
+        }
+    } catch (e) {
+        setTimeout(poll, 2000);
+    }
+}
+
+async function pollLesson() {
+    if (lessonPolls++ > MAX_LESSON_POLL) {
+        const row = document.getElementById('row-lesson');
+        row.className = 'step-row step-pending';
+        row.querySelector('.step-icon').innerHTML = '&#10007;';
+        row.querySelector('.label').textContent = 'Generation timed out — refresh to retry';
+        return;
+    }
+
+    try {
+        const res = await authFetch(API + '/presentations/' + deckId + '/lessons?page_size=1');
+        if (!res.ok) throw new Error('Failed to fetch lessons');
+        const data = await res.json();
+
+        if (!data.data || data.data.length === 0) {
+            setStep('row-lesson', 'active');
+            await triggerLessonGeneration();
+            setTimeout(pollLesson, 3000);
+            return;
+        }
+
+        const lesson = data.data[0];
+        lessonId = lesson.id;
+
+        if (lesson.status === 'queued' || lesson.status === 'processing') {
+            setStep('row-topics', 'done');
+            setStep('row-lesson', 'active');
+            const secs = lessonPolls * 3;
+            document.getElementById('deckMeta').textContent = 'Generating descriptions… ' + secs + 's elapsed';
+            setTimeout(pollLesson, 3000);
+        } else if (lesson.status === 'ready' || lesson.status === 'completed') {
+            setStep('row-lesson', 'done');
+            setStep('row-ready', 'done');
+            await showTopics(lesson);
+        } else if (lesson.status === 'failed') {
+            setStep('row-lesson', 'pending');
+            document.getElementById('row-lesson').querySelector('.label').textContent = 'Generation failed';
+        }
+    } catch (e) {
+        setTimeout(pollLesson, 2000);
+    }
+}
+
+async function showTopics(lesson) {
+    const statusRes = await authFetch(API + '/presentations/' + deckId + '/lessons/' + lessonId);
+    if (!statusRes.ok) return;
+    const lessonData = await statusRes.json();
+    const version = lessonData.data.version;
+    const blocks = version ? version.blocks : [];
+
+    document.getElementById('review-hint').style.display = 'block';
+    document.getElementById('review-hint').textContent = blocks.length + ' topics detected. Ready to start.';
+
+    const container = document.getElementById('topics');
+    container.style.display = 'block';
+    container.innerHTML = '';
+
+    blocks.forEach((b, i) => {
+        const row = document.createElement('div');
+        row.className = 'topic-row';
+        row.style.animationDelay = (i * 0.08) + 's';
+        row.innerHTML = '<span class="topic-name">' + String(i + 1).padStart(2, '0') + '&nbsp;&nbsp;' + escHtml(b.topic) + '</span>';
+        container.appendChild(row);
+    });
+
+    const btn = document.getElementById('start-btn');
+    btn.style.display = 'block';
+    btn.href = '/frontend/player.html?lesson=' + lessonId + '&deck=' + deckId;
+}
+
+function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+// Start polling
+poll();
+</script>
+</body>
+</html>

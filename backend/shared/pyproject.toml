@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eduvision-ai-shared"
+version = "1.0.0"
+description = "EduVision AI — Shared types, validators, and constants"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.9.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["shared*"]

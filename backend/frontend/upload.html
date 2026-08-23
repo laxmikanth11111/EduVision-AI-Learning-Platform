@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Deck — EduVision AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0E1A2B;
+            --paper: #F4EFE4;
+            --amber: #F2A623;
+            --teal: #1D9E75;
+            --coral: #D85A30;
+            --line: rgba(244,239,228,0.14);
+            --muted: rgba(244,239,228,0.55);
+            --muted-strong: rgba(244,239,228,0.72);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--ink); color: var(--paper); font-family: 'Manrope', sans-serif; min-height: 100vh; }
+        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+
+        nav { border-bottom: 1px solid var(--line); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+        .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+        .brand-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--amber); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink); font-family: 'Space Grotesk', sans-serif; }
+        .nav-right { display: flex; align-items: center; gap: 16px; }
+        .nav-user { font-size: .85rem; color: var(--muted-strong); }
+        .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: .5rem 1rem; border-radius: 2px; cursor: pointer; font-size: .85rem; transition: border-color .2s, color .2s; }
+        .btn-ghost:hover { border-color: var(--paper); color: var(--paper); }
+
+        .container { max-width: 680px; margin: 3.5rem auto; padding: 0 1.5rem; }
+
+        .mode-tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 2rem; }
+        .mode-tab { padding: .6rem 1.4rem; font-size: .88rem; cursor: pointer; color: var(--muted); transition: background .2s, color .2s; font-family: 'Space Grotesk', sans-serif; border: none; background: transparent; }
+        .mode-tab.active { background: var(--amber); color: var(--ink); font-weight: 600; }
+        .mode-tab:hover:not(.active) { color: var(--paper); }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .frame { border: 1px solid var(--line); padding: 2rem; background: rgba(244,239,228,0.02); position: relative; }
+        .corner { position: absolute; width: 9px; height: 9px; border: 1px solid var(--amber); }
+        .corner-tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+        .corner-br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+        .form-label { font-size: .85rem; color: var(--muted-strong); font-family: 'Space Grotesk', sans-serif; display: block; margin-bottom: .4rem; }
+        .form-control { width: 100%; background: transparent; border: 1px solid var(--line); color: var(--paper); border-radius: 2px; padding: .7rem .9rem; font-size: .9rem; font-family: 'Manrope', sans-serif; }
+        .form-control:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+        .form-control::placeholder { color: rgba(244,239,228,0.35); }
+        textarea.form-control { resize: vertical; min-height: 100px; }
+
+        .form-group { margin-bottom: 1.25rem; }
+
+        .btn-signal { background: var(--amber); color: var(--ink); border: none; font-weight: 700; padding: .8rem 1.5rem; border-radius: 2px; font-family: 'Space Grotesk', sans-serif; cursor: pointer; font-size: .95rem; transition: transform .2s, background .2s; width: 100%; }
+        .btn-signal:hover { background: #ffbf47; }
+        .btn-signal:active { transform: scale(.96); }
+        .btn-signal:disabled { opacity: .5; cursor: not-allowed; }
+
+        .btn-outline { background: transparent; color: var(--paper); border: 1px solid var(--line); padding: .7rem 1.5rem; border-radius: 2px; cursor: pointer; font-size: .9rem; font-family: 'Space Grotesk', sans-serif; transition: border-color .2s; }
+        .btn-outline:hover { border-color: var(--paper); }
+
+        .upload-zone { border: 2px dashed var(--line); border-radius: 4px; padding: 3rem 2rem; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; }
+        .upload-zone:hover, .upload-zone.dragover { border-color: var(--amber); background: rgba(242,166,35,0.05); }
+        .upload-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+        .upload-text { font-size: .95rem; color: var(--muted-strong); margin-bottom: .4rem; }
+        .upload-hint { font-size: .8rem; color: var(--muted); }
+        #fileInput { display: none; }
+
+        .topic-inputs { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .75rem; }
+        .topic-row { display: flex; gap: .5rem; align-items: center; }
+        .topic-row .form-control { flex: 1; }
+        .topic-num { font-family: 'Space Grotesk', sans-serif; font-size: .8rem; color: var(--amber); min-width: 24px; text-align: right; }
+        .btn-remove { background: transparent; border: none; color: var(--coral); cursor: pointer; font-size: 1.1rem; padding: .3rem; line-height: 1; }
+        .btn-remove:hover { color: #ff7b5a; }
+        .btn-add { background: transparent; border: 1px dashed var(--line); color: var(--muted); padding: .5rem; border-radius: 2px; cursor: pointer; font-size: .85rem; width: 100%; transition: border-color .2s, color .2s; font-family: 'Space Grotesk', sans-serif; }
+        .btn-add:hover { border-color: var(--amber); color: var(--amber); }
+
+        .status { margin-top: 1.25rem; padding: .8rem 1rem; border-radius: 2px; font-size: .85rem; display: none; }
+        .status.success { background: rgba(29,158,117,0.15); color: var(--teal); border: 1px solid rgba(29,158,117,0.3); display: block; }
+        .status.error { background: rgba(216,90,48,0.15); color: var(--coral); border: 1px solid rgba(216,90,48,0.3); display: block; }
+        .status.loading { background: rgba(242,166,35,0.1); color: var(--amber); border: 1px solid rgba(242,166,35,0.25); display: block; }
+
+        .deck-list { margin-top: 2.5rem; }
+        .deck-list h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--muted-strong); }
+        .deck-item { border: 1px solid var(--line); border-radius: 2px; padding: 1rem 1.25rem; margin-bottom: .5rem; display: flex; align-items: center; justify-content: space-between; transition: border-color .2s; cursor: pointer; }
+        .deck-item:hover { border-color: var(--amber); }
+        .deck-title { font-weight: 500; color: var(--paper); font-size: .95rem; }
+        .deck-meta { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+        .deck-status { font-size: .78rem; padding: .2rem .6rem; border-radius: 2px; font-family: 'Space Grotesk', sans-serif; }
+        .deck-status.ready { background: rgba(29,158,117,0.15); color: var(--teal); }
+        .deck-status.processing { background: rgba(242,166,35,0.12); color: var(--amber); }
+        .deck-status.draft { background: rgba(244,239,228,0.08); color: var(--muted); }
+
+        footer { text-align: center; padding: 1.75rem 0; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 3rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/frontend/upload.html" class="nav-brand">
+            <div class="brand-mark">EV</div>
+            <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;">EduVision AI</span>
+        </a>
+        <div class="nav-right">
+            <span class="nav-user" id="userName"></span>
+            <button class="btn-ghost" id="logoutBtn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1 style="font-size:1.7rem;margin-bottom:.5rem;">Create a New Deck</h1>
+        <p style="color:var(--muted);margin-bottom:1.5rem;font-size:.9rem;">Upload a document or type topics manually to generate interactive learning materials.</p>
+
+        <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="upload">Upload File</button>
+            <button class="mode-tab" data-mode="manual">Type Topics</button>
+        </div>
+
+        <!-- UPLOAD PANEL -->
+        <div class="panel active" id="panel-upload">
+            <div class="frame" style="padding:0;border:none;">
+                <div class="upload-zone" id="dropZone">
+                    <div class="upload-icon">&#128196;</div>
+                    <div class="upload-text">Drag and drop your file here</div>
+                    <div class="upload-hint">PDF, DOCX, PPTX, TXT &mdash; up to 100 MB</div>
+                    <button class="btn-outline" id="browseBtn" style="margin-top:1rem;">Browse Files</button>
+                </div>
+            </div>
+            <input type="file" id="fileInput" accept=".pdf,.docx,.pptx,.txt">
+        </div>
+
+        <!-- MANUAL PANEL -->
+        <div class="panel" id="panel-manual">
+            <div class="frame">
+                <div class="corner corner-tl"></div><div class="corner corner-br"></div>
+                <div class="form-group">
+                    <label class="form-label">Deck Title</label>
+                    <input class="form-control" id="manualTitle" placeholder="e.g. Introduction to Machine Learning">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Topics (one per line)</label>
+                    <div class="topic-inputs" id="topicInputs">
+                        <div class="topic-row">
+                            <span class="topic-num">01</span>
+                            <input class="form-control topic-field" placeholder="e.g. What is Machine Learning?">
+                            <button class="btn-remove" title="Remove">&times;</button>
+                        </div>
+                        <div class="topic-row">
+                            <span class="topic-num">02</span>
+                            <input class="form-control topic-field" placeholder="e.g. Supervised vs Unsupervised Learning">
+                            <button class="btn-remove" title="Remove">&times;</button>
+                        </div>
+                        <div class="topic-row">
+                            <span class="topic-num">03</span>
+                            <input class="form-control topic-field" placeholder="e.g. Neural Networks Basics">
+                            <button class="btn-remove" title="Remove">&times;</button>
+                        </div>
+                    </div>
+                    <button class="btn-add" id="addTopicBtn">+ Add Topic</button>
+                </div>
+                <button class="btn-signal" id="manualSubmitBtn">Create Deck</button>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="deck-list" id="deckList" style="display:none;">
+            <h2>Recent Decks</h2>
+            <div id="deckItems"></div>
+        </div>
+    </div>
+
+    <footer>EduVision AI &mdash; no accounts required, no roles, just the idea, seen clearly.</footer>
+
+    <script>
+    const API = '/api/v1';
+    (async function() {
+        let user = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!user) {
+            // Post-Google-OAuth bootstrap: callback set httpOnly cookies only,
+            // so hydrate localStorage via the refresh endpoint. If no session
+            // exists, refresh returns 401 and we fall through to sign-in.
+            try {
+                const r = await fetch(API + '/auth/refresh', { method: 'POST' });
+                if (r.ok) {
+                    const d = await r.json();
+                    const at = d.access_token || d.data?.access_token || d.tokens?.access_token;
+                    const rt = d.refresh_token || d.data?.refresh_token || d.tokens?.refresh_token;
+                    if (at) {
+                        localStorage.setItem('access_token', at);
+                        if (rt) localStorage.setItem('refresh_token', rt);
+                        const me = await fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + at } });
+                        if (me.ok) {
+                            let u = await me.json();
+                            u = u.user || u;
+                            localStorage.setItem('user', JSON.stringify(u));
+                            user = u;
+                        }
+                    }
+                }
+            } catch (e) { /* fall through to sign-in redirect */ }
+        }
+        if (!user) { window.location.href = '/frontend/signin.html'; }
+        else { document.getElementById('userName').textContent = user.name || user.email; }
+    })();
+
+    function authHeaders() {
+        const token = localStorage.getItem('access_token');
+        return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    async function authFetch(url, opts = {}) {
+        if (!opts.headers) opts.headers = {};
+        Object.assign(opts.headers, authHeaders());
+        let res = await fetch(url, opts);
+        if (res.status === 401) {
+            try {
+                const refreshRes = await fetch(API + '/auth/refresh', { method: 'POST' });
+                if (refreshRes.ok) {
+                    const refreshData = await refreshRes.json();
+                    const newToken = refreshData.access_token || refreshData.data?.access_token || refreshData.tokens?.access_token;
+                    if (newToken) {
+                        localStorage.setItem('access_token', newToken);
+                        if (refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token) {
+                            localStorage.setItem('refresh_token', refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token);
+                        }
+                        opts.headers['Authorization'] = 'Bearer ' + newToken;
+                        res = await fetch(url, opts);
+                    }
+                }
+            } catch (e) { /* refresh failed */ }
+            if (res.status === 401) {
+                window.location.href = '/frontend/signin.html';
+                throw new Error('Session expired. Please sign in again.');
+            }
+        }
+        return res;
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+        await fetch(API + '/auth/logout', { method: 'POST', credentials: 'include' });
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        window.location.href = '/frontend/signin.html';
+    });
+
+    // Mode tabs
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById('panel-' + tab.dataset.mode).classList.add('active');
+            hideStatus();
+        });
+    });
+
+    // Status helpers
+    const statusEl = document.getElementById('status');
+    function showStatus(msg, type) {
+        statusEl.textContent = msg;
+        statusEl.className = 'status ' + type;
+    }
+    function hideStatus() { statusEl.className = 'status'; }
+
+    // ── Upload path ─────────────────────────────────────────────────────────
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    dropZone.addEventListener('click', () => fileInput.click());
+    document.getElementById('browseBtn').addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) uploadFile(fileInput.files[0]); });
+
+    async function uploadFile(file) {
+        showStatus('Uploading ' + file.name + '...', 'loading');
+        try {
+            const createRes = await authFetch(API + '/presentations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                body: JSON.stringify({ title: file.name.replace(/\.[^.]+$/, ''), description: '' }),
+            });
+            if (!createRes.ok) { const err = await createRes.json(); throw new Error(err.detail || 'Failed to create deck'); }
+            const deck = await createRes.json();
+            const deckId = deck.data.id;
+
+            const formData = new FormData();
+            formData.append('source', file);
+            const uploadRes = await authFetch(API + '/presentations/' + deckId + '/source', {
+                method: 'POST',
+                headers: authHeaders(),
+                body: formData,
+            });
+            if (!uploadRes.ok) { const err = await uploadRes.json(); throw new Error(err.detail || 'Failed to upload file'); }
+
+            showStatus('Upload complete! Redirecting...', 'success');
+            setTimeout(() => { window.location.href = '/frontend/processing.html?id=' + deckId; }, 600);
+        } catch (err) {
+            showStatus(err.message, 'error');
+        }
+    }
+
+    // ── Manual path ─────────────────────────────────────────────────────────
+    const topicInputs = document.getElementById('topicInputs');
+    let topicCount = 3;
+
+    function renumber() {
+        const rows = topicInputs.querySelectorAll('.topic-row');
+        rows.forEach((r, i) => { r.querySelector('.topic-num').textContent = String(i + 1).padStart(2, '0'); });
+        topicCount = rows.length;
+    }
+
+    document.getElementById('addTopicBtn').addEventListener('click', () => {
+        topicCount++;
+        const row = document.createElement('div');
+        row.className = 'topic-row';
+        row.innerHTML = '<span class="topic-num">' + String(topicCount).padStart(2, '0') + '</span>' +
+            '<input class="form-control topic-field" placeholder="Topic title">' +
+            '<button class="btn-remove" title="Remove">&times;</button>';
+        row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); renumber(); });
+        topicInputs.appendChild(row);
+    });
+
+    topicInputs.querySelectorAll('.btn-remove').forEach(btn => {
+        btn.addEventListener('click', () => { btn.closest('.topic-row').remove(); renumber(); });
+    });
+
+    document.getElementById('manualSubmitBtn').addEventListener('click', async () => {
+        hideStatus();
+        const title = document.getElementById('manualTitle').value.trim();
+        if (!title) { showStatus('Please enter a deck title.', 'error'); return; }
+
+        const topics = Array.from(topicInputs.querySelectorAll('.topic-field'))
+            .map(f => f.value.trim())
+            .filter(t => t.length > 0);
+
+        if (topics.length === 0) { showStatus('Please enter at least one topic.', 'error'); return; }
+
+        showStatus('Creating deck with ' + topics.length + ' topics...', 'loading');
+        try {
+            const res = await authFetch(API + '/presentations/manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                body: JSON.stringify({ title: title, topics: topics }),
+            });
+            if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Failed to create deck'); }
+            const deck = await res.json();
+            showStatus('Deck created! Redirecting...', 'success');
+            setTimeout(() => { window.location.href = '/frontend/processing.html?id=' + deck.data.id; }, 600);
+        } catch (err) {
+            showStatus(err.message, 'error');
+        }
+    });
+
+    // ── Deck listing ────────────────────────────────────────────────────────
+    async function loadDecks() {
+        try {
+            const res = await authFetch(API + '/presentations?page_size=10');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.data && data.data.length) {
+                document.getElementById('deckList').style.display = 'block';
+                document.getElementById('deckItems').innerHTML = data.data.map(d => {
+                    const st = d.extraction_status || 'none';
+                    const statusClass = st === 'ready' ? 'ready' : st === 'processing' ? 'processing' : 'draft';
+                    return '<div class="deck-item" onclick="window.location.href=\'/frontend/processing.html?id=' + d.id + '\'">' +
+                        '<div><div class="deck-title">' + escHtml(d.title) + '</div>' +
+                        '<div class="deck-meta">' + (d.slide_count || 0) + ' topics &middot; ' + st + '</div></div>' +
+                        '<span class="deck-status ' + statusClass + '">' + statusClass + '</span></div>';
+                }).join('');
+            }
+        } catch (e) {}
+    }
+
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    loadDecks();
+    </script>
+</body>
+</html>

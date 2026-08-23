@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sign in — EduVision AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0E1A2B;--paper:#F4EFE4;--amber:#F2A623;--teal:#1D9E75;--coral:#D85A30;--line:rgba(244,239,228,0.14);--muted:rgba(244,239,228,0.55);--muted-strong:rgba(244,239,228,0.72)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--paper);font-family:'Manrope',sans-serif;min-height:100vh;display:flex;flex-direction:column}
+h1,h2,h3{font-family:'Space Grotesk',sans-serif}
+.wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:3rem 1rem}
+.auth-card{width:100%;max-width:420px;padding:2.5rem 2.25rem;border:1px solid var(--line);background:rgba(244,239,228,0.02);position:relative}
+.corner{position:absolute;width:9px;height:9px;border:1px solid var(--amber)}
+.corner-tl{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.corner-br{bottom:-1px;right:-1px;border-left:none;border-top:none}
+.eyebrow{font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;font-family:'Space Grotesk',sans-serif}
+.hint{font-size:.8rem;color:var(--muted)}
+.form-label{font-size:.85rem;color:var(--muted-strong);font-family:'Space Grotesk',sans-serif;display:block;margin-bottom:.4rem}
+.form-control{width:100%;background:transparent;border:1px solid var(--line);color:var(--paper);border-radius:2px;padding:.7rem .9rem;font-size:.9rem;font-family:'Manrope',sans-serif}
+.form-control:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
+.form-control::placeholder{color:rgba(244,239,228,0.35)}
+.btn-amber{background:var(--amber);color:var(--ink);border:none;font-weight:700;padding:.8rem 1.5rem;border-radius:2px;font-family:'Space Grotesk',sans-serif;cursor:pointer;font-size:.95rem;transition:transform .2s,background .2s;width:100%}
+.btn-amber:hover{background:#ffbf47}
+.btn-amber:active{transform:scale(.96)}
+.btn-amber:disabled{opacity:.5;cursor:not-allowed}
+.link-teal{color:var(--teal);text-decoration:none}
+.link-teal:hover{text-decoration:underline}
+.brand-mark{width:34px;height:34px;border-radius:8px;background:var(--amber);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink);font-family:'Space Grotesk',sans-serif}
+.navbar{padding:1rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+.nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.status-msg{margin-top:1rem;padding:.7rem 1rem;border-radius:2px;font-size:.85rem;display:none}
+.status-msg.error{display:block;background:rgba(216,90,48,0.15);color:var(--coral);border:1px solid rgba(216,90,48,0.3)}
+.status-msg.success{display:block;background:rgba(29,158,117,0.15);color:var(--teal);border:1px solid rgba(29,158,117,0.3)}
+.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}
+footer{text-align:center;padding:1.75rem 0;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="index.html" class="nav-brand">
+    <div class="brand-mark">EV</div>
+    <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;">EduVision AI</span>
+  </a>
+  <span class="hint">No account? <a href="signup.html" class="link-teal">Sign up</a></span>
+</nav>
+
+<div class="wrap">
+  <div class="auth-card">
+    <div class="corner corner-tl"></div><div class="corner corner-br"></div>
+    <div class="eyebrow mb-2">Welcome back</div>
+    <h1 class="mb-1" style="font-size:1.8rem;">Sign in</h1>
+    <p class="hint mb-4">One idea, seen clearly. Pick up where you left off.</p>
+
+    <form id="signinForm" onsubmit="return false;">
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" id="email" placeholder="you@example.com">
+      </div>
+      <div class="mb-4">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-control" id="password" placeholder="Enter your password">
+      </div>
+      <div>
+        <button type="button" class="btn-amber" id="submitBtn">Sign in &rarr;</button>
+      </div>
+    </form>
+
+    <div class="text-center my-3 hint" id="googleDivider" style="font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;">or</div>
+    <a href="/api/v1/auth/google" id="googleBtn" class="btn-amber d-block text-center" style="background:transparent;color:var(--paper);border:1px solid var(--line);text-decoration:none;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 48 48" style="vertical-align:-2px;margin-right:.5rem;"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
+      Continue with Google
+    </a>
+
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+</div>
+
+<footer>EduVision AI &mdash; no roles, no course structure, just the idea, seen clearly.</footer>
+
+<script>
+(function() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('google_error') === 'not_configured') {
+        var status = document.getElementById('statusMsg');
+        status.textContent = 'Google sign-in is not configured on this server yet. Please use email and password.';
+        status.className = 'status-msg error';
+    }
+})();
+
+var googleBtn = document.getElementById('googleBtn');
+googleBtn.addEventListener('click', function() {
+    googleBtn.setAttribute('aria-busy', 'true');
+    googleBtn.style.opacity = '0.6';
+});
+
+document.getElementById('submitBtn').addEventListener('click', async function() {
+    var btn = document.getElementById('submitBtn');
+    var status = document.getElementById('statusMsg');
+    var email = document.getElementById('email').value.trim();
+    var password = document.getElementById('password').value;
+
+    if (!email || !password) {
+        status.textContent = 'Please fill in all fields.';
+        status.className = 'status-msg error';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+    status.className = 'status-msg';
+
+    try {
+        var res = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, password: password })
+        });
+        var data = await res.json();
+        if (!res.ok) {
+            var msg = (data.error && data.error.message) || data.detail || 'Login failed';
+            throw new Error(msg);
+        }
+        localStorage.setItem('access_token', data.tokens.access_token);
+        localStorage.setItem('refresh_token', data.tokens.refresh_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        status.textContent = 'Signed in! Redirecting...';
+        status.className = 'status-msg success';
+        setTimeout(function() { window.location.href = 'upload.html'; }, 600);
+    } catch (err) {
+        status.textContent = err.message;
+        status.className = 'status-msg error';
+        btn.disabled = false;
+        btn.textContent = 'Sign in \u2192';
+    }
+});
+</script>
+</body>
+</html>

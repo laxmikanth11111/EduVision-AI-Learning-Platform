@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deck — EduVision AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="assets/style.css" rel="stylesheet">
+<style>
+body{min-height:100vh;display:flex;flex-direction:column}
+.stage{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.deck{width:100%;max-width:720px}
+.slide{display:none;opacity:0;transform:translateY(10px);animation:slideIn .5s ease forwards}
+.slide.active{display:block}
+@keyframes slideIn{to{opacity:1;transform:translateY(0)}}
+.dots{display:flex;gap:6px;justify-content:center;margin-top:1.25rem}
+.dot-nav{width:6px;height:6px;border-radius:50%;background:var(--line);cursor:pointer;transition:background .2s ease,width .2s ease}
+.dot-nav.active{background:var(--amber);width:18px;border-radius:3px}
+.nav-row{display:flex;justify-content:space-between;align-items:center;margin-top:1.25rem}
+.controls{display:flex;gap:8px;justify-content:center;margin-top:1rem}
+.icon-btn{background:transparent;border:1px solid var(--line);color:var(--muted-strong);border-radius:2px;padding:.5rem .9rem;font-size:.85rem;cursor:pointer;transition:border-color .2s ease,color .2s ease}
+.icon-btn:hover{border-color:var(--amber);color:var(--paper)}
+.desc-title{font-size:1.7rem;margin:0 0 12px;}
+.desc-text{font-size:1rem;color:var(--muted-strong);line-height:1.75}
+.stage-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:1.25rem}
+.stage-card{border:1px solid var(--line);border-radius:2px;padding:8px 10px;opacity:.35;transition:opacity .3s,border-color .3s}
+.stage-card.active{opacity:1;border-color:var(--amber)}
+.paused .vapor,.paused .cloud-puff,.paused .rain,.paused .runoff,.paused .sun-glow,.paused .ray{animation-play-state:paused !important}
+@keyframes vaporrise{0%{transform:translateY(0) scale(.7);opacity:0}20%{opacity:.55}60%{opacity:.4}100%{transform:translateY(-130px) scale(1.3);opacity:0}}
+@keyframes puff{0%,20%{transform:scale(.6);opacity:.25}45%,72%{transform:scale(1);opacity:1}100%{transform:scale(1);opacity:.9}}
+@keyframes fall{0%,46%{transform:translateY(0);opacity:0}52%{opacity:1}76%{transform:translateY(95px);opacity:1}80%{opacity:0}100%{opacity:0}}
+@keyframes flow{0%,74%{stroke-dashoffset:70;opacity:0}80%{opacity:.9}100%{stroke-dashoffset:0;opacity:.9}}
+@keyframes glow{0%,100%{opacity:.3}50%{opacity:.65}}
+.vapor{animation:vaporrise 3.4s ease-out infinite}
+.v1{animation-delay:0s}.v2{animation-delay:.6s}.v3{animation-delay:1.2s}.v4{animation-delay:1.8s}.v5{animation-delay:2.4s}.v6{animation-delay:.9s}
+.cloud-puff{animation:puff 20s ease-in-out infinite;transform-origin:center}
+.rain{animation:fall 20s ease-in-out infinite}
+.r1{animation-delay:0s}.r2{animation-delay:.4s}.r3{animation-delay:.8s}.r4{animation-delay:1.2s}.r5{animation-delay:1.6s}
+.runoff{stroke-dasharray:70;animation:flow 20s ease-in-out infinite}
+.sun-glow{animation:glow 3s ease-in-out infinite}
+</style>
+</head>
+<body>
+
+<nav class="navbar py-3">
+  <div class="container d-flex justify-content-between align-items-center">
+    <a href="index.html" style="text-decoration:none;color:inherit;" class="d-flex align-items-center gap-2">
+      <div class="brand-mark">EV</div>
+      <span class="display-font fw-bold" style="font-size:1.05rem;">EduVision AI</span>
+    </a>
+    <span class="hint">Computer_networks.pdf</span>
+  </div>
+</nav>
+
+<div class="stage">
+  <div class="deck">
+    <div class="frame p-4 p-md-5" style="min-height:420px;">
+      <div class="corner corner-tl"></div><div class="corner corner-br"></div>
+
+      <div class="slide active" id="s0">
+        <p class="count-label mb-2">Topic 1 &middot; description</p>
+        <h2 class="desc-title">The water cycle</h2>
+        <p class="desc-text">The sun heats water in oceans and lakes, causing it to evaporate into vapor. The vapor rises, cools, and condenses into clouds. Once the droplets are heavy enough, they fall as rain &mdash; then flow back to the ocean, and the cycle repeats.</p>
+      </div>
+
+      <div class="slide" id="s1">
+        <p class="count-label mb-2">Topic 1 &middot; visual</p>
+        <svg width="100%" viewBox="0 0 680 260" role="img">
+        <title>Water cycle animation</title>
+        <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+        <circle class="sun-glow" cx="590" cy="50" r="34" fill="#F2A623" opacity="0.35"/><circle cx="590" cy="50" r="22" fill="#F2A623"/>
+        <g class="cloud-puff"><ellipse cx="230" cy="70" rx="38" ry="24" fill="#C9CFD6"/><ellipse cx="276" cy="60" rx="44" ry="28" fill="#C9CFD6"/><ellipse cx="320" cy="72" rx="36" ry="22" fill="#C9CFD6"/></g>
+        <line class="rain r1" x1="248" y1="90" x2="243" y2="120" stroke="#3B8BD4" stroke-width="3" stroke-linecap="round"/>
+        <line class="rain r2" x1="270" y1="93" x2="265" y2="123" stroke="#3B8BD4" stroke-width="3" stroke-linecap="round"/>
+        <line class="rain r3" x1="292" y1="90" x2="287" y2="120" stroke="#3B8BD4" stroke-width="3" stroke-linecap="round"/>
+        <path d="M60 150 Q 200 138 340 150 Q 480 162 620 150 L 620 230 L 60 230 Z" fill="#378ADD" opacity="0.85"/>
+        <ellipse class="vapor v1" cx="150" cy="180" rx="14" ry="8" fill="#E6F1FB"/>
+        <ellipse class="vapor v2" cx="180" cy="185" rx="16" ry="9" fill="#E6F1FB"/>
+        <ellipse class="vapor v3" cx="130" cy="183" rx="13" ry="7" fill="#E6F1FB"/>
+        <ellipse class="vapor v4" cx="165" cy="178" rx="15" ry="8" fill="#E6F1FB"/>
+        <path class="runoff" d="M300 220 Q 220 208 160 194" fill="none" stroke="#185FA5" stroke-width="2.5" marker-end="url(#arrow)"/>
+        <text x="165" y="170" text-anchor="middle" fill="#F4EFE4" font-size="11" opacity="0.7">Water vapor</text>
+        </svg>
+        <div class="stage-cards">
+          <div class="stage-card" id="c0"><div style="font-size:.68rem;color:var(--muted);">0&ndash;5s</div><div style="font-size:.8rem;font-weight:600;">Evaporation</div></div>
+          <div class="stage-card" id="c1"><div style="font-size:.68rem;color:var(--muted);">5&ndash;10s</div><div style="font-size:.8rem;font-weight:600;">Condensation</div></div>
+          <div class="stage-card" id="c2"><div style="font-size:.68rem;color:var(--muted);">10&ndash;16s</div><div style="font-size:.8rem;font-weight:600;">Precipitation</div></div>
+          <div class="stage-card" id="c3"><div style="font-size:.68rem;color:var(--muted);">16&ndash;20s</div><div style="font-size:.8rem;font-weight:600;">Collection</div></div>
+        </div>
+        <div class="controls">
+          <button class="icon-btn" id="playpause-btn" onclick="togglePlay()"><i class="ti ti-player-pause"></i> Pause</button>
+          <button class="icon-btn" onclick="restartAnim()"><i class="ti ti-refresh"></i> Restart</button>
+        </div>
+      </div>
+
+      <div class="slide" id="s2">
+        <p class="count-label mb-2">Topic 2 &middot; description</p>
+        <h2 class="desc-title">Photosynthesis</h2>
+        <p class="desc-text">Plants take in carbon dioxide from the air and water from the soil. Using sunlight captured by chlorophyll, they convert these into glucose for energy, releasing oxygen as a byproduct.</p>
+      </div>
+
+      <div class="slide" id="s3">
+        <p class="count-label mb-2">Topic 2 &middot; visual</p>
+        <svg width="100%" viewBox="0 0 680 260" role="img">
+        <title>Photosynthesis animation</title>
+        <circle cx="590" cy="45" r="20" fill="#F2A623"/>
+        <path d="M320 120 Q 250 68 220 120 Q 250 172 320 120 Z" fill="#3B6D11"/>
+        <line x1="320" y1="120" x2="230" y2="120" stroke="#27500A" stroke-width="1.5"/>
+        <circle cx="130" cy="120" r="8" fill="#888780"/><text x="130" y="124" text-anchor="middle" fill="#fff" font-size="9">CO&#8322;</text>
+        <circle cx="230" cy="92" r="8" fill="#378ADD"/><text x="230" y="96" text-anchor="middle" fill="#fff" font-size="9">O&#8322;</text>
+        <rect x="290" y="180" width="60" height="24" rx="4" fill="#F2A623"/><text x="320" y="196" text-anchor="middle" fill="#412402" font-size="10">Glucose</text>
+        </svg>
+      </div>
+
+      <div class="dots" id="dots"></div>
+      <div class="nav-row">
+        <button class="icon-btn" onclick="prevSlide()"><i class="ti ti-arrow-left"></i> Back</button>
+        <button class="btn-signal" id="next-btn" onclick="nextSlide()">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer style="text-align:center;">EduVision AI &mdash; pause anytime, nothing auto-advances.</footer>
+<script src="assets/app.js"></script>
+<script>
+let idx = 0;
+const slides = ['s0','s1','s2','s3'];
+const dotsEl = document.getElementById('dots');
+slides.forEach((id, i) => {
+  const d = document.createElement('span');
+  d.className = 'dot-nav' + (i===0?' active':'');
+  d.onclick = () => goTo(i);
+  dotsEl.appendChild(d);
+});
+function setSlide(i){
+  document.getElementById(slides[idx]).classList.remove('active');
+  dotsEl.children[idx].classList.remove('active');
+  idx = i;
+  document.getElementById(slides[idx]).classList.add('active');
+  dotsEl.children[idx].classList.add('active');
+  document.getElementById('next-btn').textContent = idx === slides.length - 1 ? 'Restart deck' : 'Next';
+}
+function nextSlide(){ setSlide((idx + 1) % slides.length); }
+function prevSlide(){ setSlide((idx - 1 + slides.length) % slides.length); }
+function goTo(i){ setSlide(i); }
+
+// Water cycle stage sync + pause control
+let paused = false, elapsed = 0, lastStart = Date.now(), active = -1;
+const stages = ['c0','c1','c2','c3'];
+const timings = [0, 5000, 10000, 16000];
+function togglePlay(){
+  paused = !paused;
+  const btn = document.getElementById('playpause-btn');
+  const scene = document.getElementById('s1');
+  if(paused){
+    elapsed += Date.now() - lastStart;
+    scene.classList.add('paused');
+    btn.innerHTML = '<i class="ti ti-player-play"></i> Play';
+  } else {
+    lastStart = Date.now();
+    scene.classList.remove('paused');
+    btn.innerHTML = '<i class="ti ti-player-pause"></i> Pause';
+  }
+}
+function restartAnim(){
+  elapsed = 0; lastStart = Date.now(); paused = false;
+  document.getElementById('s1').classList.remove('paused');
+  document.getElementById('playpause-btn').innerHTML = '<i class="ti ti-player-pause"></i> Pause';
+  document.querySelectorAll('#s1 *').forEach(el => { el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; });
+}
+function tick(){
+  if(paused) return;
+  const t = (elapsed + (Date.now() - lastStart)) % 20000;
+  let cur = 0;
+  for(let i = timings.length - 1; i >= 0; i--){ if(t >= timings[i]){ cur = i; break; } }
+  if(cur !== active){
+    if(active >= 0) document.getElementById(stages[active]).classList.remove('active');
+    document.getElementById(stages[cur]).classList.add('active');
+    active = cur;
+  }
+}
+document.getElementById(stages[0]).classList.add('active'); active = 0;
+setInterval(tick, 200);
+</script>
+</body>
+</html>
