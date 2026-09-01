@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.models.user import User
 from app.services.educational_memory_service import educational_memory_service
 from app.services.learning_context_service import learning_context_service
+from app.utils.bounded_cache import BoundedCache
 
 logger = get_logger(__name__)
 
@@ -21,7 +22,9 @@ animation_runtime_router = APIRouter(
     prefix="/animations/runtime", tags=["Interactive Animation Runtime Engine"]
 )
 
-_RUNTIME_STATES: dict[str, Any] = {}
+# Bounded in-process state: evicts the least-recently-written session once it
+# exceeds the cap so long-running servers never accumulate state without limit.
+_RUNTIME_STATES: BoundedCache[str, dict[str, Any]] = BoundedCache(max_size=4096)
 
 
 class SyncRuntimeRequest(BaseModel):
@@ -42,14 +45,14 @@ async def sync_animation_runtime(
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     now = time.time()
-    _RUNTIME_STATES[req.session_id] = {
+    _RUNTIME_STATES.set(req.session_id, {
         "blueprint_id": req.blueprint_id,
         "scene_index": req.scene_index,
         "event_id": req.event_id,
         "component_id": req.component_id,
         "user_id": str(user.id),
         "last_sync_timestamp": now,
-    }
+    })
 
     # Log into LearningContext Timeline (best-effort; session may not exist)
     try:
@@ -78,7 +81,7 @@ async def sync_animation_runtime(
     except Exception as exc:
         logger.debug("animation_runtime_add_milestone_failed", user_id=str(user.id), error=str(exc))
 
-    return {"success": True, "data": _RUNTIME_STATES[req.session_id]}
+    return {"success": True, "data": _RUNTIME_STATES.get(req.session_id)}
 
 
 @animation_runtime_router.get(

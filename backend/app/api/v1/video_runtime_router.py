@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.models.user import User
 from app.services.educational_memory_service import educational_memory_service
 from app.services.learning_context_service import learning_context_service
+from app.utils.bounded_cache import BoundedCache
 
 logger = get_logger(__name__)
 
@@ -21,9 +22,12 @@ video_runtime_router = APIRouter(
     prefix="/videos/runtime", tags=["Interactive Educational Video Runtime Engine"]
 )
 
-_VIDEO_RUNTIME_STATES: dict[str, Any] = {}
-_VIDEO_BOOKMARKS: dict[str, list[dict[str, Any]]] = {}
-_VIDEO_ASSESSMENTS: dict[str, list[dict[str, Any]]] = {}
+# Bounded in-process state: evicts least-recently-written sessions/bookmarks/
+# assessments once caps are reached so long-running servers never accumulate
+# memory without limit.
+_VIDEO_RUNTIME_STATES: BoundedCache[str, dict[str, Any]] = BoundedCache(max_size=4096)
+_VIDEO_BOOKMARKS: BoundedCache[str, list[dict[str, Any]]] = BoundedCache(max_size=4096)
+_VIDEO_ASSESSMENTS: BoundedCache[str, list[dict[str, Any]]] = BoundedCache(max_size=4096)
 
 
 class SyncVideoRuntimeRequest(BaseModel):
@@ -58,14 +62,14 @@ async def sync_video_runtime(
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     now = time.time()
-    _VIDEO_RUNTIME_STATES[req.session_id] = {
+    _VIDEO_RUNTIME_STATES.set(req.session_id, {
         "video_id": req.video_id,
         "scene_index": req.scene_index,
         "current_timestamp_ms": req.current_timestamp_ms,
         "component_id": req.component_id,
         "user_id": str(user.id),
         "last_sync_timestamp": now,
-    }
+    })
 
     # Publish event to LearningContext (best-effort; session may not exist)
     try:
@@ -94,7 +98,7 @@ async def sync_video_runtime(
     except Exception as exc:
         logger.debug("video_runtime_add_milestone_failed", user_id=str(user.id), error=str(exc))
 
-    return {"success": True, "data": _VIDEO_RUNTIME_STATES[req.session_id]}
+    return {"success": True, "data": _VIDEO_RUNTIME_STATES.get(req.session_id)}
 
 
 @video_runtime_router.get(
@@ -128,9 +132,9 @@ async def create_video_bookmark(
         "user_id": str(user.id),
         "created_at": time.time(),
     }
-    if req.session_id not in _VIDEO_BOOKMARKS:
-        _VIDEO_BOOKMARKS[req.session_id] = []
-    _VIDEO_BOOKMARKS[req.session_id].append(bm)
+    bookmarks = _VIDEO_BOOKMARKS.get(req.session_id) or []
+    bookmarks = [*bookmarks, bm]
+    _VIDEO_BOOKMARKS.set(req.session_id, bookmarks)
     return {"success": True, "data": bm}
 
 
@@ -152,9 +156,9 @@ async def submit_video_assessment(
         "user_id": str(user.id),
         "submitted_at": time.time(),
     }
-    if req.session_id not in _VIDEO_ASSESSMENTS:
-        _VIDEO_ASSESSMENTS[req.session_id] = []
-    _VIDEO_ASSESSMENTS[req.session_id].append(attempt)
+    assessments = _VIDEO_ASSESSMENTS.get(req.session_id) or []
+    assessments = [*assessments, attempt]
+    _VIDEO_ASSESSMENTS.set(req.session_id, assessments)
 
     return {"success": True, "data": attempt}
 
