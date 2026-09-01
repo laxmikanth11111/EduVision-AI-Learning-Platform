@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from app.core.config import settings
 from app.core.exceptions import StorageError
@@ -90,10 +91,16 @@ class LocalStorageBackend(StorageBackend):
         expiration: int = 3600,
         method: str = "get_object",
     ) -> str:
+        """Return an app-relative, authenticated download URL for the object.
+
+        Local storage must never expose absolute filesystem paths (file:// URIs).
+        Objects are streamed through an authenticated API endpoint instead; the
+        ``expiration``/``method`` parameters mirror the S3 adapter's signature.
+        """
         path = self._resolve_path(key)
         if not path.exists():
             raise StorageError(message=f"File not found: {key}")
-        return path.resolve().as_uri()
+        return f"/api/v1/storage/content/{quote(key, safe='/')}"
 
     async def list_buckets(self) -> list[dict[str, str]]:
         if not self._base_path.exists():

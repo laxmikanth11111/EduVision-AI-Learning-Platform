@@ -23,6 +23,7 @@ from app.api.v1.presentation_folders import folders_router
 from app.api.v1.presentations import presentations_router
 from app.api.v1.quiz import quiz_router
 from app.api.v1.simulation import simulation_router
+from app.api.v1.storage import storage_router
 from app.api.v1.video_router import video_router
 from app.api.v1.video_runtime_router import video_runtime_router
 from app.api.v1.visual_canvases import visual_router
@@ -143,6 +144,7 @@ app.include_router(health_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(metrics_router, prefix="/api/v1")
 app.include_router(presentations_router, prefix="/api/v1")
+app.include_router(storage_router, prefix="/api/v1")
 app.include_router(folders_router, prefix="/api/v1")
 app.include_router(player_router, prefix="/api/v1")
 app.include_router(quiz_router, prefix="/api/v1")
@@ -155,8 +157,8 @@ app.include_router(video_runtime_router, prefix="/api/v1")
 app.include_router(assistant_router, prefix="/api/v1")
 app.include_router(effectiveness_router, prefix="/api/v1")
 
-uploads_dir = os.path.join(os.getcwd(), "uploads")
-os.makedirs(uploads_dir, exist_ok=True)
+uploads_dir = settings.upload_path
+uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 frontend_dir = os.path.join(os.getcwd(), "frontend")
