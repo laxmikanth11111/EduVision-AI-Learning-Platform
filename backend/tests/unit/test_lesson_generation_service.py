@@ -300,6 +300,28 @@ class TestCreateLesson:
         assert second["duplicate"] is True
         assert second["id"] == first["id"]
 
+    async def test_create_stamps_user_id_from_presentation_owner(self, db_session) -> None:
+        """WS5: generated lessons adopt the owning user for scoped lookup."""
+        owner_id = uuid.uuid4()
+        presentation = await _seed(db_session)
+        presentation.owner_id = owner_id
+        result = await _service(db_session).create_lesson(presentation, _request())
+        lesson = await GeneratedLessonRepository(db_session).get_by_public_id(
+            result["id"]
+        )
+        assert lesson is not None
+        assert lesson.user_id == owner_id
+
+    async def test_create_with_null_owner_keeps_user_id_null(self, db_session) -> None:
+        presentation = await _seed(db_session)
+        presentation.owner_id = None
+        result = await _service(db_session).create_lesson(presentation, _request())
+        lesson = await GeneratedLessonRepository(db_session).get_by_public_id(
+            result["id"]
+        )
+        assert lesson is not None
+        assert lesson.user_id is None
+
 
 class TestRunGeneration:
     async def test_success_persists_version_blocks_and_usage(self, db_session) -> None:

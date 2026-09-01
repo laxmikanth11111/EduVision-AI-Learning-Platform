@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.answer_key import AnswerKey
+from app.models.generated_lesson import GeneratedLesson
 from app.models.presentation import Presentation
 from app.models.question_explanation import QuestionExplanation
 from app.models.quiz import Quiz
@@ -212,3 +213,37 @@ async def test_portable_jsonb_roundtrips_native_jsonb(pg_session: AsyncSession, 
     ).scalar_one()
     assert fetched.correct_option_ids == [correct.public_id]
     assert fetched.acceptable_answers == ["a", "b", "c"]
+
+
+async def test_partial_unique_index_blocks_null_user_duplicate(
+    pg_session: AsyncSession, user: User
+):
+    """WS8: legacy/ownerless lessons (user_id NULL) share idempotency keys.
+
+    The partial unique index ``uq_generated_lessons_idempotency_null`` (0027)
+    enforces uniqueness over ``idempotency_key`` only where ``user_id IS
+    NULL``, guarding rows that bypass the composite (user_id, idempotency_key)
+    constraint that never fires on NULLs. Owned rows keep the composite rule.
+    """
+    pres = await _presentation(pg_session, user.id)
+    first = GeneratedLesson(
+        presentation_id=pres.id,
+        user_id=None,
+        idempotency_key="shared-null-key",
+        mode="slide",
+        status="queued",
+    )
+    pg_session.add(first)
+    await pg_session.flush()
+
+    duplicate = GeneratedLesson(
+        presentation_id=pres.id,
+        user_id=None,
+        idempotency_key="shared-null-key",
+        mode="slide",
+        status="queued",
+    )
+    pg_session.add(duplicate)
+    with pytest.raises(IntegrityError):
+        await pg_session.flush()
+    await pg_session.rollback()
