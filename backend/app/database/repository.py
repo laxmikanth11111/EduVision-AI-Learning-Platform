@@ -134,11 +134,19 @@ class BaseRepository(Generic[ModelType]):
         if hard:
             stmt = sql_delete(self._model).where(self._model.id == id)  # type: ignore[attr-defined]
             await self._session.execute(stmt)
-        else:
-            instance = await self.get_or_raise(id)
-            if hasattr(instance, "soft_delete"):
-                instance.soft_delete()
-                await self._session.flush()
+            return
+
+        instance = await self.get_or_raise(id)
+        if hasattr(instance, "soft_delete"):
+            instance.soft_delete()
+            await self._session.flush()
+            return
+
+        # The model has no soft-delete capability. Falling back to a hard
+        # delete preserves the delete contract: a requested delete must not
+        # silently no-op just because the model cannot be soft-deleted.
+        stmt = sql_delete(self._model).where(self._model.id == id)  # type: ignore[attr-defined]
+        await self._session.execute(stmt)
 
     async def count(self, **filters: Any) -> int:
         stmt = select(func.count()).select_from(self._model).filter_by(**filters)

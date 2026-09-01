@@ -30,6 +30,7 @@ class QuestionAttempt(Base, UUIDMixin, TimestampMixin):
         Uuid(as_uuid=True),
         ForeignKey("questions.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="unanswered")

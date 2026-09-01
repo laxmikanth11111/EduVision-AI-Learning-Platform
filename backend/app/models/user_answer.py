@@ -31,6 +31,7 @@ class UserAnswer(Base, UUIDMixin, TimestampMixin):
         Uuid(as_uuid=True),
         ForeignKey("question_attempts.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     answer_type: Mapped[str] = mapped_column(String(30), nullable=False)
     option_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)

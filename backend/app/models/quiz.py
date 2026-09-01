@@ -62,6 +62,7 @@ class Quiz(Base, UUIDMixin, TimestampMixin):
         Uuid(as_uuid=True),
         ForeignKey("generated_lesson_versions.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")

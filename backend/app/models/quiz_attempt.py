@@ -40,6 +40,7 @@ class QuizAttempt(Base, UUIDMixin, TimestampMixin):
         Uuid(as_uuid=True),
         ForeignKey("quiz_versions.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
