@@ -248,8 +248,79 @@ class TestSafeDispatch:
         safe_dispatch(task, "a", "b")
         task.delay.assert_called_once_with("a", "b")
 
-    def test_dispatch_swallows_broker_errors(self) -> None:
+    def test_dispatch_retries_then_swallows_broker_errors(self) -> None:
         task = MagicMock()
         task.delay.side_effect = ConnectionError("broker down")
-        result = safe_dispatch(task, "a")
+        with patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_ATTEMPTS",
+            3,
+        ), patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_DELAY",
+            0.0,
+        ):
+            result = safe_dispatch(task, "a")
         assert result is None
+        assert task.delay.call_count == 3
+
+    def test_dispatch_recovers_after_transient_failure(self) -> None:
+        task = MagicMock()
+        task.delay.side_effect = [ConnectionError("flaky"), MagicMock()]
+        with patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_ATTEMPTS",
+            3,
+        ), patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_DELAY",
+            0.0,
+        ):
+            safe_dispatch(task, "a")
+        assert task.delay.call_count == 2
+
+    def test_dispatch_forwards_to_dlq_after_exhaustion(self) -> None:
+        task = MagicMock(delay=MagicMock(side_effect=ConnectionError("down")))
+        task.name = "eduvision.test"
+        with patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_ATTEMPTS",
+            1,
+        ), patch(
+            "app.workers.tasks.settings.CELERY_TASK_DLQ_ENABLED",
+            True,
+        ), patch(
+            "app.workers.tasks.celery_app.send_task",
+            return_value=MagicMock(),
+        ) as send_task:
+            safe_dispatch(task, "a", flag=True)
+        send_task.assert_called_once()
+        kwargs = send_task.call_args.kwargs
+        assert kwargs["queue"] == "dead_letter"
+        assert kwargs["kwargs"]["task_name"] == "eduvision.test"
+        assert kwargs["kwargs"]["args"] == ["a"]
+
+    def test_dispatch_no_dlq_when_disabled(self) -> None:
+        task = MagicMock(delay=MagicMock(side_effect=RuntimeError("boom")))
+        task.name = "eduvision.test"
+        with patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_ATTEMPTS",
+            1,
+        ), patch(
+            "app.workers.tasks.settings.CELERY_TASK_DLQ_ENABLED",
+            False,
+        ), patch(
+            "app.workers.tasks.celery_app.send_task",
+            return_value=MagicMock(),
+        ) as send_task:
+            safe_dispatch(task, "a")
+        send_task.assert_not_called()
+
+    def test_dispatch_runs_on_failure_callback(self) -> None:
+        task = MagicMock(delay=MagicMock(side_effect=RuntimeError("boom")))
+        task.name = "eduvision.test"
+        on_failure = MagicMock()
+        with patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_ATTEMPTS",
+            1,
+        ), patch(
+            "app.workers.tasks.settings.CELERY_DISPATCH_RETRY_DELAY",
+            0.0,
+        ):
+            safe_dispatch(task, "a", on_failure=on_failure)
+        on_failure.assert_called_once()

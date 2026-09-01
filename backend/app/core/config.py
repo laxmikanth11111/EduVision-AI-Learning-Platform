@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     CELERY_TASK_MAX_RETRIES: int = 3
     CELERY_TASK_RETRY_DELAY: int = 60
 
+    # ── Celery dispatch ─────────────────────────────────────────────────────
+    # Bounded in-process retry used by safe_dispatch when enqueueing a task to
+    # the broker fails (e.g. Redis momentarily unavailable). On exhaustion the
+    # caller's on_failure hook runs and, if CELERY_TASK_DLQ_ENABLED, the task
+    # is forwarded to the dead-letter queue.
+    CELERY_DISPATCH_RETRY_ATTEMPTS: int = 2
+    CELERY_DISPATCH_RETRY_DELAY: float = 0.1
+    CELERY_DISPATCH_RETRY_MAX_DELAY: float = 1.0
+
     # ── Storage (S3-compatible) ───────────────────────────────────────────────
     STORAGE_PROVIDER: str = "s3"
     S3_ENDPOINT_URL: str | None = None

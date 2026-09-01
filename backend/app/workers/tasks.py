@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import html
 import smtplib
+import time
+import uuid
 from collections.abc import Callable
 from email.mime.text import MIMEText
 from typing import Any
@@ -93,19 +95,66 @@ def safe_dispatch(
     on_failure: Callable[[Exception], None] | None = None,
     **kwargs: Any,
 ) -> None:
+    """Enqueue a task with bounded retry against a flaky broker.
+
+    A single broker ``delay()`` that raises (e.g. Redis briefly unreachable)
+    would silently lose a job. This retries the enqueue up to
+    ``CELERY_DISPATCH_RETRY_ATTEMPTS`` times with capped exponential backoff,
+    then runs the optional ``on_failure`` hook. When ``CELERY_TASK_DLQ_ENABLED``
+    and enough retries have been consumed, the task is forwarded to the
+    dead-letter queue as ``eduvision.dlq.record`` so no job vanishes.
+    """
+    attempts = max(1, settings.CELERY_DISPATCH_RETRY_ATTEMPTS)
+    base_delay = settings.CELERY_DISPATCH_RETRY_DELAY
+    max_delay = settings.CELERY_DISPATCH_RETRY_MAX_DELAY
+    task_name = getattr(task, "name", str(task))
+
+    for attempt in range(attempts):
+        try:
+            task.delay(*args, **kwargs)
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt + 1 < attempts:
+                backoff = min(base_delay * (2**attempt), max_delay)
+                time.sleep(backoff)
+
+    logger.error(
+        "task_dispatch_failed",
+        task_name=task_name,
+        error=str(last_exc),
+    )
+    if settings.CELERY_TASK_DLQ_ENABLED:
+        _forward_to_dlq(task_name, last_exc, args, kwargs)
+    if on_failure:
+        try:
+            on_failure(last_exc)
+        except Exception as cb_exc:
+            logger.error("task_dispatch_on_failure_failed", error=str(cb_exc))
+
+
+def _forward_to_dlq(
+    task_name: str,
+    exc: Exception,
+    args: Any,
+    kwargs: dict[str, Any] | None,
+) -> None:
+    task_id = f"{task_name}:{uuid.uuid4().hex[:12]}"
     try:
-        task.delay(*args, **kwargs)
-    except Exception as exc:
-        logger.error(
-            "task_dispatch_failed",
-            task_name=getattr(task, "name", str(task)),
-            error=str(exc),
+        celery_app.send_task(
+            "eduvision.dlq.record",
+            kwargs={
+                "task_name": task_name,
+                "task_id": task_id,
+                "error": str(exc),
+                "args": list(args) if args else [],
+                "kwargs": kwargs or {},
+            },
+            queue=DLQ_QUEUE,
         )
-        if on_failure:
-            try:
-                on_failure(exc)
-            except Exception as cb_exc:
-                logger.error("task_dispatch_on_failure_failed", error=str(cb_exc))
+        metrics.increment("dlq_forwarded_total", task_name=task_name)
+    except Exception:
+        logger.error("task_dispatch_dlq_forward_failed", task_name=task_name)
 
 
 @celery_app.task(
