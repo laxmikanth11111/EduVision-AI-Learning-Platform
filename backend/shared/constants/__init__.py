@@ -9,10 +9,15 @@ class AppEnvironment(str, Enum):
 
 
 class UserRole(str, Enum):
-    STUDENT = "student"
-    TEACHER = "teacher"
-    ADMIN = "admin"
-    SUPER_ADMIN = "super_admin"
+    """Individual-user role.
+
+    EduVision is an individual learning platform: every account is a single
+    learner. There is no student/teacher split and no multi-role hierarchy.
+    The value matches the ``role="user"`` claim issued on every JWT so
+    existing access tokens remain valid.
+    """
+
+    USER = "user"
 
 
 class ContentStatus(str, Enum):

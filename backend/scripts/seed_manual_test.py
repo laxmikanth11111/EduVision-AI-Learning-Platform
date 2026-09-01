@@ -16,64 +16,64 @@ from shared.constants import (
     UserRole,
 )
 
-TEACHER_EMAIL = "manualtest.teacher@example.com"
-STUDENT_EMAIL = "manualtest.student@example.com"
+OWNER_EMAIL = "manualtest.owner@example.com"
+COLLAB_EMAIL = "manualtest.collaborator@example.com"
 TEST_PASSWORD = "ManualTest2026!"
 
 
 async def seed():
     async with async_session_factory() as session, session.begin():
-        # 1. Teacher account
-        result = await session.execute(select(User).where(User.email == TEACHER_EMAIL))
-        teacher = result.scalar_one_or_none()
-        if not teacher:
-            teacher = User(
-                email=TEACHER_EMAIL,
+        # 1. Owner account (individual user)
+        result = await session.execute(select(User).where(User.email == OWNER_EMAIL))
+        owner = result.scalar_one_or_none()
+        if not owner:
+            owner = User(
+                email=OWNER_EMAIL,
                 password_hash=hash_password(TEST_PASSWORD),
-                name="Manual Test Teacher",
-                role=UserRole.TEACHER.value,
+                name="Manual Test Owner",
+                role=UserRole.USER.value,
                 is_verified=True,
                 is_active=True,
             )
-            session.add(teacher)
+            session.add(owner)
             await session.flush()
-            print(f"Created teacher: {teacher.id} ({TEACHER_EMAIL})")
+            print(f"Created owner: {owner.id} ({OWNER_EMAIL})")
         else:
-            teacher.password_hash = hash_password(TEST_PASSWORD)
-            teacher.role = UserRole.TEACHER.value
-            teacher.is_verified = True
-            teacher.is_active = True
+            owner.password_hash = hash_password(TEST_PASSWORD)
+            owner.role = UserRole.USER.value
+            owner.is_verified = True
+            owner.is_active = True
             await session.flush()
-            print(f"Updated existing teacher: {teacher.id}")
+            print(f"Updated existing owner: {owner.id}")
 
-        # 2. Student account
-        result = await session.execute(select(User).where(User.email == STUDENT_EMAIL))
-        student = result.scalar_one_or_none()
-        if not student:
-            student = User(
-                email=STUDENT_EMAIL,
+        # 2. Collaborator account (second individual user, for sharing)
+        result = await session.execute(select(User).where(User.email == COLLAB_EMAIL))
+        collaborator = result.scalar_one_or_none()
+        if not collaborator:
+            collaborator = User(
+                email=COLLAB_EMAIL,
                 password_hash=hash_password(TEST_PASSWORD),
-                name="Manual Test Student",
-                role=UserRole.STUDENT.value,
+                name="Manual Test Collaborator",
+                role=UserRole.USER.value,
                 is_verified=True,
                 is_active=True,
             )
-            session.add(student)
+            session.add(collaborator)
             await session.flush()
-            print(f"Created student: {student.id} ({STUDENT_EMAIL})")
+            print(f"Created collaborator: {collaborator.id} ({COLLAB_EMAIL})")
         else:
-            student.password_hash = hash_password(TEST_PASSWORD)
-            student.role = UserRole.STUDENT.value
-            student.is_verified = True
-            student.is_active = True
+            collaborator.password_hash = hash_password(TEST_PASSWORD)
+            collaborator.role = UserRole.USER.value
+            collaborator.is_verified = True
+            collaborator.is_active = True
             await session.flush()
-            print(f"Updated existing student: {student.id}")
+            print(f"Updated existing collaborator: {collaborator.id}")
 
-        # 3. Presentation owned by teacher
+        # 3. Presentation owned by owner
         pres_title = "[Manual Test] Introduction to Machine Learning & Neural Networks"
         result = await session.execute(
             select(Presentation).where(
-                Presentation.owner_id == teacher.id,
+                Presentation.owner_id == owner.id,
                 Presentation.title == pres_title
             )
         )
@@ -85,7 +85,7 @@ async def seed():
                 topic="Machine Learning & AI",
                 status=PresentationStatus.PUBLISHED.value,
                 visibility=PresentationVisibility.PRIVATE.value,
-                owner_id=teacher.id,
+                owner_id=owner.id,
                 slide_count=2,
                 extraction_status="ready",
             )
@@ -129,31 +129,31 @@ async def seed():
             await session.flush()
             print(f"Created ContentUnits for presentation {presentation.public_id}")
 
-        # 5. Collaborator (Student as EDITOR)
+        # 5. Collaborator (second individual user as EDITOR)
         result = await session.execute(
             select(PresentationCollaborator).where(
                 PresentationCollaborator.presentation_id == presentation.id,
-                PresentationCollaborator.user_id == student.id,
+                PresentationCollaborator.user_id == collaborator.id,
             )
         )
         collab = result.scalar_one_or_none()
         if not collab:
             collab = PresentationCollaborator(
                 presentation_id=presentation.id,
-                user_id=student.id,
+                user_id=collaborator.id,
                 role=CollaboratorRole.EDITOR.value,
             )
             session.add(collab)
             await session.flush()
-            print(f"Added student {STUDENT_EMAIL} as EDITOR collaborator to presentation {presentation.public_id}")
+            print(f"Added {COLLAB_EMAIL} as EDITOR collaborator to presentation {presentation.public_id}")
         else:
             collab.role = CollaboratorRole.EDITOR.value
             await session.flush()
-            print(f"Student {STUDENT_EMAIL} already collaborator with role {collab.role}")
+            print(f"{COLLAB_EMAIL} already collaborator with role {collab.role}")
 
         print("\nSEEDING COMPLETE SUCCESSFULLY!")
-        print(f"Teacher: {TEACHER_EMAIL} / {TEST_PASSWORD}")
-        print(f"Student: {STUDENT_EMAIL} / {TEST_PASSWORD}")
+        print(f"Owner: {OWNER_EMAIL} / {TEST_PASSWORD}")
+        print(f"Collaborator: {COLLAB_EMAIL} / {TEST_PASSWORD}")
         print(f"Presentation Public ID: {presentation.public_id}")
         print(f"Presentation Title: {presentation.title}")
 
