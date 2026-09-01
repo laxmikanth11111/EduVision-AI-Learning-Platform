@@ -126,9 +126,11 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 markers = [
     "integration: marks tests that require a PostgreSQL database (testcontainers or CI service)",
     "unit: marks tests that run with SQLite (default for all tests)",
+    "postgres: marks tests that exercise the real PostgreSQL backend (run with pytest -m postgres against a running instance)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
