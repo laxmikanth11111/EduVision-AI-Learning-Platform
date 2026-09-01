@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -413,6 +414,21 @@ class Settings(BaseSettings):
     def is_staging(self) -> bool:
         return self.APP_ENV == "staging"
 
+    @staticmethod
+    def _is_unauthenticated_localhost(url: str) -> bool:
+        """True when a URL points at localhost loopback with no password.
+
+        Production must never silently run against the default unauthenticated
+        ``redis://localhost:6379`` style endpoints baked into the settings
+        defaults (fail-fast guard). Password-protected loopback Redis is a
+        legitimate single-box deployment, so it is allowed.
+        """
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            return False
+        return parts.hostname in {"localhost", "127.0.0.1", "::1"} and parts.password is None
+
     # ── Validators ────────────────────────────────────────────────────────────
 
     @model_validator(mode="after")
@@ -433,6 +449,29 @@ class Settings(BaseSettings):
                 raise ValueError("Database credentials must be explicitly configured in production/staging; default 'eduvision:eduvision' password is not allowed.")
             if self.AI_PROVIDER and self.AI_PROVIDER != "local" and not self.AI_API_KEY:
                 raise ValueError(f"AI_API_KEY is required when AI_PROVIDER is '{self.AI_PROVIDER}' in production/staging")
+            if self.STORAGE_PROVIDER == "s3" and (
+                not self.S3_ACCESS_KEY_ID or not self.S3_SECRET_ACCESS_KEY
+            ):
+                raise ValueError("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when STORAGE_PROVIDER is 's3' in production/staging")
+
+        if self.is_production:
+            if self.LOG_LEVEL.upper() == "DEBUG":
+                raise ValueError("LOG_LEVEL must not be 'DEBUG' in production")
+            if not self.JWT_SECRET_KEY:
+                raise ValueError("JWT_SECRET_KEY must be explicitly configured in production")
+            if len(self.JWT_SECRET_KEY) < 32:
+                raise ValueError("JWT_SECRET_KEY must be at least 32 characters in production")
+            if self.JWT_SECRET_KEY == self.APP_SECRET_KEY:
+                raise ValueError("JWT_SECRET_KEY must differ from APP_SECRET_KEY in production")
+            if not self.LIFESPAN_FAIL_FAST_ON_MIGRATION_ERROR:
+                raise ValueError("LIFESPAN_FAIL_FAST_ON_MIGRATION_ERROR must be True in production")
+            for name, url in (
+                ("REDIS_URL", self.REDIS_URL),
+                ("CELERY_BROKER_URL", self.CELERY_BROKER_URL),
+                ("CELERY_RESULT_BACKEND", self.CELERY_RESULT_BACKEND),
+            ):
+                if self._is_unauthenticated_localhost(url):
+                    raise ValueError(f"{name} must not use the default unauthenticated localhost URL in production")
 
         return self
 
