@@ -691,11 +691,13 @@ class PresentationService:
         await self._uow.flush()
         await self._uow.session.refresh(presentation)
 
+        # Commit before dispatch in every mode: a worker session must never
+        # read a transaction the request hasn't committed yet, or it races the
+        # commit and fails with stale/absent state ("No source file has been
+        # uploaded"). Eager mode runs the task on the same loop, so it acquires
+        # the fresh state only after this commit as well.
+        await self._uow.commit()
         if settings.CELERY_TASK_ALWAYS_EAGER:
-            # Commit first so the eager task's own session sees the uploaded
-            # source; otherwise it races the request transaction and fails
-            # with "No source file has been uploaded".
-            await self._uow.commit()
             _spawn_background(self.start_source_ingestion(public_id))
         else:
             import app.workers.tasks as worker_tasks
@@ -798,12 +800,15 @@ class PresentationService:
             idempotency_key=idempotency_key,
         )
         if not result.get("duplicate"):
+            # Persist the QUEUED lesson before dispatch so the worker never
+            # observes an uncommitted transaction (same ordering guarantee as
+            # upload_source above).
+            await self._uow.commit()
             if settings.CELERY_TASK_ALWAYS_EAGER:
                 # Eager mode: run generation directly on the server loop (same
                 # pattern as start_source_ingestion). Going through the Celery
-                # task here would execute it inline on a foreign event loop and
+                # task here would execute it inline on a foreign event loop
                 # before the creating transaction commits.
-                await self._uow.commit()
                 _spawn_background(self._run_lesson_generation_eager(result["id"]))
             else:
                 from app.workers.tasks import lesson_generation_task, safe_dispatch

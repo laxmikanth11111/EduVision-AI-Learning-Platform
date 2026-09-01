@@ -8,6 +8,7 @@ import pytest
 
 from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.schemas.generated_lesson import LessonGenerationRequest
 from app.schemas.presentation import (
     AutosaveRequest,
     PresentationCreateRequest,
@@ -15,6 +16,7 @@ from app.schemas.presentation import (
 )
 from app.services.presentation_service import PresentationService
 from shared.constants import (
+    LearningMode,
     PresentationAction,
     PresentationStatus,
     PresentationVisibility,
@@ -727,6 +729,113 @@ class TestThumbnailManagement:
         delay_mock.assert_called_once_with(presentation.public_id)
         audit_args = presentation_service._audit_service.log.await_args.args
         assert audit_args[1] == PresentationAction.UPDATED
+
+    async def test_set_source_commits_before_dispatch(
+        self, presentation_service: PresentationService, mock_uow: MagicMock
+    ) -> None:
+        """WS3: a worker must never observe the request's uncommitted state."""
+        presentation = _make_presentation()
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+        storage = MagicMock()
+        storage.upload_fileobj = AsyncMock(return_value="sources/test-key")
+
+        events: list[str] = []
+        mock_uow.commit.side_effect = lambda: events.append("commit")
+        delay_mock = MagicMock()
+        delay_mock.side_effect = lambda *args, **kwargs: events.append("dispatch")
+
+        with patch(
+            "app.workers.tasks.process_source_ingestion_task.delay",
+            new=delay_mock,
+        ), patch(
+            "app.services.presentation_service.get_storage_backend",
+            AsyncMock(return_value=storage),
+        ), patch(
+            "app.core.config.settings.CELERY_TASK_ALWAYS_EAGER",
+            False,
+        ):
+            await presentation_service.set_source(
+                presentation.public_id,
+                b"%PDF-1.4 pdf-content",
+                filename="slides.pdf",
+                content_type="application/pdf",
+            )
+
+        assert events == ["commit", "dispatch"]
+
+    async def test_generate_lesson_commits_before_dispatch(
+        self, presentation_service: PresentationService, mock_uow: MagicMock
+    ) -> None:
+        """WS3: the QUEUED lesson row must be durable before the Celery task."""
+        presentation = _make_presentation()
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+
+        events: list[str] = []
+        mock_uow.commit.side_effect = lambda: events.append("commit")
+        delay_mock = MagicMock()
+        delay_mock.side_effect = lambda *args, **kwargs: events.append("dispatch")
+
+        with patch(
+            "app.services.lesson_generation_service.LessonGenerationService.create_lesson",
+            AsyncMock(
+                return_value={
+                    "id": f"lesson_{uuid.uuid4().hex[:12]}",
+                    "duplicate": False,
+                }
+            ),
+        ), patch(
+            "app.workers.tasks.lesson_generation_task.delay",
+            new=delay_mock,
+        ), patch(
+            "app.core.config.settings.CELERY_TASK_ALWAYS_EAGER",
+            False,
+        ):
+            await presentation_service.generate_lesson(
+                presentation.public_id,
+                LessonGenerationRequest(
+                    mode=LearningMode.SLIDE, title="Auto lesson"
+                ),
+            )
+
+        assert events == ["commit", "dispatch"]
+
+    async def test_generate_lesson_skips_dispatch_on_duplicate(
+        self, presentation_service: PresentationService, mock_uow: MagicMock
+    ) -> None:
+        """WS3: idempotent replays must not re-dispatch generation."""
+        presentation = _make_presentation()
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+
+        delay_mock = MagicMock()
+        with patch(
+            "app.services.lesson_generation_service.LessonGenerationService.create_lesson",
+            AsyncMock(
+                return_value={
+                    "id": f"lesson_{uuid.uuid4().hex[:12]}",
+                    "duplicate": True,
+                }
+            ),
+        ), patch(
+            "app.workers.tasks.lesson_generation_task.delay",
+            new=delay_mock,
+        ), patch(
+            "app.core.config.settings.CELERY_TASK_ALWAYS_EAGER",
+            False,
+        ):
+            await presentation_service.generate_lesson(
+                presentation.public_id,
+                LessonGenerationRequest(
+                    mode=LearningMode.SLIDE, title="Auto lesson"
+                ),
+            )
+
+        delay_mock.assert_not_called()
 
     async def test_set_source_rejects_invalid_extension(
         self, presentation_service: PresentationService,
