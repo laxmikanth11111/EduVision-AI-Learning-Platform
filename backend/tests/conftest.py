@@ -10,25 +10,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-# ---------------------------------------------------------------------------
-# JSONB / SQLite compatibility: compile PostgreSQL JSONB to plain JSON on
-# SQLite so the same ORM model definitions work in both production (PG) and
-# the test suite (SQLite).
-# ---------------------------------------------------------------------------
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.pool import NullPool
 
-
-@compiles(JSONB, "sqlite")
-def _compile_jsonb_sqlite(type_, compiler, **kw):  # noqa: D401
-    return "JSON"
-
-
-# The imports below intentionally follow the JSONB compiler registration so
-# every app module observes the SQLite-compatible compilation rule.
+# The imports below intentionally follow the SQLite engine construction so every
+# app module observes the SQLite test configuration.
 import app.database.session as db_session_module  # noqa: E402
 import app.database.unit_of_work as uow_module  # noqa: E402
 from app.database.base import Base  # noqa: E402
@@ -45,6 +32,13 @@ test_engine = create_async_engine(
     poolclass=NullPool,
     connect_args={"timeout": 30},
 )
+
+
+@event.listens_for(test_engine.sync_engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, connection_record) -> None:  # noqa: ARG001
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 TestSessionLocal = async_sessionmaker(
     test_engine,
@@ -221,6 +215,7 @@ async def _create_test_user(setup_database: None) -> None:
             )
             session.add(user)
             await session.flush()
+            await session.commit()
 
 
 class _FakeUser:

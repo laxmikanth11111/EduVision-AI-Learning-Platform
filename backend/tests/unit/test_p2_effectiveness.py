@@ -125,6 +125,32 @@ async def _create_presentation_committed() -> Presentation:
         return pres
 
 
+async def _ensure_user(session, user_id):
+    """Persist a user row so FK constraints are satisfied.
+
+    The test conftest enables SQLite FK enforcement (PRAGMA foreign_keys=ON),
+    so any row referencing a non-existent user is rejected. Tests that create
+    records owned by ad-hoc users must first insert the user.
+    """
+    from sqlalchemy import select
+
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    existing = await session.execute(select(User).where(User.id == user_id))
+    if existing.scalar_one_or_none() is None:
+        session.add(
+            User(
+                id=user_id,
+                email=f"u{user_id.hex}@test.local",
+                name="Test User",
+                password_hash=hash_password("testpassword123"),
+            )
+        )
+    await session.flush()
+    return user_id
+
+
 # ── P2.3: Learning Event Service Tests ──────────────────────────────────
 
 
@@ -193,7 +219,7 @@ class TestLearningEventService:
 
     async def test_user_isolation(self, db_session):
         service = LearningEventService(db_session)
-        other_user = uuid.uuid4()
+        other_user = await _ensure_user(db_session, uuid.uuid4())
         await service.record(user_id=TEST_USER_ID, event_type="lesson_started")
         await service.record(user_id=other_user, event_type="lesson_started")
         events, total = await service.list_for_user(TEST_USER_ID)
@@ -571,7 +597,7 @@ class TestUserFeedback:
         service = UserFeedbackService(db_session)
         pres_id = uuid.uuid4()
         await service.submit(user_id=TEST_USER_ID, presentation_id=pres_id, usefulness=4, confidence=3)
-        await service.submit(user_id=uuid.uuid4(), presentation_id=pres_id, usefulness=2, confidence=5)
+        await service.submit(user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres_id, usefulness=2, confidence=5)
         summary = await service.summary_for_presentation(pres_id)
         assert summary["total_count"] == 2
         assert summary["avg_usefulness"] == 3.0
@@ -585,7 +611,7 @@ class TestUserFeedback:
     async def test_user_isolation(self, db_session):
         service = UserFeedbackService(db_session)
         await service.submit(user_id=TEST_USER_ID, overall_experience=5)
-        await service.submit(user_id=uuid.uuid4(), overall_experience=1)
+        await service.submit(user_id=await _ensure_user(db_session, uuid.uuid4()), overall_experience=1)
         feedbacks, total = await service.list_for_user(TEST_USER_ID)
         assert total == 1
 
@@ -815,7 +841,7 @@ class TestExperimentGroup:
 class TestGroupComparison:
     async def test_compare_groups_service(self, db_session):
         service = EffectivenessService(db_session)
-        other_user = uuid.uuid4()
+        other_user = await _ensure_user(db_session, uuid.uuid4())
 
         pres_a = await _create_presentation(db_session)
         pres_b = await _create_presentation(db_session)
@@ -862,7 +888,7 @@ class TestGroupComparison:
 
         for i in range(3):
             pres = await _create_presentation(db_session)
-            user_id = uuid.uuid4()
+            user_id = await _ensure_user(db_session, uuid.uuid4())
             assessment = await service.get_or_create_assessment(
                 user_id=user_id, presentation_id=pres.id,
                 experiment_group="reference",
@@ -873,7 +899,7 @@ class TestGroupComparison:
 
         for i in range(2):
             pres = await _create_presentation(db_session)
-            user_id = uuid.uuid4()
+            user_id = await _ensure_user(db_session, uuid.uuid4())
             assessment = await service.get_or_create_assessment(
                 user_id=user_id, presentation_id=pres.id,
                 experiment_group="eduvision",

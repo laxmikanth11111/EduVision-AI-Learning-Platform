@@ -48,6 +48,28 @@ TEST_USER_A = uuid.UUID("10000000-0000-0000-0000-000000000001")
 TEST_USER_B = uuid.UUID("20000000-0000-0000-0000-000000000002")
 
 
+async def _ensure_user(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Persist a user row so FK constraints are satisfied.
+
+    The test conftest enables SQLite FK enforcement (PRAGMA foreign_keys=ON),
+    so any row referencing a non-existent user is rejected.
+    """
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    existing = await db.execute(select(User).where(User.id == user_id))
+    if existing.scalar_one_or_none() is None:
+        db.add(
+            User(
+                id=user_id,
+                email=f"u{user_id.hex}@test.local",
+                name="Test User",
+                password_hash=hash_password("testpassword123"),
+            )
+        )
+    await db.flush()
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -87,6 +109,8 @@ async def _create_quiz_with_questions(
     presentation_id: uuid.UUID,
     num_questions: int = 3,
 ) -> tuple[Quiz, list[Question], QuizVersion]:
+    await _ensure_user(db, user_id)
+
     quiz = Quiz(
         public_id=f"quiz_{uuid.uuid4().hex[:16]}",
         user_id=user_id,
@@ -157,6 +181,8 @@ async def _take_quiz(
     This creates the attempt directly with the desired score to focus
     on the effectiveness chain rather than quiz-scoring internals.
     """
+    await _ensure_user(db, user_id)
+
     attempt = QuizAttempt(
         public_id=f"qatt_{uuid.uuid4().hex[:16]}",
         quiz_id=quiz.id,
@@ -186,6 +212,10 @@ class TestP2EffectivenessE2E:
     """
 
     async def test_full_effectiveness_chain(self, db_session: AsyncSession):
+        # Ensure synthetic users exist so FK constraints are satisfied
+        await _ensure_user(db_session, TEST_USER_A)
+        await _ensure_user(db_session, TEST_USER_B)
+
         # ── Step 1: Create presentation and concept ───────────────────────
         pres_a = await _create_presentation(db_session, TEST_USER_A)
         await _create_concept(db_session)
@@ -395,6 +425,8 @@ class TestP2EffectivenessE2ERetention:
 
     async def test_retention_chain(self, db_session: AsyncSession):
         user_id = uuid.uuid4()
+        await _ensure_user(db_session, user_id)
+        await _ensure_user(db_session, TEST_USER_B)
         pres = await _create_presentation(db_session, user_id)
         quiz, questions, version = await _create_quiz_with_questions(
             db_session, user_id=user_id, presentation_id=pres.id, num_questions=3,

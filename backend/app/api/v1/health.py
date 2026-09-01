@@ -96,11 +96,21 @@ async def _check_database() -> ComponentHealth:
         db_healthy = await check_database_connection()
         return ComponentHealth(
             status="healthy" if db_healthy else "unhealthy",
-            details={"database_type": "postgresql"},
+            details={"database_type": _database_dialect()},
         )
     except Exception as e:
         logger.error("health_check_db_failed", error=str(e))
         return ComponentHealth(status="unhealthy", details={"error": "database connection failed"})
+
+
+def _database_dialect() -> str:
+    """Report the real engine dialect rather than assuming PostgreSQL."""
+    try:
+        from app.database.session import engine
+
+        return engine.dialect.name
+    except Exception:
+        return "unknown"
 
 
 async def _check_redis(redis: Redis) -> ComponentHealth:

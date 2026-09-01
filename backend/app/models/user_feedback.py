@@ -6,11 +6,11 @@ import uuid
 from typing import Any
 
 from sqlalchemy import ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
+from app.database.types import PortableJSONB
 
 PUBLIC_ID_PREFIX = "ufbk_"
 
@@ -51,4 +51,4 @@ class UserFeedback(Base, UUIDMixin, TimestampMixin):
     overall_experience: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     qualitative_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
-    extra_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_json: Mapped[dict[str, Any] | None] = mapped_column(PortableJSONB, nullable=True)

@@ -7,11 +7,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
+from app.database.types import PortableJSONB
 
 if TYPE_CHECKING:
     from app.models.quiz import Quiz
@@ -47,7 +47,7 @@ class QuizVersion(Base, UUIDMixin, TimestampMixin):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    generation_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    generation_metadata: Mapped[dict | None] = mapped_column(PortableJSONB, nullable=True)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Index, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
+from app.database.types import PortableJSONB
 
 PUBLIC_ID_PREFIX = "levt_"
 
@@ -45,7 +45,7 @@ class LearningEvent(Base, UUIDMixin, TimestampMixin):
         Uuid(as_uuid=True), nullable=True,
     )
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSONB, nullable=True,
     )
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False,

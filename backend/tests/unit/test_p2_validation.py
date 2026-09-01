@@ -51,9 +51,35 @@ async def _create_pres(session) -> Presentation:
     return pres
 
 
+async def _ensure_user(session, user_id):
+    """Persist a user row so FK constraints are satisfied.
+
+    With SQLite FK enforcement enabled (PRAGMA foreign_keys=ON in the test
+    conftest), rows referencing a non-existent user are rejected. Tests that
+    create records owned by ad-hoc users must first insert the user.
+    """
+    from sqlalchemy import select
+
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    existing = await session.execute(select(User).where(User.id == user_id))
+    if existing.scalar_one_or_none() is None:
+        session.add(
+            User(
+                id=user_id,
+                email=f"u{user_id.hex}@test.local",
+                name="Test User",
+                password_hash=hash_password("testpassword123"),
+            )
+        )
+    await session.flush()
+    return user_id
+
+
 # ---------------------------------------------------------------------------
 # P2.11: No assumptions about learning gains
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 
 class TestNoUnwarrantedClaims:
@@ -69,7 +95,7 @@ class TestNoUnwarrantedClaims:
         pres = await _create_pres(db_session)
         service = EffectivenessService(db_session)
         assessment = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
         )
         assessment.baseline_score = 30.0
         assessment.post_score = 70.0
@@ -96,7 +122,7 @@ class TestNoUnwarrantedClaims:
         pres = await _create_pres(db_session)
         service = EffectivenessService(db_session)
         assessment = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
         )
         assessment.baseline_score = 0.0
         assessment.post_score = 100.0
@@ -113,7 +139,7 @@ class TestNoUnwarrantedClaims:
         pres = await _create_pres(db_session)
         service = EffectivenessService(db_session)
         assessment = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
         )
         assessment.baseline_score = 80.0
         assessment.post_score = 60.0
@@ -130,7 +156,7 @@ class TestNoUnwarrantedClaims:
         pres = await _create_pres(db_session)
         service = EffectivenessService(db_session)
         assessment = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
         )
         assessment.baseline_score = 40.0
         assessment.post_score = 80.0
@@ -162,7 +188,7 @@ class TestNoUnwarrantedClaims:
         pres = await _create_pres(db_session)
         service = EffectivenessService(db_session)
         assessment = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
         )
         assessment.baseline_concept_scores = {"algebra": 80.0, "geometry": 30.0}
         assessment.post_concept_scores = {"algebra": 85.0, "geometry": 45.0}
@@ -195,7 +221,7 @@ class TestNoStatisticalClaims:
         # Create two groups
         for i in range(5):
             pres = await _create_pres(db_session)
-            uid = uuid.uuid4()
+            uid = await _ensure_user(db_session, uuid.uuid4())
             a = await service.get_or_create_assessment(
                 user_id=uid, presentation_id=pres.id,
                 experiment_group="reference",
@@ -206,7 +232,7 @@ class TestNoStatisticalClaims:
 
         for i in range(5):
             pres = await _create_pres(db_session)
-            uid = uuid.uuid4()
+            uid = await _ensure_user(db_session, uuid.uuid4())
             a = await service.get_or_create_assessment(
                 user_id=uid, presentation_id=pres.id,
                 experiment_group="eduvision",
@@ -245,7 +271,7 @@ class TestNoStatisticalClaims:
 
         # Only 1 user per group — far too small for any statistical claim
         a = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
             experiment_group="reference",
         )
         a.baseline_score = 40.0
@@ -254,7 +280,7 @@ class TestNoStatisticalClaims:
 
         pres2 = await _create_pres(db_session)
         b = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres2.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres2.id,
             experiment_group="eduvision",
         )
         b.baseline_score = 40.0
@@ -294,7 +320,7 @@ class TestComparisonFramework:
         for g in gains_a:
             pres = await _create_pres(db_session)
             a = await service.get_or_create_assessment(
-                user_id=uuid.uuid4(), presentation_id=pres.id,
+                user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
                 experiment_group="ref",
             )
             a.baseline_score = 40.0
@@ -304,7 +330,7 @@ class TestComparisonFramework:
         for g in gains_b:
             pres = await _create_pres(db_session)
             a = await service.get_or_create_assessment(
-                user_id=uuid.uuid4(), presentation_id=pres.id,
+                user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
                 experiment_group="ev",
             )
             a.baseline_score = 40.0
@@ -332,7 +358,7 @@ class TestComparisonFramework:
         service = EffectivenessService(db_session)
         pres = await _create_pres(db_session)
         a = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
             experiment_group="alpha",
         )
         a.baseline_score = 50.0
@@ -383,7 +409,7 @@ class TestBoundaryBetweenSoftwareAndLearning:
         pres = await _create_pres(db_session)
         service = EffectivenessService(db_session)
         assessment = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
         )
         assessment.baseline_score = 30.0
         assessment.post_score = 90.0
@@ -410,7 +436,7 @@ class TestBoundaryBetweenSoftwareAndLearning:
         pres = await _create_pres(db_session)
 
         a = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
             experiment_group="control",
         )
         a.baseline_score = 50.0
@@ -419,7 +445,7 @@ class TestBoundaryBetweenSoftwareAndLearning:
 
         pres2 = await _create_pres(db_session)
         b = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres2.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres2.id,
             experiment_group="treatment",
         )
         b.baseline_score = 50.0
@@ -449,7 +475,7 @@ class TestBoundaryBetweenSoftwareAndLearning:
         pres = await _create_pres(db_session)
         service = EffectivenessService(db_session)
         assessment = await service.get_or_create_assessment(
-            user_id=uuid.uuid4(), presentation_id=pres.id,
+            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
         )
         assessment.post_score = 80.0
         assessment.retention_score = 60.0
@@ -473,7 +499,7 @@ class TestBoundaryBetweenSoftwareAndLearning:
 
         service = UserFeedbackService(db_session)
         fb = await service.submit(
-            user_id=uuid.uuid4(),
+            user_id=await _ensure_user(db_session, uuid.uuid4()),
             perceived_understanding=5,
             confidence=5,
             usefulness=5,
@@ -502,8 +528,8 @@ class TestDataIsolation:
         from app.models.quiz_version import QuizVersion
         from app.services.effectiveness_service import EffectivenessService
 
-        user_a = uuid.uuid4()
-        user_b = uuid.uuid4()
+        user_a = await _ensure_user(db_session, uuid.uuid4())
+        user_b = await _ensure_user(db_session, uuid.uuid4())
 
         # Create presentation + quiz + attempt for User A
         pres_a = await _create_pres(db_session)
@@ -580,8 +606,8 @@ class TestDataIsolation:
         from app.models.quiz_version import QuizVersion
         from app.services.effectiveness_service import EffectivenessService
 
-        user_a = uuid.uuid4()
-        user_b = uuid.uuid4()
+        user_a = await _ensure_user(db_session, uuid.uuid4())
+        user_b = await _ensure_user(db_session, uuid.uuid4())
 
         pres = await _create_pres(db_session)
         quiz = Quiz(

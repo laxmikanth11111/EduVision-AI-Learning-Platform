@@ -7,11 +7,11 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
+from app.database.types import PortableJSONB
 
 PUBLIC_ID_PREFIX = "eass_"
 
@@ -51,7 +51,7 @@ class EffectivenessAssessment(Base, UUIDMixin, TimestampMixin):
     )
     baseline_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     baseline_concept_scores: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSONB, nullable=True,
     )
 
     post_quiz_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -59,7 +59,7 @@ class EffectivenessAssessment(Base, UUIDMixin, TimestampMixin):
     )
     post_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     post_concept_scores: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSONB, nullable=True,
     )
 
     retention_quiz_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -67,7 +67,7 @@ class EffectivenessAssessment(Base, UUIDMixin, TimestampMixin):
     )
     retention_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     retention_concept_scores: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSONB, nullable=True,
     )
     retention_delay_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -78,7 +78,7 @@ class EffectivenessAssessment(Base, UUIDMixin, TimestampMixin):
 
     total_learning_time_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     events_summary: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSONB, nullable=True,
     )
 
     status: Mapped[str] = mapped_column(

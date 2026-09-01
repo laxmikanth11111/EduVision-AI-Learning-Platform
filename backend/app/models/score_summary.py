@@ -5,11 +5,11 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import ForeignKey, Integer, Numeric
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
+from app.database.types import PortableJSONB
 
 
 class ScoreSummary(Base, UUIDMixin, TimestampMixin):
@@ -30,4 +30,4 @@ class ScoreSummary(Base, UUIDMixin, TimestampMixin):
     incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     partially_correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unanswered_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    breakdown: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    breakdown: Mapped[dict | None] = mapped_column(PortableJSONB, nullable=True)

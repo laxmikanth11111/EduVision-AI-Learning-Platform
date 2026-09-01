@@ -454,7 +454,8 @@ class TestP18ConceptRepository:
         from app.repositories.concept_repository import ConceptRepository
 
         repo = ConceptRepository(db_session)
-        pres_id = uuid.uuid4()
+        pres = await _create_presentation(db_session, owner_id=None, title="Concept Test")
+        pres_id = pres.id
 
         # First call creates
         c1 = await repo.get_or_create(
@@ -477,11 +478,13 @@ class TestP18ConceptRepository:
         from app.repositories.concept_repository import ConceptRepository
 
         repo = ConceptRepository(db_session)
-        pres_id = uuid.uuid4()
+        pres = await _create_presentation(db_session, owner_id=None, title="CNN RNN Concepts")
+        other_pres = await _create_presentation(db_session, owner_id=None, title="GAN Concepts")
+        pres_id = pres.id
 
         await repo.get_or_create("CNN", presentation_id=pres_id)
         await repo.get_or_create("RNN", presentation_id=pres_id)
-        await repo.get_or_create("GAN", presentation_id=uuid.uuid4())  # different pres
+        await repo.get_or_create("GAN", presentation_id=other_pres.id)  # different pres
 
         concepts = await repo.list_by_presentation(pres_id)
         names = {c.name for c in concepts}

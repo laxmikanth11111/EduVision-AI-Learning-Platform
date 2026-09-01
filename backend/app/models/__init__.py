@@ -31,6 +31,7 @@ from app.models.generated_lesson import GeneratedLesson
 from app.models.generated_lesson_version import GeneratedLessonVersion
 from app.models.learning_activity import LearningActivity
 from app.models.learning_event import LearningEvent
+from app.models.learning_session import LearningSession
 from app.models.presentation import Presentation
 from app.models.presentation_analytics import PresentationAnalytics
 from app.models.presentation_audit_log import PresentationAuditLog
@@ -117,6 +118,7 @@ __all__ = [
     "EducationalMemoryRecord",
     "EffectivenessAssessment",
     "LearningEvent",
+    "LearningSession",
     "Concept",
     "User",
     "UserFeedback",

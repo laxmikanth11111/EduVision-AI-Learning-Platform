@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.effectiveness_assessment import EffectivenessAssessment
+from app.models.presentation import Presentation
 from app.models.user_feedback import UserFeedback
 from app.services.effectiveness_service import EffectivenessService
 
@@ -21,6 +22,30 @@ pytestmark = pytest.mark.asyncio
 
 TEST_USER = uuid.UUID("aaaa0001-0000-0000-0000-000000000001")
 OTHER_USER = uuid.UUID("aaaa9999-9999-9999-9999-999999999999")
+
+
+async def _ensure_user(db_session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Persist a user row so FK constraints are satisfied.
+
+    The test conftest enables SQLite FK enforcement (PRAGMA foreign_keys=ON),
+    so any row referencing a non-existent user is rejected.
+    """
+    from sqlalchemy import select
+
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    existing = await db_session.execute(select(User).where(User.id == user_id))
+    if existing.scalar_one_or_none() is None:
+        db_session.add(
+            User(
+                id=user_id,
+                email=f"u{user_id.hex}@test.local",
+                name="Test User",
+                password_hash=hash_password("testpassword123"),
+            )
+        )
+    await db_session.flush()
 
 
 async def _create_assessment(
@@ -35,6 +60,20 @@ async def _create_assessment(
     total_learning_time_seconds: int | None = None,
     status: str = "in_progress",
 ) -> EffectivenessAssessment:
+    await _ensure_user(db_session, user_id)
+
+    # The caller-supplied presentation id is an ad-hoc key; replace it with a
+    # real presentation row so the FK constraint is satisfied.
+    pres = Presentation(
+        title="Export Test Presentation",
+        owner_id=None,
+        status="ready",
+        visibility="private",
+    )
+    db_session.add(pres)
+    await db_session.flush()
+    presentation_id = pres.id
+
     assessment = EffectivenessAssessment(
         user_id=user_id,
         presentation_id=presentation_id,
@@ -72,6 +111,8 @@ async def _create_feedback(
     usefulness: int | None = None,
     qualitative_feedback: str | None = None,
 ) -> UserFeedback:
+    await _ensure_user(db_session, user_id)
+
     fb = UserFeedback(
         user_id=user_id,
         assessment_id=assessment_id,

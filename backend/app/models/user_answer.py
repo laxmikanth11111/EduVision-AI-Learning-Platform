@@ -6,11 +6,11 @@ import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
+from app.database.types import PortableJSONB
 
 if TYPE_CHECKING:
     pass
@@ -34,9 +34,9 @@ class UserAnswer(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
     answer_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    option_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    option_ids: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
     text_value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    matching_pairs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    order_values: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    matching_pairs: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
+    order_values: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
     is_auto_graded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     grading_status: Mapped[str] = mapped_column(String(20), nullable=False, default="auto")
