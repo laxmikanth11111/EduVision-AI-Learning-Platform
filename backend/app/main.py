@@ -72,12 +72,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         environment=settings.APP_ENV,
     )
     try:
-        from alembic import command
-        from alembic.config import Config
-        alembic_cfg = Config("alembic.ini")
-        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
-        logger.info("alembic_migrations_applied")
+        if settings.AUTO_MIGRATE_ON_STARTUP:
+            from alembic import command
+            from alembic.config import Config
+
+            alembic_cfg = Config("alembic.ini")
+            await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
+            logger.info("alembic_migrations_applied")
     except Exception as e:
+        if settings.LIFESPAN_FAIL_FAST_ON_MIGRATION_ERROR:
+            logger.critical("alembic_migration_failed_aborting", error=str(e))
+            raise RuntimeError("Database migration failed at startup; refusing to start") from e
         logger.warning("alembic_migration_failed", error=str(e))
     yield
     logger.info("application_shutting_down")

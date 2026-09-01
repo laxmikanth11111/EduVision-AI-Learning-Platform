@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     CELERY_DISPATCH_RETRY_DELAY: float = 0.1
     CELERY_DISPATCH_RETRY_MAX_DELAY: float = 1.0
 
+    # ── Startup / lifespan ───────────────────────────────────────────────────
+    # When True, a failure to run Alembic migrations at startup aborts app
+    # startup (fail-fast) instead of continuing on a possibly-stale schema.
+    AUTO_MIGRATE_ON_STARTUP: bool = True
+    LIFESPAN_FAIL_FAST_ON_MIGRATION_ERROR: bool = False
+
     # ── Storage (S3-compatible) ───────────────────────────────────────────────
     STORAGE_PROVIDER: str = "s3"
     S3_ENDPOINT_URL: str | None = None
