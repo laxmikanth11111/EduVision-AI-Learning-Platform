@@ -30,14 +30,57 @@ logger = get_logger(__name__)
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# In-memory revoked token JTI set (production would use Redis)
+# In-memory revoked token JTI set (fallback when Redis is unavailable).
+# Primary store is Redis so revocation is shared across app instances.
 _revoked_refresh_jtis: set[str] = set()
+_REVOKED_REFRESH_KEY_PREFIX = "eduvision:auth:revoked:refresh:"
 
 # In-memory OAuth state store with TTL (fallback when Redis is unavailable;
 # primary store is Redis so multiple app instances share state)
 _oauth_states: dict[str, float] = {}
 _OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
 _OAUTH_STATE_KEY_PREFIX = "eduvision:oauth:state:"
+
+
+def _revoked_refresh_ttl() -> int:
+    """TTL for a revoked refresh token JTI (lifetime of a refresh token)."""
+    return max(settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400, 1)
+
+
+async def _revoke_refresh_jti(jti: str) -> None:
+    """Persist a revoked refresh token JTI (Redis with in-memory fallback)."""
+    try:
+        from redis.asyncio import Redis as AsyncRedis
+
+        from app.workers.redis_client import get_redis_pool
+
+        pool = await get_redis_pool()
+        redis = AsyncRedis(connection_pool=pool)
+        await redis.set(
+            f"{_REVOKED_REFRESH_KEY_PREFIX}{jti}",
+            "",
+            ex=_revoked_refresh_ttl(),
+        )
+        return
+    except Exception:
+        pass
+    _revoked_refresh_jtis.add(jti)
+
+
+async def _is_refresh_jti_revoked(jti: str) -> bool:
+    """Return True if a refresh token JTI has been revoked."""
+    try:
+        from redis.asyncio import Redis as AsyncRedis
+
+        from app.workers.redis_client import get_redis_pool
+
+        pool = await get_redis_pool()
+        redis = AsyncRedis(connection_pool=pool)
+        exists = await redis.exists(f"{_REVOKED_REFRESH_KEY_PREFIX}{jti}")
+        return bool(exists)
+    except Exception:
+        pass
+    return jti in _revoked_refresh_jtis
 
 
 async def _store_oauth_state(state: str) -> None:
@@ -180,7 +223,7 @@ async def logout(
     if refresh_token:
         try:
             payload = decode_refresh_token(refresh_token)
-            _revoked_refresh_jtis.add(payload["jti"])
+            await _revoke_refresh_jti(payload["jti"])
         except Exception:
             pass
 
@@ -337,7 +380,7 @@ async def refresh_tokens(
             detail="Invalid or expired refresh token.",
         )
 
-    if payload["jti"] in _revoked_refresh_jtis:
+    if await _is_refresh_jti_revoked(payload["jti"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has been revoked.",
