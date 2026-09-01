@@ -2,8 +2,19 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Header, Query, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.database.unit_of_work import UnitOfWork, get_unit_of_work
 from app.models.user import User
@@ -40,6 +51,23 @@ from app.services.presentation_service import PresentationService
 from app.utils.pagination_helpers import create_page_meta
 
 presentations_router = APIRouter(prefix="/presentations", tags=["Presentations"])
+
+
+async def _read_upload_bounded(upload: UploadFile) -> bytes:
+    """Read an upload, enforcing a hard byte limit on the body.
+
+    The request-size middleware only checks the declared ``Content-Length``
+    header; it does not bound the actual streamed body. This helper caps the
+    read at ``settings.UPLOAD_MAX_FILE_SIZE`` so a misdeclared or chunked
+    request cannot force an unbounded read into memory.
+    """
+    content = await upload.read(settings.UPLOAD_MAX_FILE_SIZE + 1)
+    if len(content) > settings.UPLOAD_MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Upload exceeds the maximum allowed size of {settings.UPLOAD_MAX_FILE_SIZE} bytes.",
+        )
+    return content
 
 
 @presentations_router.get(
@@ -374,7 +402,7 @@ async def upload_source(
 ) -> APIResponse[PresentationResponse]:
     service = PresentationService(uow)
     await service.assert_ownership(presentation_id, user.id)
-    content = await source.read()
+    content = await _read_upload_bounded(source)
     filename = source.filename or ""
 
     result = await service.set_source(
@@ -465,7 +493,7 @@ async def upload_thumbnail(
 ) -> APIResponse[ThumbnailResponse]:
     service = PresentationService(uow)
     await service.assert_ownership(presentation_id, user.id)
-    content = await thumbnail.read()
+    content = await _read_upload_bounded(thumbnail)
     result = await service.set_thumbnail(
         presentation_id,
         content,

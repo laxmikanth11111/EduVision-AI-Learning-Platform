@@ -40,9 +40,14 @@ async def _assert_canvas_owner(
     user: User,
     persistence_service: VisualPersistenceService,
 ) -> None:
-    """Raise 404 if the canvas does not exist or does not belong to *user*."""
+    """Raise 404 if the canvas does not exist or does not belong to *user*.
+
+    Ownership is strict: a canvas is only accessible to its owning user. A
+    canvas with no owner (``user_id IS NULL``) is not owned by anyone and must
+    never be reachable through this personal, owner-scoped API.
+    """
     canvas = await persistence_service.canvas_repo.get_or_raise(canvas_id)
-    if canvas.user_id is not None and str(canvas.user_id) != str(user.id):
+    if canvas.user_id is None or str(canvas.user_id) != str(user.id):
         raise NotFoundError(
             message="Canvas not found",
             details={"canvas_id": str(canvas_id)},
