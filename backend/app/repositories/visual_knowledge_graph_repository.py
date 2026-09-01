@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.exceptions import NotFoundError
 from app.database.repository import BaseRepository
 from app.models.visual_knowledge_graph import (
     ComponentMetadata,
@@ -22,6 +23,27 @@ from app.models.visual_knowledge_graph import (
     VisualQuizBlueprint,
     VisualRelationship,
 )
+
+
+async def _ensure_canvas_active(
+    session: AsyncSession, canvas_id: uuid.UUID | str
+) -> None:
+    """Raise NotFoundError if the canvas does not exist or is soft-deleted.
+
+    Sub-graph queries (nodes/edges/layout/...) must never return data that
+    belongs to a soft-deleted canvas, otherwise a deleted canvas's graph
+    would remain reachable through standalone repository queries.
+    """
+    stmt = select(VisualCanvas.id).where(
+        VisualCanvas.id == canvas_id,
+        VisualCanvas.deleted_at.is_(None),
+    )
+    result = await session.execute(stmt)
+    if result.scalar_one_or_none() is None:
+        raise NotFoundError(
+            message="Visual canvas not found or has been deleted",
+            details={"canvas_id": str(canvas_id)},
+        )
 
 
 class VisualCanvasRepository(BaseRepository[VisualCanvas]):
@@ -78,6 +100,7 @@ class VisualNodeRepository(BaseRepository[VisualNode]):
         super().__init__(session, VisualNode)
 
     async def get_nodes_by_canvas(self, canvas_id: uuid.UUID) -> list[VisualNode]:
+        await _ensure_canvas_active(self._session, canvas_id)
         stmt = (
             select(VisualNode)
             .where(VisualNode.canvas_id == canvas_id)
@@ -100,6 +123,7 @@ class VisualEdgeRepository(BaseRepository[VisualEdge]):
         super().__init__(session, VisualEdge)
 
     async def get_edges_by_canvas(self, canvas_id: uuid.UUID) -> list[VisualEdge]:
+        await _ensure_canvas_active(self._session, canvas_id)
         return await self.find(canvas_id=canvas_id)
 
 
@@ -118,6 +142,7 @@ class LearningObjectiveRepository(BaseRepository[LearningObjective]):
         super().__init__(session, LearningObjective)
 
     async def get_by_canvas_id(self, canvas_id: uuid.UUID) -> LearningObjective | None:
+        await _ensure_canvas_active(self._session, canvas_id)
         return await self.find_one(canvas_id=canvas_id)
 
 
@@ -127,6 +152,7 @@ class VisualRelationshipRepository(BaseRepository[VisualRelationship]):
         super().__init__(session, VisualRelationship)
 
     async def get_by_canvas_id(self, canvas_id: uuid.UUID) -> list[VisualRelationship]:
+        await _ensure_canvas_active(self._session, canvas_id)
         return await self.find(canvas_id=canvas_id)
 
 
@@ -136,6 +162,7 @@ class VisualLayoutRepository(BaseRepository[VisualLayout]):
         super().__init__(session, VisualLayout)
 
     async def get_by_canvas_id(self, canvas_id: uuid.UUID) -> VisualLayout | None:
+        await _ensure_canvas_active(self._session, canvas_id)
         return await self.find_one(canvas_id=canvas_id)
 
 
@@ -145,6 +172,7 @@ class SimulationCandidateRepository(BaseRepository[SimulationCandidate]):
         super().__init__(session, SimulationCandidate)
 
     async def get_by_canvas_id(self, canvas_id: uuid.UUID) -> list[SimulationCandidate]:
+        await _ensure_canvas_active(self._session, canvas_id)
         return await self.find(canvas_id=canvas_id)
 
 
@@ -154,4 +182,5 @@ class VisualQuizBlueprintRepository(BaseRepository[VisualQuizBlueprint]):
         super().__init__(session, VisualQuizBlueprint)
 
     async def get_by_canvas_id(self, canvas_id: uuid.UUID) -> VisualQuizBlueprint | None:
+        await _ensure_canvas_active(self._session, canvas_id)
         return await self.find_one(canvas_id=canvas_id)
