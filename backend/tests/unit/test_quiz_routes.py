@@ -417,17 +417,217 @@ async def test_max_attempts_limit(client: AsyncClient, quiz_id: str):
 # ---------------------------------------------------------------------------
 
 
+@pytest_asyncio.fixture
+async def other_user_quiz_id(
+    db_session: AsyncSession,
+    other_user_id: uuid.UUID,
+) -> str:
+    """Create a quiz owned by a different user (via their own presentation)."""
+    from sqlalchemy import select as sa_select
+
+    from app.models.presentation import Presentation
+    from app.models.quiz import Quiz
+    from app.models.quiz_version import QuizVersion
+
+    p = Presentation(
+        title="Other User Presentation",
+        owner_id=other_user_id,
+        status="published",
+        slide_count=1,
+    )
+    db_session.add(p)
+    await db_session.flush()
+    await db_session.refresh(p)
+
+    quiz = Quiz(
+        presentation_id=p.id,
+        user_id=other_user_id,
+        status="published",
+        mode="practice",
+        title="Other User Quiz",
+        description="Owned by another user",
+        difficulty="beginner",
+        question_count=1,
+        max_attempts_per_user=3,
+        passing_score=60.0,
+        shuffle_questions=False,
+        shuffle_options=False,
+        show_feedback_after=True,
+        latest_version=1,
+        published_version=1,
+    )
+    db_session.add(quiz)
+    await db_session.flush()
+
+    version = QuizVersion(
+        quiz_id=quiz.id,
+        version=1,
+        status="published",
+        title="Other User Quiz v1",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    await db_session.commit()
+    return quiz.public_id
+
+
+@pytest_asyncio.fixture
+async def other_user_id(db_session: AsyncSession) -> uuid.UUID:
+    """Create a second distinct test user and return their UUID."""
+    from sqlalchemy import select as sa_select
+
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    uid = uuid.UUID("00000000-0000-0000-0000-000000000003")
+    existing = await db_session.execute(sa_select(User).where(User.id == uid))
+    if existing.scalar_one_or_none() is None:
+        user = User(
+            id=uid,
+            email="other@example.com",
+            name="Other User",
+            password_hash=hash_password("testpassword123"),
+        )
+        db_session.add(user)
+        await db_session.flush()
+    await db_session.commit()
+    return uid
+
+
+@pytest.fixture
+def as_other_user(other_user_id: uuid.UUID):
+    """Run a test block authenticated as a different user via get_current_user."""
+    from app.core.dependencies import get_current_user
+
+    class _OtherFakeUser:
+        def __init__(self) -> None:
+            self.id = other_user_id
+            self.email = "other@example.com"
+            self.name = "Other User"
+
+    def _install():
+        async def _fake_other():
+            return _OtherFakeUser()
+        app.dependency_overrides[get_current_user] = _fake_other
+
+    def _restore():
+        app.dependency_overrides.pop(get_current_user, None)
+
+    return _install, _restore
+
+
 @pytest.mark.asyncio
-async def test_other_user_can_access_quiz(client: AsyncClient, quiz_id: str):
-    """Quizzes are accessible by any authenticated user (via presentation sharing model)."""
-    # For now, quiz access is tied to the quiz being published.
-    # A second user can start attempts on a published quiz.
+async def test_other_user_denied_quiz_idor(client: AsyncClient, quiz_id: str, as_other_user):
+    """IDOR: a different authenticated user cannot read another owner's quiz."""
+    install, restore = as_other_user
+    install()
+    try:
+        resp = await client.get(f"/api/v1/quizzes/{quiz_id}")
+        assert resp.status_code == 404
+    finally:
+        restore()
+
+
+@pytest.mark.asyncio
+async def test_other_user_denied_start_attempt(
+    client: AsyncClient, quiz_id: str, as_other_user
+):
+    """IDOR: a different user cannot create an attempt on another owner's quiz."""
+    install, restore = as_other_user
+    install()
+    try:
+        resp = await client.post(f"/api/v1/quizzes/{quiz_id}/attempts")
+        assert resp.status_code == 404
+    finally:
+        restore()
+
+
+@pytest.mark.asyncio
+async def test_other_user_denied_list_attempts(
+    client: AsyncClient, quiz_id: str, as_other_user
+):
+    """IDOR: a different user cannot list another owner's quiz attempts."""
+    install, restore = as_other_user
+    install()
+    try:
+        resp = await client.get(f"/api/v1/quizzes/{quiz_id}/attempts")
+        assert resp.status_code == 404
+    finally:
+        restore()
+
+
+@pytest.mark.asyncio
+async def test_owner_can_access_own_quiz(client: AsyncClient, quiz_id: str):
+    """The owner can read their own quiz."""
     resp = await client.get(f"/api/v1/quizzes/{quiz_id}")
     assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_attempt_ownership_isolation(client: AsyncClient, quiz_id: str):
+async def test_owner_can_start_attempt(client: AsyncClient, quiz_id: str):
+    """The owner can start an attempt on their own quiz."""
+    resp = await client.post(f"/api/v1/quizzes/{quiz_id}/attempts")
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_owner_can_list_attempts(client: AsyncClient, quiz_id: str):
+    """The owner can list attempts on their own quiz."""
+    await client.post(f"/api/v1/quizzes/{quiz_id}/attempts")
+    resp = await client.get(f"/api/v1/quizzes/{quiz_id}/attempts")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_other_user_denied_other_quiz(client: AsyncClient, other_user_quiz_id: str):
+    """The current user cannot read a quiz owned by someone else."""
+    resp = await client.get(f"/api/v1/quizzes/{other_user_quiz_id}")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_orphaned_quiz_safely_denied(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """A quiz whose presentation has a null owner is safely denied for everyone."""
+    from app.models.presentation import Presentation
+    from app.models.quiz import Quiz
+
+    p = Presentation(
+        title="Orphaned Presentation",
+        owner_id=None,
+        status="published",
+        slide_count=1,
+    )
+    db_session.add(p)
+    await db_session.flush()
+    await db_session.refresh(p)
+
+    quiz = Quiz(
+        presentation_id=p.id,
+        user_id=None,
+        status="published",
+        mode="practice",
+        title="Orphaned Quiz",
+        max_attempts_per_user=3,
+        question_count=0,
+        latest_version=1,
+        published_version=1,
+    )
+    db_session.add(quiz)
+    await db_session.flush()
+    await db_session.commit()
+    await db_session.refresh(quiz)
+
+    resp = await client.get(f"/api/v1/quizzes/{quiz.public_id}")
+    assert resp.status_code == 404
+
+    resp = await client.post(f"/api/v1/quizzes/{quiz.public_id}/attempts")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_attempt_ownership_isolation(client: AsyncClient, quiz_id: str, as_other_user):
     """User B cannot get User A's attempt results via a different attempt_id."""
     # User A creates an attempt
     resp = await client.post(f"/api/v1/quizzes/{quiz_id}/attempts")
@@ -439,10 +639,14 @@ async def test_attempt_ownership_isolation(client: AsyncClient, quiz_id: str):
         json={"answers": []},
     )
 
-    # User B tries to access (we use the same user for now since tests override auth)
-    # Verify the attempt is returned for the correct user
-    resp = await client.get(f"/api/v1/quizzes/{quiz_id}/attempts/{attempt_id}")
-    assert resp.status_code == 200
+    # User B tries to read User A's attempt -> denied (404)
+    install, restore = as_other_user
+    install()
+    try:
+        resp = await client.get(f"/api/v1/quizzes/{quiz_id}/attempts/{attempt_id}")
+        assert resp.status_code == 404
+    finally:
+        restore()
 
 
 @pytest.mark.asyncio

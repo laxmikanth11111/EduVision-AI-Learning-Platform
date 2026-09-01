@@ -49,8 +49,40 @@ class QuizAttemptService:
     async def assert_quiz_ownership(
         self, quiz_public_id: str, user_id: uuid.UUID
     ) -> Quiz:
-        """Return quiz if user owns it (via presentation ownership), else 404."""
-        quiz = await self._quiz_repo.get_by_public_id_or_raise(quiz_public_id)
+        """Return quiz if the authenticated user owns it, else 404.
+
+        Ownership is enforced through the parent presentation, which is the
+        top-level ownership unit in the individual-first model: a quiz belongs
+        to a presentation and only the presentation's owner may access it.
+        A missing quiz, missing/orphaned presentation, or a non-owner are all
+        reported identically as 404 so no information leaks about whether
+        another user's resource exists.
+        """
+        from sqlalchemy import select
+
+        from app.models.presentation import Presentation
+
+        quiz = await self._quiz_repo.get_by_public_id(quiz_public_id)
+        if quiz is None:
+            raise NotFoundError(
+                message="Quiz not found",
+                details={"quiz_id": quiz_public_id},
+            )
+
+        stmt = select(Presentation).where(Presentation.id == quiz.presentation_id)
+        result = await self._uow.session.execute(stmt)
+        presentation = result.scalar_one_or_none()
+
+        if (
+            presentation is None
+            or presentation.owner_id is None
+            or str(presentation.owner_id) != str(user_id)
+        ):
+            raise NotFoundError(
+                message="Quiz not found",
+                details={"quiz_id": quiz_public_id},
+            )
+
         return quiz
 
     async def _get_quiz_with_version(
