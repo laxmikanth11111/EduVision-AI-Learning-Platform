@@ -614,13 +614,17 @@ class PresentationService:
             key,
             content_type=content_type or "image/png",
         )
-        presentation.thumbnail_key = key
-        await self._audit_service.log(
-            presentation.id,
-            PresentationAction.THUMBNAIL_UPDATED,
-            details={"thumbnail_key": key},
-        )
-        await self._uow.flush()
+        try:
+            presentation.thumbnail_key = key
+            await self._audit_service.log(
+                presentation.id,
+                PresentationAction.THUMBNAIL_UPDATED,
+                details={"thumbnail_key": key},
+            )
+            await self._uow.flush()
+        except Exception:
+            await self._storage_delete_best_effort(storage, key)
+            raise
         logger.info("presentation_thumbnail_uploaded", presentation_id=public_id)
         return {"presentation_id": presentation.public_id, "thumbnail_key": key}
 
@@ -674,29 +678,36 @@ class PresentationService:
             content_type=content_type,
         )
 
-        presentation.file_key = key
-        presentation.file_name = filename
-        presentation.file_size = len(content)
-        presentation.mime_type = content_type
+        try:
+            presentation.file_key = key
+            presentation.file_name = filename
+            presentation.file_size = len(content)
+            presentation.mime_type = content_type
 
-        await self._audit_service.log(
-            presentation.id,
-            PresentationAction.UPDATED,
-            details={
-                "file_key": key,
-                "file_name": filename,
-                "file_size": presentation.file_size,
-            },
-        )
-        await self._uow.flush()
-        await self._uow.session.refresh(presentation)
+            await self._audit_service.log(
+                presentation.id,
+                PresentationAction.UPDATED,
+                details={
+                    "file_key": key,
+                    "file_name": filename,
+                    "file_size": presentation.file_size,
+                },
+            )
+            await self._uow.flush()
+            await self._uow.session.refresh(presentation)
 
-        # Commit before dispatch in every mode: a worker session must never
-        # read a transaction the request hasn't committed yet, or it races the
-        # commit and fails with stale/absent state ("No source file has been
-        # uploaded"). Eager mode runs the task on the same loop, so it acquires
-        # the fresh state only after this commit as well.
-        await self._uow.commit()
+            # Commit before dispatch in every mode: a worker session must never
+            # read a transaction the request hasn't committed yet, or it races the
+            # commit and fails with stale/absent state ("No source file has been
+            # uploaded"). Eager mode runs the task on the same loop, so it acquires
+            # the fresh state only after this commit as well.
+            await self._uow.commit()
+        except Exception:
+            # The upload already hit object storage but the DB write rolled
+            # back; remove the orphaned object so no unreferenced file leaks.
+            await self._storage_delete_best_effort(storage, key)
+            raise
+
         if settings.CELERY_TASK_ALWAYS_EAGER:
             _spawn_background(self.start_source_ingestion(public_id))
         else:
@@ -946,6 +957,23 @@ class PresentationService:
         await self._uow.flush()
         logger.info("presentation_thumbnail_regeneration_scheduled", presentation_id=public_id)
         return {"presentation_id": presentation.public_id, "task_scheduled": True}
+
+    @staticmethod
+    async def _storage_delete_best_effort(storage: object, key: str) -> None:
+        """Remove a freshly-uploaded object when the DB write rolled back.
+
+        Keeps storage and the database consistent: an object uploaded before a
+        failed flush/commit has no database reference and would otherwise be
+        orphaned. Best-effort by design so a storage hiccup never masks the
+        original database error.
+        """
+        try:
+            await storage.delete_object(key)
+        except Exception:
+            logger.exception(
+                "storage_cleanup_after_db_failure_failed",
+                key=key,
+            )
 
     @staticmethod
     def _thumbnail_extension(

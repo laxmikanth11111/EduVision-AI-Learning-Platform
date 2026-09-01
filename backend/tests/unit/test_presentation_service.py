@@ -682,6 +682,30 @@ class TestThumbnailManagement:
         audit_args = presentation_service._audit_service.log.await_args.args
         assert audit_args[1] == PresentationAction.THUMBNAIL_UPDATED
 
+    async def test_set_thumbnail_removes_orphan_upload_on_db_failure(
+        self, presentation_service: PresentationService, mock_uow: MagicMock
+    ) -> None:
+        """WS4: a failed flush rolls back the freshly uploaded thumbnail."""
+        presentation = _make_presentation()
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+        storage = MagicMock()
+        storage.upload_fileobj = AsyncMock(return_value="thumbnails/thumb.png")
+        storage.delete_object = AsyncMock()
+
+        mock_uow.flush = AsyncMock(side_effect=RuntimeError("flush failed"))
+
+        with pytest.raises(RuntimeError, match="flush failed"), patch(
+            "app.services.presentation_service.get_storage_backend",
+            AsyncMock(return_value=storage),
+        ):
+            await presentation_service.set_thumbnail(
+                presentation.public_id, b"\x89PNG\r\n\x1a\npng-data", content_type="image/png"
+            )
+
+        storage.delete_object.assert_awaited_once()
+
     async def test_set_thumbnail_empty_content(
         self, presentation_service: PresentationService,
     ) -> None:
@@ -692,6 +716,63 @@ class TestThumbnailManagement:
 
         with pytest.raises(ConflictError, match="empty"):
             await presentation_service.set_thumbnail(presentation.public_id, b"")
+
+    async def test_set_source_removes_orphan_upload_on_db_failure(
+        self, presentation_service: PresentationService, mock_uow: MagicMock
+    ) -> None:
+        """WS4: a failed DB write rolls back the freshly uploaded source file."""
+        presentation = _make_presentation()
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+        storage = MagicMock()
+        storage.upload_fileobj = AsyncMock(return_value="sources/test-key")
+        storage.delete_object = AsyncMock()
+
+        mock_uow.commit = AsyncMock(side_effect=RuntimeError("db commit failed"))
+
+        with pytest.raises(RuntimeError, match="db commit failed"), patch(
+            "app.services.presentation_service.get_storage_backend",
+            AsyncMock(return_value=storage),
+        ):
+            await presentation_service.set_source(
+                presentation.public_id,
+                b"%PDF-1.4 pdf-content",
+                filename="slides.pdf",
+                content_type="application/pdf",
+            )
+
+        storage.delete_object.assert_awaited_once()
+
+    async def test_set_source_keeps_upload_on_success(
+        self, presentation_service: PresentationService, mock_uow: MagicMock
+    ) -> None:
+        presentation = _make_presentation()
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+        storage = MagicMock()
+        storage.upload_fileobj = AsyncMock(return_value="sources/test-key")
+        storage.delete_object = AsyncMock()
+
+        with patch(
+            "app.workers.tasks.process_source_ingestion_task.delay",
+            MagicMock(),
+        ), patch(
+            "app.services.presentation_service.get_storage_backend",
+            AsyncMock(return_value=storage),
+        ), patch(
+            "app.core.config.settings.CELERY_TASK_ALWAYS_EAGER",
+            False,
+        ):
+            await presentation_service.set_source(
+                presentation.public_id,
+                b"%PDF-1.4 pdf-content",
+                filename="slides.pdf",
+                content_type="application/pdf",
+            )
+
+        storage.delete_object.assert_not_called()
 
     async def test_set_source_uploads_and_updates_metadata(
         self, presentation_service: PresentationService,
