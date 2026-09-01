@@ -91,9 +91,9 @@ class TestPresentationSourceUpload:
         assert body["error"]["code"] == "VALIDATION_ERROR"
         assert "Unsupported source file extension" in body["error"]["message"]
 
-    async def test_oversized_file_returns_422(self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_oversized_file_returns_413(self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "app.services.presentation_service.settings.UPLOAD_MAX_FILE_SIZE",
+            "app.core.config.settings.UPLOAD_MAX_FILE_SIZE",
             10,
         )
         presentation_id = await _create_presentation(client)
@@ -103,15 +103,15 @@ class TestPresentationSourceUpload:
             files={"source": ("slides.pdf", b"0123456789A", "application/pdf")},
         )
 
-        assert response.status_code == 422
-        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+        assert response.status_code == 413
+        assert response.json()["error"]["code"] == "REQUEST_TOO_LARGE"
 
     async def test_invalid_content_type_still_allows_upload(self, client: AsyncClient, mock_storage: MagicMock) -> None:
         presentation_id = await _create_presentation(client)
 
         response = await client.post(
             f"/api/v1/presentations/{presentation_id}/source",
-            files={"source": ("slides.pdf", b"pdf-data", "application/invalid")},
+            files={"source": ("slides.pdf", b"%PDF-1.4 pdf-data", "application/invalid")},
         )
 
         assert response.status_code == 200

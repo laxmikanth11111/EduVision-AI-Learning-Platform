@@ -33,9 +33,11 @@ from app.storage.factory import get_storage_backend
 from app.utils.file_helpers import (
     SUPPORTED_DOCUMENT_EXTENSIONS,
     get_content_type,
+    get_file_extension,
     is_document_extension_allowed,
     is_within_size_limit,
     safe_filename,
+    validate_magic_bytes,
 )
 from shared.constants import (
     PresentationAction,
@@ -597,6 +599,14 @@ class PresentationService:
             raise ConflictError(message="Thumbnail content is empty")
 
         extension = self._thumbnail_extension(filename, content_type)
+        if not validate_magic_bytes(content[:512], f"thumbnail{extension}"):
+            raise ValidationError(
+                message="Thumbnail content does not match its file type",
+                details={
+                    "extension": extension,
+                    "content_type": content_type,
+                },
+            )
         key = f"thumbnails/{presentation.public_id}{extension}"
         storage = await get_storage_backend()
         await storage.upload_fileobj(
@@ -643,6 +653,15 @@ class PresentationService:
                 details={
                     "max_size": settings.UPLOAD_MAX_FILE_SIZE,
                     "actual_size": len(content),
+                },
+            )
+
+        if not validate_magic_bytes(content[:512], filename):
+            raise ValidationError(
+                message="Source file content does not match its file extension",
+                details={
+                    "filename": filename,
+                    "extension": get_file_extension(filename),
                 },
             )
 

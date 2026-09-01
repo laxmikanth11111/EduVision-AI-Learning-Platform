@@ -101,6 +101,7 @@ def _build_http_error_response(
         404: ErrorCode.NOT_FOUND,
         405: ErrorCode.METHOD_NOT_ALLOWED,
         409: ErrorCode.CONFLICT,
+        413: ErrorCode.REQUEST_TOO_LARGE,
         415: ErrorCode.UNSUPPORTED_MEDIA_TYPE,
         422: ErrorCode.VALIDATION_ERROR,
         429: ErrorCode.RATE_LIMITED,

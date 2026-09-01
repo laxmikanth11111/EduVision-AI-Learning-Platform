@@ -671,7 +671,7 @@ class TestThumbnailManagement:
             AsyncMock(return_value=storage),
         ):
             result = await presentation_service.set_thumbnail(
-                presentation.public_id, b"png-data", content_type="image/png"
+                presentation.public_id, b"\x89PNG\r\n\x1a\npng-data", content_type="image/png"
             )
 
         assert result["thumbnail_key"] == f"thumbnails/{presentation.public_id}.png"
@@ -714,14 +714,14 @@ class TestThumbnailManagement:
         ):
             result = await presentation_service.set_source(
                 presentation.public_id,
-                b"pdf-content",
+                b"%PDF-1.4 pdf-content",
                 filename="slides.pdf",
                 content_type="application/pdf",
             )
 
         assert result["file_key"].startswith("sources/")
         assert result["file_name"] == "slides.pdf"
-        assert result["file_size"] == len(b"pdf-content")
+        assert result["file_size"] == len(b"%PDF-1.4 pdf-content")
         assert result["mime_type"] == "application/pdf"
         storage.upload_fileobj.assert_awaited_once()
         delay_mock.assert_called_once_with(presentation.public_id)
@@ -809,7 +809,7 @@ class TestThumbnailManagement:
         ):
             result = await presentation_service.set_source(
                 presentation.public_id,
-                b"pdf-content",
+                b"%PDF-1.4 pdf-content",
                 filename="slides.pdf",
                 content_type=None,
             )
@@ -833,7 +833,7 @@ class TestThumbnailManagement:
         ):
             await presentation_service.set_source(
                 presentation.public_id,
-                b"pdf-content",
+                b"%PDF-1.4 pdf-content",
                 filename="../secret slides.pdf",
                 content_type="application/pdf",
             )
