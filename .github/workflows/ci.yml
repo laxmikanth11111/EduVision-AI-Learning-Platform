@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, "feature/**"]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: ruff check (non-mutating)
+        run: ruff check app tests scripts --no-fix
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: test
+      DATABASE_URL: "sqlite+aiosqlite:///test.db"
+      REDIS_URL: "redis://localhost:6379/0"
+      STORAGE_PROVIDER: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run unit tests
+        run: pytest tests/unit --no-header -q --tb=short
+
+  integration-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: test
+      DATABASE_URL: "sqlite+aiosqlite:///test.db"
+      REDIS_URL: "redis://localhost:6379/0"
+      STORAGE_PROVIDER: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run integration tests
+        # The test harness currently runs on SQLite (see tests/conftest.py);
+        # PostgreSQL-backed runs are a follow-up.
+        run: pytest tests/integration --no-header -q --tb=short
+
+  migration-check:
+    name: Alembic migration integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Verify single migration head
+        run: |
+          heads=$(alembic heads --verbose | grep -c '\((head)\)')
+          echo "heads=$heads"
+          if [ "$heads" -ne 1 ]; then
+            echo "Expected exactly one migration head; found $heads."
+            exit 1
+          fi
+      - name: Offline SQL dry-run of upgrade path
+        run: alembic upgrade head --sql > /tmp/upgrade.sql && test -s /tmp/upgrade.sql
+
+  mypy-gate:
+    name: mypy no-regression gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Enforce mypy error budget (baseline 86, no growth)
+        # Pre-existing baseline from Phase 0/1 audit. New code must not push the
+        # count above it; the value is deliberately explicit so CI cannot drift.
+        run: |
+          set -o pipefail
+          output=$(mypy app 2>&1)
+          count=$(printf '%s\n' "$output" | grep -c 'error:' || true)
+          echo "mypy errors: $count"
+          if [ "$count" -gt 86 ]; then
+            printf '%s\n' "$output" | tail -n 40
+            echo "mypy error count ($count) exceeds baseline (86)."
+            exit 1
+          fi
+
+  docker-build:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t eduvision-backend:ci -f backend/Dockerfile backend
