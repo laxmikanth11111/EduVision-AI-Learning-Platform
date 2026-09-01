@@ -148,9 +148,12 @@ class LessonGenerationService:
             presentation_id=presentation.public_id,
         )
 
+        # Stamp the generating user (the presentation owner) so ownership-scoped
+        # lookups and the (user_id, idempotency_key) uniqueness constraint are
+        # meaningful; a presentation without an owner keeps user_id NULL.
         lesson = await self._repo.create(
             presentation_id=presentation.id,
-            user_id=None,
+            user_id=presentation.owner_id,
             idempotency_key=idempotency_key,
             mode=request.mode.value,
             status=LessonStatus.QUEUED.value,
