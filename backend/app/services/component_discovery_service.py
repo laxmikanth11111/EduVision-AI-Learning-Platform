@@ -10,8 +10,8 @@ import json
 import re
 from typing import Any
 
-from app.ai.factory import get_ai_provider
 from app.ai.models import AIRequest
+from app.ai.service import get_ai_content_service
 from app.core.logging import get_logger
 from app.schemas.visual_intelligence import (
     DifficultyLevel,
@@ -36,10 +36,10 @@ class ComponentDiscoveryService:
             return []
 
         try:
-            ai_provider = get_ai_provider()
+            ai_service = get_ai_content_service()
             prompt = f"Topic Title: {title or 'Topic'}\n\nContent:\n{content[:4000]}"
             req = AIRequest(system_prompt=COMPONENT_DISCOVERY_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.3)
-            res = await ai_provider.generate(req)
+            res = await ai_service.generate(req)
 
             data = json.loads(res.text)
             raw_comps = data.get("components", [])

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 
-from app.ai.factory import get_ai_provider
 from app.ai.models import AIRequest
+from app.ai.service import get_ai_content_service
 from app.core.logging import get_logger
 from app.schemas.visual_intelligence import (
     CategoryClassification,
@@ -74,10 +74,10 @@ class VisualizationDecisionService:
 
         # Step 2: Fallback to LLM decision
         try:
-            ai_provider = get_ai_provider()
+            ai_service = get_ai_content_service()
             prompt = f"Topic: {topic_title or 'Educational Topic'}\nCategory: {primary_cat.value}\nComponent Count: {len(components)}"
             req = AIRequest(system_prompt=VISUALIZATION_SELECTION_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2)
-            res = await ai_provider.generate(req)
+            res = await ai_service.generate(req)
 
             data = json.loads(res.text)
             vis_str = data.get("visualization_type", "Block Diagram")

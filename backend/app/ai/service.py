@@ -36,6 +36,26 @@ def _new_request_id() -> str:
     return f"ai_{uuid.uuid4().hex}"
 
 
+_ai_content_service_singleton: AIContentService | None = None
+
+
+def get_ai_content_service(uow: UnitOfWork | None = None) -> AIContentService:
+    """Return a process-wide ``AIContentService``.
+
+    This is the canonical entry point for AI generation. Routing calls through
+    the service (instead of calling ``AIProvider.generate`` directly) applies
+    the shared retry policy, overall timeout, rate limiting and response cache
+    uniformly. When ``uow`` is omitted, usage accounting is skipped (a
+    long-lived, non-persistent orchestrator), which is the right shape for the
+    visual-intelligence and quiz-generation services that are not tied to a
+    single request-scoped transaction.
+    """
+    global _ai_content_service_singleton
+    if _ai_content_service_singleton is None:
+        _ai_content_service_singleton = AIContentService()
+    return _ai_content_service_singleton
+
+
 class AIContentService:
     def __init__(
         self,

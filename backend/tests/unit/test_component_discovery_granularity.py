@@ -42,7 +42,7 @@ class _FakeProvider:
 def _install_fake_provider(monkeypatch, payload: dict) -> None:
     fake = _FakeProvider(payload)
     monkeypatch.setattr(
-        "app.services.component_discovery_service.get_ai_provider",
+        "app.services.component_discovery_service.get_ai_content_service",
         lambda: fake,
     )
 

@@ -11,8 +11,8 @@ import json
 import re
 from typing import Any
 
-from app.ai.factory import get_ai_provider
 from app.ai.models import AIRequest
+from app.ai.service import get_ai_content_service
 from app.core.logging import get_logger
 from app.schemas.visual_intelligence import CategoryClassification, TopicCategory
 from app.services.visual_prompts import CLASSIFICATION_SYSTEM_PROMPT
@@ -166,10 +166,10 @@ class VisualClassifierService:
 
         # Step 2: Fallback to LLM AI Provider classification
         try:
-            ai_provider = get_ai_provider()
+            ai_service = get_ai_content_service()
             prompt = f"Title: {title or 'N/A'}\n\nContent:\n{content[:4000]}"
             req = AIRequest(system_prompt=CLASSIFICATION_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2)
-            res = await ai_provider.generate(req)
+            res = await ai_service.generate(req)
 
             data = json.loads(res.text)
             primary_str = data.get("primary_category", "Process")

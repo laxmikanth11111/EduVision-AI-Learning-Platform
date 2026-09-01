@@ -546,9 +546,9 @@ class LearningAssistantService:
     ) -> str:
         """Try AI provider; fall back to contextual answer if unavailable."""
         try:
-            from app.ai.factory import get_ai_provider
+            from app.ai.service import get_ai_content_service
 
-            provider = get_ai_provider()
+            provider = get_ai_content_service()
             request = self._prompt_builder.build_ai_request(
                 context_text=context_text,
                 history=history,

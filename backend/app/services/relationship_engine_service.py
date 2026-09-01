@@ -11,8 +11,8 @@ import json
 import math
 from typing import Any
 
-from app.ai.factory import get_ai_provider
 from app.ai.models import AIRequest
+from app.ai.service import get_ai_content_service
 from app.core.logging import get_logger
 from app.schemas.visual_intelligence import (
     ComponentRelationship,
@@ -41,11 +41,11 @@ class RelationshipEngineService:
             return []
 
         try:
-            ai_provider = get_ai_provider()
+            ai_service = get_ai_content_service()
             comps_json = json.dumps([{"id": c.component_id, "name": c.name} for c in components])
             prompt = f"Components:\n{comps_json}\n\nContent Context:\n{content[:3000]}"
             req = AIRequest(system_prompt=RELATIONSHIP_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2)
-            res = await ai_provider.generate(req)
+            res = await ai_service.generate(req)
 
             data = json.loads(res.text)
             raw_rels = data.get("relationships", [])

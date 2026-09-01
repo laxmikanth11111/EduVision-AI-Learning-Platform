@@ -190,10 +190,10 @@ class QuizGenerationService:
 
     async def _call_ai(self, prompt: str) -> str:
         """Call the AI provider with the quiz generation prompt."""
-        from app.ai.factory import get_ai_provider
         from app.ai.models import AIRequest, AIResponseFormat
+        from app.ai.service import get_ai_content_service
 
-        provider = get_ai_provider()
+        provider = get_ai_content_service()
         request = AIRequest(
             user_prompt=prompt,
             system_prompt="You are an expert quiz generator. Return valid JSON only.",
