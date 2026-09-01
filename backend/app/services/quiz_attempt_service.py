@@ -218,8 +218,16 @@ class QuizAttemptService:
                 ],
             })
 
-        # Update quiz attempt count
-        quiz.attempt_count += 1
+        # Update quiz attempt count atomically on the database so concurrent
+        # start_attempt calls cannot lose an increment (the denormalized
+        # counter is separate from the per-user limit check above).
+        from sqlalchemy import update
+
+        await self._uow.session.execute(
+            update(Quiz)
+            .where(Quiz.id == quiz.id)
+            .values(attempt_count=Quiz.attempt_count + 1)
+        )
 
         return {
             "attempt_id": attempt.public_id,
