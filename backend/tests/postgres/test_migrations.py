@@ -54,7 +54,7 @@ EXPECTED_TABLES: set[str] = {
 }
 
 
-EXPECTED_HEAD = "0027_ws5_lesson_user_owner"
+EXPECTED_HEAD = "0028_ws10_idempotency_key_index"
 
 
 async def test_alembic_revision_is_single_head(pg_engine: AsyncEngine):

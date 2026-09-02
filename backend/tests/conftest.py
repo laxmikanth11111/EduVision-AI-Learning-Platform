@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import tempfile
 import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -22,9 +23,14 @@ from app.database.base import Base  # noqa: E402
 from app.main import app  # noqa: E402
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+# Keep the SQLite test database out of the repo tree (and out of any
+# synced-folder side effects such as OneDrive) by defaulting to the OS temp
+# dir. Integration/CI can still pin a path via EDUVISION_TEST_DB_PATH.
 TEST_DB_PATH = Path(
-    os.environ.get("EDUVISION_TEST_DB_PATH") or (ROOT_DIR / "test.db")
+    os.environ.get("EDUVISION_TEST_DB_PATH")
+    or (Path(tempfile.gettempdir()) / "eduvision_testdb" / "test.db")
 )
+TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 test_engine = create_async_engine(
     f"sqlite+aiosqlite:///{TEST_DB_PATH.as_posix()}",
@@ -104,7 +110,7 @@ async def client(setup_database: None) -> AsyncGenerator[AsyncClient]:
     settings.EMAIL_VERIFICATION_REQUIRED = False
     settings.COOKIE_SECURE = False
     settings.RATE_LIMIT_ENABLED = False
-    settings.DATABASE_URL = "sqlite+aiosqlite:///test.db"
+    settings.DATABASE_URL = f"sqlite+aiosqlite:///{TEST_DB_PATH.as_posix()}"
 
     transport = ASGITransport(app=app)
     async with AsyncClient(

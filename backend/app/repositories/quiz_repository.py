@@ -182,6 +182,17 @@ class QuestionExplanationRepository(BaseRepository[QuestionExplanation]):
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_question_ids(
+        self, question_ids: list[uuid.UUID]
+    ) -> list[QuestionExplanation]:
+        if not question_ids:
+            return []
+        stmt = select(QuestionExplanation).where(
+            QuestionExplanation.question_id.in_(question_ids)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
 
 class QuizAttemptRepository(BaseRepository[QuizAttempt]):
     def __init__(self, session: AsyncSession) -> None:
@@ -262,6 +273,17 @@ class UserAnswerRepository(BaseRepository[UserAnswer]):
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_by_question_attempts(
+        self, question_attempt_ids: list[uuid.UUID]
+    ) -> list[UserAnswer]:
+        if not question_attempt_ids:
+            return []
+        stmt = select(UserAnswer).where(
+            UserAnswer.question_attempt_id.in_(question_attempt_ids)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
 
 StudentAnswerRepository = UserAnswerRepository  # backward compat alias

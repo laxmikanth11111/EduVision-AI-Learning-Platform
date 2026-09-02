@@ -106,3 +106,10 @@ class ConceptRepository(BaseRepository[Concept]):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_by_ids(self, concept_ids: list[uuid.UUID]) -> list[Concept]:
+        if not concept_ids:
+            return []
+        stmt = select(Concept).where(Concept.id.in_(concept_ids))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

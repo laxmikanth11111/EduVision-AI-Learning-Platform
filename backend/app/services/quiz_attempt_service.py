@@ -15,6 +15,7 @@ from app.models.quiz_attempt import QuizAttempt
 from app.models.quiz_content import Question
 from app.models.quiz_version import QuizVersion
 from app.models.user_answer import UserAnswer
+from app.repositories.concept_repository import ConceptRepository
 from app.repositories.quiz_repository import (
     AnswerKeyRepository,
     QuestionAttemptRepository,
@@ -347,6 +348,33 @@ class QuizAttemptService:
         questions = await self._question_repo.list_by_version_with_options(attempt.quiz_version_id)
         questions_map = {q.id: q for q in questions}
 
+        # Bulk-load the per-question detail tables once instead of issuing a
+        # separate query inside the evaluation loop (prevents N+1 growth as the
+        # number of questions scales).
+        qa_ids = [qa.id for qa in question_attempts]
+        question_ids = list({qa.question_id for qa in question_attempts})
+        user_answers_map = {
+            ua.question_attempt_id: ua
+            for ua in await self._answer_repo.list_by_question_attempts(qa_ids)
+        }
+        explanations_map = {
+            exp.question_id: exp
+            for exp in await self._explanation_repo.get_by_question_ids(question_ids)
+        }
+        concept_ids = {q.concept_id for q in questions if q.concept_id}
+        concept_names: dict[uuid.UUID, str] = {}
+        if concept_ids:
+            try:
+                concepts = await ConceptRepository(self._uow.session).list_by_ids(
+                    sorted(concept_ids)
+                )
+                concept_names = {c.id: c.name for c in concepts}
+            except Exception:
+                logger.warning(
+                    "quiz_concept_name_preload_failed",
+                    quiz_id=quiz.public_id,
+                )
+
         # Evaluate each question
         total_earned = 0.0
         total_possible = 0.0
@@ -359,7 +387,7 @@ class QuizAttemptService:
         for qa in question_attempts:
             question = questions_map.get(qa.question_id)
             answer_key = answer_keys_map.get(qa.question_id)
-            user_answer = await self._answer_repo.get_by_question_attempt(qa.id)
+            user_answer = user_answers_map.get(qa.id)
 
             points_possible = float(question.points) if question else 1.0
             total_possible += points_possible
@@ -399,29 +427,16 @@ class QuizAttemptService:
             # Load explanation
             explanation_text = None
             if answer_key:
-                explanation_obj = await self._explanation_repo.get_by_question_id(
-                    qa.question_id
-                )
-                if explanation_obj:
+                explanation_obj = explanations_map.get(qa.question_id)
+                if explanation_obj is not None:
                     explanation_text = explanation_obj.explanation
 
             correct_answer = _extract_correct_answer(answer_key, question) if answer_key else None
 
             # Resolve concept name from Question model
-            concept_id_str = str(question.concept_id) if question and question.concept_id else None
-            concept_name = None
-            if concept_id_str:
-                try:
-                    from sqlalchemy import select as sa_select
-
-                    from app.models.concept import Concept as ConceptModel
-                    concept_stmt = sa_select(ConceptModel).where(ConceptModel.id == question.concept_id)
-                    concept_result = await self._uow.session.execute(concept_stmt)
-                    concept_obj = concept_result.scalar_one_or_none()
-                    if concept_obj:
-                        concept_name = concept_obj.name
-                except Exception:
-                    pass
+            concept_id = question.concept_id if question else None
+            concept_id_str = str(concept_id) if concept_id else None
+            concept_name = concept_names.get(concept_id) if concept_id else None
 
             feedback_list.append({
                 "question_id": question.public_id if question else str(qa.question_id),
@@ -573,11 +588,17 @@ class QuizAttemptService:
                     [qa.question_id for qa in question_attempts]
                 )
                 answer_keys_map = {ak.question_id: ak for ak in answer_keys}
+                explanations_map = {
+                    exp.question_id: exp
+                    for exp in await self._explanation_repo.get_by_question_ids(
+                        [qa.question_id for qa in question_attempts]
+                    )
+                }
 
                 feedback_list = []
                 for qa in question_attempts:
                     question = questions_map.get(qa.question_id)
-                    explanation_obj = await self._explanation_repo.get_by_question_id(qa.question_id)
+                    explanation_obj = explanations_map.get(qa.question_id)
                     correct_answer = None
                     if qa.question_id in answer_keys_map:
                         correct_answer = _extract_correct_answer(
