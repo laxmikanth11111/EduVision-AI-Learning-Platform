@@ -119,7 +119,7 @@ services:
       dockerfile: Dockerfile
       target: development
     restart: unless-stopped
-    command: celery -A app.core.celery_app worker -l info -c ${CELERY_WORKER_CONCURRENCY:-4}
+    command: celery -A app.workers.celery_app worker -l info -c ${CELERY_WORKER_CONCURRENCY:-4}
     env_file:
       - .env
     environment:
@@ -142,7 +142,7 @@ services:
       dockerfile: Dockerfile
       target: development
     restart: unless-stopped
-    command: celery -A app.core.celery_app beat -l info
+    command: celery -A app.workers.celery_app beat -l info
     env_file:
       - .env
     environment:

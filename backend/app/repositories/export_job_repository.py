@@ -114,6 +114,22 @@ class ExportJobRepository(BaseRepository[ExportJob]):
         res = await self._session.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def count_active_for_user(self, user_id: uuid.UUID) -> int:
+        """Count a user's active (queued/processing) export jobs."""
+        stmt = (
+            select(func.count())
+            .select_from(ExportJob)
+            .where(
+                ExportJob.user_id == user_id,
+                ExportJob.status.in_(
+                    [ExportJobStatus.QUEUED.value, ExportJobStatus.PROCESSING.value]
+                ),
+                ExportJob.deleted_at.is_(None),
+            )
+        )
+        res = await self._session.execute(stmt)
+        return int(res.scalar_one() or 0)
+
     async def update_job_progress(
         self,
         job_id: uuid.UUID,

@@ -88,6 +88,31 @@ class ExportService:
             await uow.flush()
             return job
 
+    async def count_active_jobs(self, user_id: uuid.UUID) -> int:
+        """Count a user's active (queued/processing) export jobs.
+
+        Used by the API to enforce a per-user concurrency cap before a new
+        export job is created, preventing unbounded task accumulation.
+        """
+        async with self._uow as uow:
+            job_repo = ExportJobRepository(uow.session)
+            return await job_repo.count_active_for_user(user_id=user_id)
+
+    async def count_user_exports(self, user_id: uuid.UUID) -> int:
+        async with self._uow as uow:
+            job_repo = ExportJobRepository(uow.session)
+            return await job_repo.count_jobs(user_id=user_id)
+
+    async def dispatch_export_job(self, public_id: str) -> None:
+        """Enqueue the durable export job for processing (bounded retry).
+
+        Must only be called after the job row has been committed so a broker
+        hiccup never references a row the worker cannot read back.
+        """
+        from app.workers.tasks import export_generation_task, safe_dispatch
+
+        safe_dispatch(export_generation_task, public_id, on_failure=None)
+
     async def get_export_job_status(
         self, user_id: uuid.UUID, public_id: str
     ) -> dict[str, Any]:

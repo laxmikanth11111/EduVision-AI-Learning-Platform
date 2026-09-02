@@ -16,6 +16,7 @@ from app.api.v1.animation_runtime_router import animation_runtime_router
 from app.api.v1.assistant import assistant_router
 from app.api.v1.auth import auth_router
 from app.api.v1.effectiveness import effectiveness_router
+from app.api.v1.exports import exports_router
 from app.api.v1.health import health_router
 from app.api.v1.metrics import metrics_router
 from app.api.v1.player import player_router
@@ -161,6 +162,7 @@ app.include_router(video_router, prefix="/api/v1")
 app.include_router(video_runtime_router, prefix="/api/v1")
 app.include_router(assistant_router, prefix="/api/v1")
 app.include_router(effectiveness_router, prefix="/api/v1")
+app.include_router(exports_router, prefix="/api/v1")
 
 uploads_dir = settings.upload_path
 uploads_dir.mkdir(parents=True, exist_ok=True)

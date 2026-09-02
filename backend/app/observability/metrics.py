@@ -161,9 +161,6 @@ def init_default_metrics() -> None:
     metrics.register("worker_tasks_succeeded_total", "Celery worker task runs that succeeded, by task.")
     metrics.register("worker_tasks_failed_total", "Celery worker task runs that failed, by task.")
     metrics.register("worker_tasks_duration_seconds", "Celery worker task run duration histogram in seconds.")
-    metrics.register("quiz_cache_hits_total", "Quiz read-cache hits.")
-    metrics.register("quiz_cache_misses_total", "Quiz read-cache misses.")
-    metrics.register("quiz_cache_errors_total", "Quiz read-cache Redis errors (fail-open).")
     metrics.register("dlq_forwarded_total", "Tasks forwarded to the dead-letter queue after retries exhausted.")
     # ── RAG embedding workers (Phase 4E.1 + 4E.2) ─────────────────────────────
     metrics.register("embedding_tasks_started_total", "Embedding worker task runs started, by task.")

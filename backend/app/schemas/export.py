@@ -29,6 +29,7 @@ class ExportCreateRequest(BaseModel):
     )
     options: ExportOptions = Field(default_factory=ExportOptions)
     template_key: str = Field(default="standard", alias="templateKey")
+    target_id: str | None = Field(default=None, alias="targetId")
 
 
 class ExportJobData(BaseModel):

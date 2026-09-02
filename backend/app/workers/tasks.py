@@ -107,14 +107,17 @@ def safe_dispatch(
     attempts = max(1, settings.CELERY_DISPATCH_RETRY_ATTEMPTS)
     base_delay = settings.CELERY_DISPATCH_RETRY_DELAY
     max_delay = settings.CELERY_DISPATCH_RETRY_MAX_DELAY
-    task_name = getattr(task, "name", str(task))
+    task_name = str(getattr(task, "name", str(task)))
 
     for attempt in range(attempts):
         try:
             task.delay(*args, **kwargs)
+            metrics.increment("task_dispatch_total", task_name=task_name, outcome="enqueued")
             return
         except Exception as exc:
             last_exc = exc
+            metrics.increment("task_dispatch_total", task_name=task_name, outcome="failed")
+            metrics.increment("task_dispatch_retries_total", task_name=task_name)
             if attempt + 1 < attempts:
                 backoff = min(base_delay * (2**attempt), max_delay)
                 time.sleep(backoff)
