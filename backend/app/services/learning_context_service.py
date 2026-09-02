@@ -16,6 +16,7 @@ from app.schemas.learning_context import (
     LearningContext,
     LearningState,
 )
+from app.utils.bounded_cache import BoundedCache
 
 logger = get_logger(__name__)
 
@@ -23,7 +24,9 @@ logger = get_logger(__name__)
 class LearningContextService:
 
     def __init__(self) -> None:
-        self._contexts: dict[str, LearningContext] = {}
+        self._contexts: BoundedCache[str, LearningContext] = BoundedCache(
+            max_size=2048, ttl=1800,
+        )
 
     def create_session(
         self,
@@ -58,7 +61,7 @@ class LearningContextService:
             ],
         )
 
-        self._contexts[session_id] = context
+        self._contexts.set(session_id, context)
         logger.info("learning_context_session_created", session_id=session_id, topic=topic)
         return context
 
@@ -138,7 +141,7 @@ class LearningContextService:
 
     def import_context(self, snapshot: dict[str, Any]) -> LearningContext:
         context = LearningContext(**snapshot)
-        self._contexts[context.session_id] = context
+        self._contexts.set(context.session_id, context)
         return context
 
 

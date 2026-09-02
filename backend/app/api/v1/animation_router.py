@@ -22,12 +22,15 @@ from app.schemas.visual_intelligence import (
 from app.services.animation_classification_service import animation_classification_service
 from app.services.animation_planner_service import animation_planner_service
 from app.services.visual_intelligence_service import VisualIntelligenceService
+from app.utils.bounded_cache import BoundedCache
 
 animation_router = APIRouter(
     prefix="/animations", tags=["AI Animation Engine Architecture & Planner"]
 )
 
-_BLUEPRINT_CACHE: dict[str, dict[str, Any]] = {}
+_BLUEPRINT_CACHE: BoundedCache[str, dict[str, Any]] = BoundedCache(
+    max_size=500, ttl=1800,
+)
 
 
 def _assert_blueprint_owner(blueprint_id: str, user: User) -> None:
@@ -85,7 +88,7 @@ async def plan_animation_blueprint(
         )
 
     blueprint = animation_planner_service.create_blueprint(model)
-    _BLUEPRINT_CACHE[blueprint.blueprint_id] = {"owner_id": str(user.id), "data": blueprint}
+    _BLUEPRINT_CACHE.set(blueprint.blueprint_id, {"owner_id": str(user.id), "data": blueprint})
     return {"success": True, "data": blueprint.model_dump()}
 
 
@@ -141,7 +144,7 @@ async def get_animation_blueprint(
     )
     bp = animation_planner_service.create_blueprint(model)
     bp.blueprint_id = blueprint_id
-    _BLUEPRINT_CACHE[blueprint_id] = {"owner_id": str(user.id), "data": bp}
+    _BLUEPRINT_CACHE.set(blueprint_id, {"owner_id": str(user.id), "data": bp})
     return {"success": True, "data": bp.model_dump()}
 
 

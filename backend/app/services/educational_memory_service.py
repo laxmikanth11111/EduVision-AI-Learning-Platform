@@ -22,6 +22,7 @@ from app.schemas.educational_memory import (
     LearnerProfile,
     TimelineMilestone,
 )
+from app.utils.bounded_cache import BoundedCache
 
 logger = get_logger(__name__)
 
@@ -29,12 +30,15 @@ logger = get_logger(__name__)
 class EducationalMemoryService:
 
     def __init__(self) -> None:
-        self._memories: dict[str, EducationalMemory] = {}
+        self._memories: BoundedCache[str, EducationalMemory] = BoundedCache(
+            max_size=5000, ttl=1800,
+        )
 
     async def load_from_db(self, session: AsyncSession, user_id: str) -> EducationalMemory:
         """Load or create educational memory from database."""
-        if user_id in self._memories:
-            return self._memories[user_id]
+        cached = self._memories.get(user_id)
+        if cached is not None:
+            return cached
 
         user_uuid = _safe_uuid(user_id)
         if user_uuid is None:
@@ -60,7 +64,7 @@ class EducationalMemoryService:
         else:
             memory = self._create_empty(user_id)
 
-        self._memories[user_id] = memory
+        self._memories.set(user_id, memory)
         return memory
 
     async def save_to_db(self, session: AsyncSession, user_id: str) -> None:
@@ -91,8 +95,9 @@ class EducationalMemoryService:
 
     def get_or_create_memory(self, user_id: str) -> EducationalMemory:
         """Get memory from cache, or create empty one (not yet loaded from DB)."""
-        if user_id in self._memories:
-            return self._memories[user_id]
+        cached = self._memories.get(user_id)
+        if cached is not None:
+            return cached
         return self._create_empty(user_id)
 
     def _create_empty(self, user_id: str) -> EducationalMemory:
@@ -111,7 +116,7 @@ class EducationalMemoryService:
                 )
             ],
         )
-        self._memories[user_id] = memory
+        self._memories.set(user_id, memory)
         return memory
 
     def update_concept_mastery(
@@ -193,21 +198,17 @@ class EducationalMemoryService:
 
     def import_memory(self, snapshot: dict[str, Any]) -> EducationalMemory:
         memory = EducationalMemory(**snapshot)
-        self._memories[memory.user_id] = memory
+        self._memories.set(memory.user_id, memory)
         return memory
 
     def reset_memory(self, user_id: str) -> EducationalMemory:
         """Reset concept mastery history and milestone records (Privacy control)."""
-        if user_id in self._memories:
-            del self._memories[user_id]
+        self._memories.delete(user_id)
         return self.get_or_create_memory(user_id)
 
     def delete_memory(self, user_id: str) -> bool:
         """Completely purge educational memory for user (Privacy compliance)."""
-        if user_id in self._memories:
-            del self._memories[user_id]
-            return True
-        return False
+        return self._memories.delete(user_id)
 
 
 def _safe_uuid(user_id: str) -> uuid.UUID | None:

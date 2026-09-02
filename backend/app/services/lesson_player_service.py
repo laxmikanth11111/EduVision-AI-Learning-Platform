@@ -19,11 +19,14 @@ from app.repositories.generated_lesson_repository import (
     GeneratedLessonRepository,
     GeneratedLessonVersionRepository,
 )
+from app.utils.bounded_cache import BoundedCache
 
 logger = get_logger(__name__)
 
 # In-memory session state: session_id -> { owner_id, lesson_id, topic_index, ... }
-_SESSIONS: dict[str, dict[str, Any]] = {}
+_SESSIONS: BoundedCache[str, dict[str, Any]] = BoundedCache(
+    max_size=2048, ttl=3600,
+)
 
 
 class LessonPlayerService:
@@ -100,7 +103,7 @@ class LessonPlayerService:
             "total_topics": len(topics),
             "status": "active",
         }
-        _SESSIONS[session_id] = session_state
+        _SESSIONS.set(session_id, session_state)
 
         return {
             "lesson": self._serialize_lesson(lesson),

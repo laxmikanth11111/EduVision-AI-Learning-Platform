@@ -20,6 +20,7 @@ from app.services.relationship_engine_service import RelationshipEngineService
 from app.services.visual_classifier_service import VisualClassifierService
 from app.services.visual_validation_service import VisualValidationService
 from app.services.visualization_decision_service import VisualizationDecisionService
+from app.utils.bounded_cache import BoundedCache
 
 logger = get_logger(__name__)
 
@@ -41,7 +42,9 @@ class VisualIntelligenceService:
         self.relationship_engine = relationship_engine or RelationshipEngineService()
         self.visualization_decider = visualization_decider or VisualizationDecisionService()
         self.validator = validator or VisualValidationService()
-        self._cache: dict[str, VisualLearningModel] = {}
+        self._cache: BoundedCache[str, VisualLearningModel] = BoundedCache(
+            max_size=200, ttl=1800,
+        )
 
     async def generate_visual_learning_model(
         self,
@@ -113,7 +116,7 @@ class VisualIntelligenceService:
 
         # Cache Result
         if use_cache:
-            self._cache[cache_key] = model
+            self._cache.set(cache_key, model)
 
         logger.info("visual_intelligence_pipeline_completed", topic=model.topic, node_count=len(visual_nodes))
         return model

@@ -26,12 +26,15 @@ from app.services.video_renderer_service import video_renderer_service
 from app.services.video_script_service import video_script_service
 from app.services.video_storyboard_service import video_storyboard_service
 from app.services.visual_intelligence_service import VisualIntelligenceService
+from app.utils.bounded_cache import BoundedCache
 
 video_router = APIRouter(
     prefix="/videos", tags=["AI Video Learning Engine Architecture"]
 )
 
-_VIDEO_PROJECT_CACHE: dict[str, dict[str, Any]] = {}
+_VIDEO_PROJECT_CACHE: BoundedCache[str, dict[str, Any]] = BoundedCache(
+    max_size=500, ttl=1800,
+)
 
 
 def _get_owned_project(video_id: str, user: User) -> Any:
@@ -112,7 +115,7 @@ async def create_video_project(
         project.rendering_status = RenderingStatus.FAILED
         project.validation.errors.append(f"Video rendering error: {exc}")
 
-    _VIDEO_PROJECT_CACHE[project.video_id] = {"owner_id": str(user.id), "data": project}
+    _VIDEO_PROJECT_CACHE.set(project.video_id, {"owner_id": str(user.id), "data": project})
     return {"success": True, "data": project.model_dump()}
 
 
@@ -135,7 +138,7 @@ async def render_video_project(
     project.rendering_status = RenderingStatus.READY
     project.progress_percentage = 100.0
     project.playable_url = playable_url
-    _VIDEO_PROJECT_CACHE[video_id] = {"owner_id": str(user.id), "data": project}
+    _VIDEO_PROJECT_CACHE.set(video_id, {"owner_id": str(user.id), "data": project})
 
     return {"success": True, "data": project.model_dump()}
 
@@ -235,7 +238,7 @@ async def get_video_project(
         topic="Computer Architecture", model=model, blueprint=blueprint
     )
     project.video_id = video_id
-    _VIDEO_PROJECT_CACHE[video_id] = {"owner_id": str(user.id), "data": project}
+    _VIDEO_PROJECT_CACHE.set(video_id, {"owner_id": str(user.id), "data": project})
 
     return {"success": True, "data": project.model_dump()}
 
