@@ -14,6 +14,8 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.ai.embeddings.base import EmbeddingProvider
+from app.core.config import settings
 from app.core.exceptions import NotFoundError
 from app.database.unit_of_work import UnitOfWork
 from app.models.assistant_conversation import AssistantConversation
@@ -101,6 +103,48 @@ def _serialize_exchange(
         "prompt_hash": prompt_hash,
         "conversation_id": conversation_id,
     }
+
+
+def _cosine_similarity(
+    query: list[float] | None,
+    candidate: list[float] | None,
+) -> float | None:
+    """Numerically safe cosine similarity between two vectors.
+
+    Returns ``None`` (rather than raising) when either vector is missing,
+    empty, non-numeric, dimension-mismatched, or zero-norm, so a single
+    malformed vector can never crash the surrounding retrieval operation.
+    The returned value is always finite and lies in ``[-1, 1]``.
+    """
+    if not query or not candidate:
+        return None
+    if len(query) != len(candidate):
+        return None
+    dot: float = 0.0
+    norm_q: float = 0.0
+    norm_c: float = 0.0
+    try:
+        for q, c in zip(query, candidate, strict=False):
+            q = float(q)
+            c = float(c)
+            dot += q * c
+            norm_q += q * q
+            norm_c += c * c
+    except (TypeError, ValueError):
+        return None
+    if norm_q == 0.0 or norm_c == 0.0:
+        return None
+    denom = (norm_q * norm_c) ** 0.5
+    if not denom or denom != denom:
+        return None
+    sim = dot / denom
+    if sim != sim or sim in (float("inf"), float("-inf")):
+        return None
+    if sim > 1.0:
+        return 1.0
+    if sim < -1.0:
+        return -1.0
+    return float(sim)
 
 
 class LearningAssistantService:
@@ -490,12 +534,21 @@ class LearningAssistantService:
         user_query: str,
         lesson_id: uuid.UUID | None,
         limit: int = 3,
+        *,
+        provider: EmbeddingProvider | None = None,
     ) -> list[str]:
-        """Retrieve relevant source material chunks for the current lesson."""
+        """Retrieve relevant source material chunks for the current lesson.
+
+        Primary path is vector semantic retrieval: the query is embedded and
+        ranked by application-side cosine similarity against the persisted
+        ``ChunkEmbedding.vector`` values (symmetric with the chunk pipeline's
+        provider/model). When embeddings are unavailable, the query cannot be
+        embedded, or nothing passes the similarity floor, a deterministic
+        positional fallback (``DocumentChunk.position``) is used instead.
+        """
         if not lesson_id:
             return []
         try:
-            from app.models.document_chunk import DocumentChunk
             from app.models.generated_lesson import GeneratedLesson
 
             # Resolve presentation_id from lesson
@@ -515,19 +568,94 @@ class LearningAssistantService:
             if not cu_ids:
                 return []
 
-            chunk_stmt = (
-                select(DocumentChunk)
-                .where(DocumentChunk.content_unit_id.in_(cu_ids))
-                .where(DocumentChunk.content.isnot(None))
-                .where(DocumentChunk.content != "")
-                .order_by(DocumentChunk.position)
-                .limit(limit)
+            # Resolve an embedding provider for semantic retrieval. An explicit
+            # provider (tests) wins; otherwise use the configured singleton,
+            # degrading to the positional fallback when none is configured.
+            if provider is None:
+                try:
+                    from app.ai.embeddings.factory import get_embedding_provider
+                    provider = get_embedding_provider()
+                except Exception:
+                    provider = None
+
+            if provider is not None and user_query and user_query.strip():
+                semantic_chunks = await self._retrieve_relevant_chunks_semantic(
+                    user_query=user_query,
+                    content_unit_ids=cu_ids,
+                    limit=limit,
+                    provider=provider,
+                )
+                if semantic_chunks:
+                    return semantic_chunks
+
+            return await self._retrieve_relevant_chunks_positional(
+                content_unit_ids=cu_ids,
+                limit=limit,
             )
-            chunk_result = await self._uow.session.execute(chunk_stmt)
-            chunks = chunk_result.scalars().all()
-            return [c.content[:500] for c in chunks if c.content]
         except Exception:
             return []
+
+    async def _retrieve_relevant_chunks_semantic(
+        self,
+        *,
+        user_query: str,
+        content_unit_ids: list[uuid.UUID],
+        limit: int,
+        provider: EmbeddingProvider,
+    ) -> list[str]:
+        """Attempt vector semantic retrieval; returns ``[]`` to trigger fallback."""
+        try:
+            response = await provider.embed([user_query])
+            if not response.vectors:
+                return []
+            query_vector = response.vectors[0]
+
+            from app.repositories.rag_repository import DocumentChunkRepository
+            pairs = await DocumentChunkRepository(self._uow.session).list_embedded_pairs_for_content_units(
+                content_unit_ids=content_unit_ids,
+                provider=provider.name or provider.config.provider,
+                model=provider.model,
+                limit=settings.TUTOR_EMBEDDING_SEARCH_LIMIT,
+            )
+
+            scored: list[tuple[float, int, uuid.UUID, str]] = []
+            for chunk, embedding in pairs:
+                chunk_vector = embedding.vector
+                similarity = _cosine_similarity(query_vector, chunk_vector)
+                if similarity is None:
+                    continue
+                if similarity < settings.TUTOR_RETRIEVAL_SIMILARITY_THRESHOLD:
+                    continue
+                scored.append(
+                    (similarity, chunk.position, chunk.id, (chunk.content or "")[:500])
+                )
+
+            # Deterministic: similarity desc, then position asc, then chunk id.
+            scored.sort(key=lambda item: (-item[0], item[1], item[2]))
+            return [content for _, _, _, content in scored[:limit]]
+        except Exception:
+            return []
+
+    async def _retrieve_relevant_chunks_positional(
+        self,
+        *,
+        content_unit_ids: list[uuid.UUID],
+        limit: int,
+    ) -> list[str]:
+        """Deterministic positional fallback (original RAG behavior)."""
+        from app.models.document_chunk import DocumentChunk
+        chunk_stmt = (
+            select(DocumentChunk)
+            .where(DocumentChunk.content_unit_id.in_(content_unit_ids))
+            .where(DocumentChunk.content.isnot(None))
+            .where(DocumentChunk.content != "")
+            .where(DocumentChunk.deleted_at.is_(None))
+            .order_by(DocumentChunk.position, DocumentChunk.id)
+            .limit(limit)
+        )
+        chunk_result = await self._uow.session.execute(chunk_stmt)
+        chunks = chunk_result.scalars().all()
+        return [c.content[:500] for c in chunks if c.content]
 
     async def _load_history(self, conversation_id: uuid.UUID) -> list:
         msgs = await self._message_repo.recent_for_conversation(conversation_id, limit=20)

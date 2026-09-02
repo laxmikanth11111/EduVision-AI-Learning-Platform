@@ -228,6 +228,38 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
         result = await self._session.execute(stmt)
         return [(chunk, embedding) for chunk, embedding in result.all()]
 
+    async def list_embedded_pairs_for_content_units(
+        self,
+        content_unit_ids: list[uuid.UUID],
+        provider: str,
+        model: str,
+        limit: int = 200,
+    ) -> list[tuple[DocumentChunk, ChunkEmbedding]]:
+        """Load active chunk/embedding pairs scoped to a set of content units.
+
+        A single bounded query (chunk + active embedding inner join) so the
+        retrieval layer can rank candidates in Python without any per-chunk
+        SELECT/N+1 pattern. Soft-deleted chunks and embeddings are excluded,
+        mirroring ``_active_embedding_predicate`` and the sibling list helpers.
+        """
+        stmt = (
+            select(DocumentChunk, ChunkEmbedding)
+            .join(
+                ChunkEmbedding,
+                and_(*_active_embedding_predicate(provider, model)),
+            )
+            .where(
+                DocumentChunk.content_unit_id.in_(content_unit_ids),
+                DocumentChunk.content.isnot(None),
+                DocumentChunk.content != "",
+                DocumentChunk.deleted_at.is_(None),
+            )
+            .order_by(DocumentChunk.position.asc(), DocumentChunk.id)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [(chunk, embedding) for chunk, embedding in result.all()]
+
     async def count_by_status(self, presentation_id: uuid.UUID) -> dict[str, int]:
         stmt = (
             select(DocumentChunk.status, func.count())

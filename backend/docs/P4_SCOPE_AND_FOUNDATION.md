@@ -94,6 +94,8 @@
 - **Exit criteria:** similarity-based top-k retrieval replaces positional in the assistant path; fallback preserves behavior when vectors missing; mypy Δ≦0; no new prod DB engine.
 - **Risk:** medium-high — pgvector dependency and index weight; keep fallback path.
 
+> **WS3 delivered:** implemented as **application-side cosine similarity** over the persisted `ChunkEmbedding.vector` JSONB values (single-engine; **no pgvector**; **no new migration**; head stays `0028`). Positional fallback preserved; ownership stays an **API/service-layer responsibility**; retrieval is scoped to the authorized lesson/presentation content-unit set; soft-deleted chunks are excluded.
+
 ### WS4 — Runtime memory bounds (replace unbounded dicts)
 - **Objective:** `_VIDEO_PROJECT_CACHE`, `_BLUEPRINT_CACHE`, `_SESSIONS`, `_memories`, `_contexts`, visual `_cache` move from per-process-unbounded → bounded with TTL/eviction or durable (Redis/DB) backing.
 - **Foundation:** existing bounded per-session caps (P2/P3 pattern).
