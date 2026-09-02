@@ -60,6 +60,7 @@ dev = [
     "aiosqlite>=0.20.0",
     "pytest-env>=1.1.0",
     "testcontainers[postgres]>=4.8.0",
+    "pytest-playwright>=0.9.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -132,6 +133,7 @@ markers = [
     "integration: marks tests that require a PostgreSQL database (testcontainers or CI service)",
     "unit: marks tests that run with SQLite (default for all tests)",
     "postgres: marks tests that exercise the real PostgreSQL backend (run with pytest -m postgres against a running instance)",
+    "e2e: browser-level end-to-end smoke tests against a running server (run with pytest -m e2e)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
