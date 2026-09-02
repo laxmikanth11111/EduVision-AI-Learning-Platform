@@ -29,6 +29,23 @@ _VIDEO_RUNTIME_STATES: BoundedCache[str, dict[str, Any]] = BoundedCache(max_size
 _VIDEO_BOOKMARKS: BoundedCache[str, list[dict[str, Any]]] = BoundedCache(max_size=4096)
 _VIDEO_ASSESSMENTS: BoundedCache[str, list[dict[str, Any]]] = BoundedCache(max_size=4096)
 
+# Per-session bookmarks/assessments are also capped so a single chatty session
+# cannot grow one list without bound (best-effort in-memory tracking only; any
+# durable state lives in the database via the learning-context/memory services).
+_MAX_BOOKMARKS_PER_SESSION = 500
+_MAX_ASSESSMENTS_PER_SESSION = 500
+
+
+def _append_capped(
+    items: list[dict[str, Any]],
+    new_item: dict[str, Any],
+    cap: int,
+) -> list[dict[str, Any]]:
+    items = [*items, new_item]
+    if len(items) > cap:
+        items = items[len(items) - cap:]
+    return items
+
 
 class SyncVideoRuntimeRequest(BaseModel):
     session_id: str
@@ -133,8 +150,10 @@ async def create_video_bookmark(
         "created_at": time.time(),
     }
     bookmarks = _VIDEO_BOOKMARKS.get(req.session_id) or []
-    bookmarks = [*bookmarks, bm]
-    _VIDEO_BOOKMARKS.set(req.session_id, bookmarks)
+    _VIDEO_BOOKMARKS.set(
+        req.session_id,
+        _append_capped(bookmarks, bm, _MAX_BOOKMARKS_PER_SESSION),
+    )
     return {"success": True, "data": bm}
 
 
@@ -157,8 +176,10 @@ async def submit_video_assessment(
         "submitted_at": time.time(),
     }
     assessments = _VIDEO_ASSESSMENTS.get(req.session_id) or []
-    assessments = [*assessments, attempt]
-    _VIDEO_ASSESSMENTS.set(req.session_id, assessments)
+    _VIDEO_ASSESSMENTS.set(
+        req.session_id,
+        _append_capped(assessments, attempt, _MAX_ASSESSMENTS_PER_SESSION),
+    )
 
     return {"success": True, "data": attempt}
 
