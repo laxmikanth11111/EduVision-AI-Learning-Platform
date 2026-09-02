@@ -414,11 +414,7 @@ async def _export_generation_async(job_public_id: str) -> None:
 def export_generation_task(self: Any, job_public_id: str) -> None:
     logger.info("export_generation_task_started", job_id=job_public_id)
     try:
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_export_generation_async(job_public_id))
-        except RuntimeError:
-            asyncio.run(_export_generation_async(job_public_id))
+        _run_async(_export_generation_async(job_public_id))
         logger.info("export_generation_task_completed", job_id=job_public_id)
     except Exception as e:
         logger.exception("export_generation_task_failed", job_id=job_public_id)
