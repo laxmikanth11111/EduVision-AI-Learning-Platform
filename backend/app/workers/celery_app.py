@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import threading
+import time
+from collections.abc import Mapping
+from contextvars import Token
 from typing import Any
 
+import structlog
 from celery import Celery
+from celery.signals import (
+    before_task_publish,
+    task_failure,
+    task_postrun,
+    task_prerun,
+    task_success,
+)
 
 from app.core.config import settings
+from app.middleware.request_id import get_current_request_id
+from app.observability.metrics import metrics
 
 celery_app = Celery(
     "eduvision",
@@ -102,3 +116,89 @@ celery_app.conf.update(
 )
 def health_check_task(self: Any) -> dict[str, Any]:
     return {"status": "ok", "worker": "celery", "queues": list(celery_app.conf.task_routes.keys())}
+
+
+# ── Worker observability (correlation + task-run metrics) ────────────────────
+
+_CORRELATION_HEADER = "X-Request-ID"
+_task_started_at: dict[str, float] = {}
+_task_context_tokens: dict[str, Mapping[str, Token[Any]]] = {}
+_task_state_lock = threading.Lock()
+
+
+def _on_before_task_publish(headers: dict[str, Any] | None = None, **kwargs: Any) -> None:
+    """Bubble the API request ID into the broker message so a worker can
+    correlate its logs with the originating HTTP request."""
+    if headers is None:
+        return
+    request_id = get_current_request_id()
+    if request_id and not headers.get(_CORRELATION_HEADER):
+        headers[_CORRELATION_HEADER] = request_id
+
+
+def _on_task_prerun(task_id: str = "", **kwargs: Any) -> None:
+    task = kwargs.get("task")
+    found = None
+    if task is not None:
+        req = getattr(task, "request", None)
+        if req is not None:
+            found = getattr(req, "headers", {}).get(_CORRELATION_HEADER) or None
+    if found:
+        # Bind only the correlation key; the API-side contextvar is restored
+        # by reset_contextvars(**tokens) at postrun so an eager/in-process run
+        # never leaks the worker binding into the caller's context.
+        tokens = structlog.contextvars.bind_contextvars(request_id=found)
+        with _task_state_lock:
+            _task_context_tokens[str(task_id)] = tokens
+    with _task_state_lock:
+        _task_started_at[str(task_id)] = time.monotonic()
+
+
+def _task_duration(task_id: str) -> float | None:
+    with _task_state_lock:
+        started = _task_started_at.pop(str(task_id), None)
+    if started is None:
+        return None
+    return time.monotonic() - started
+
+
+def _on_task_postrun(task_id: str = "", **kwargs: Any) -> None:
+    with _task_state_lock:
+        _task_started_at.pop(str(task_id), None)
+        tokens = _task_context_tokens.pop(str(task_id), None)
+    if tokens:
+        structlog.contextvars.reset_contextvars(**tokens)
+
+
+def _task_run_id(sender: Any) -> str:
+    request = getattr(sender, "request", None)
+    if request is not None:
+        task_id = getattr(request, "id", None)
+        if task_id is not None:
+            return str(task_id)
+    return str(getattr(sender, "name", sender))
+
+
+def _task_name(sender: Any) -> str:
+    return str(getattr(sender, "name", sender))
+
+
+def _on_task_success(sender: Any = None, **kwargs: Any) -> None:
+    duration = _task_duration(_task_run_id(sender))
+    metrics.increment("worker_tasks_succeeded_total", task_name=_task_name(sender))
+    if duration is not None:
+        metrics.observe("worker_tasks_duration_seconds", duration, task_name=_task_name(sender))
+
+
+def _on_task_failure(sender: Any = None, **kwargs: Any) -> None:
+    duration = _task_duration(_task_run_id(sender))
+    metrics.increment("worker_tasks_failed_total", task_name=_task_name(sender))
+    if duration is not None:
+        metrics.observe("worker_tasks_duration_seconds", duration, task_name=_task_name(sender))
+
+
+before_task_publish.connect(_on_before_task_publish)
+task_prerun.connect(_on_task_prerun)
+task_postrun.connect(_on_task_postrun)
+task_success.connect(_on_task_success)
+task_failure.connect(_on_task_failure)

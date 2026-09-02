@@ -19,17 +19,42 @@ logger = get_logger(__name__)
 
 
 LabelKey = tuple[tuple[str, str], ...]
+HistogramBucket = float | str
+
+# Prometheus-conventional seconds buckets for HTTP request durations.
+DEFAULT_HISTOGRAM_BUCKETS: tuple[float, ...] = (
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+    5.0,
+    10.0,
+    float("inf"),
+)
 
 
 class MetricsRegistry:
     def __init__(self) -> None:
         self._counters: dict[str, dict[LabelKey, float]] = defaultdict(dict)
         self._gauges: dict[str, dict[LabelKey, float]] = defaultdict(dict)
+        self._histograms: dict[str, dict[LabelKey, dict[HistogramBucket, float]]] = defaultdict(dict)
+        self._histogram_buckets: dict[str, tuple[float, ...]] = {}
         self._help: dict[str, str] = {}
         self._lock = threading.Lock()
 
     def register(self, name: str, help_text: str) -> None:
         self._help[name] = help_text
+
+    def set_histogram_buckets(self, name: str, buckets: tuple[float, ...]) -> None:
+        """Override the default bucket boundaries for a histogram. Best-effort,
+        only consulted at observe() time so an existing series is not mutated."""
+        with self._lock:
+            self._histogram_buckets[name] = tuple(sorted(buckets))
 
     def increment(self, name: str, value: float = 1.0, **labels: str) -> None:
         with self._lock:
@@ -42,6 +67,23 @@ class MetricsRegistry:
         with self._lock:
             key = tuple(sorted(labels.items()))
             self._gauges[name][key] = value
+
+    def observe(self, name: str, value: float, **labels: str) -> None:
+        """Record one sample in a histogram.
+
+        Increments every ``le`` bucket whose boundary is >= ``value`` (so the
+        ``+Inf`` bucket always increments) plus the ``_sum``/``_count`` series.
+        """
+        value = max(0.0, value)
+        with self._lock:
+            key = tuple(sorted(labels.items()))
+            data = self._histograms[name].setdefault(key, {})
+            buckets = self._histogram_buckets.get(name, DEFAULT_HISTOGRAM_BUCKETS)
+            for boundary in buckets:
+                if value <= boundary:
+                    data[boundary] = data.get(boundary, 0.0) + 1.0
+            data["_sum"] = data.get("_sum", 0.0) + value
+            data["_count"] = data.get("_count", 0.0) + 1.0
 
     def _render_series(
         self,
@@ -65,6 +107,35 @@ class MetricsRegistry:
                     lines.append(f"{metric_name} {value:g}")
         return "\n".join(lines)
 
+    def _format_labels(self, labels: LabelKey, extra: tuple[tuple[str, str], ...] = ()) -> str:
+        items = list(labels) + list(extra)
+        return ",".join(f'{k}="{v}"' for k, v in sorted(items))
+
+    def _render_histograms(self) -> str:
+        lines: list[str] = []
+        for name in sorted(self._histograms):
+            help_text = self._help.get(name, "")
+            lines.append(f"# HELP {name} {help_text}")
+            lines.append(f"# TYPE {name} histogram")
+            samples = self._histograms[name]
+            for labels in sorted(samples):
+                data = samples[labels]
+                count = data.get("_count", 0.0)
+                buckets = self._histogram_buckets.get(name, DEFAULT_HISTOGRAM_BUCKETS)
+                for boundary in buckets:
+                    le = "+Inf" if boundary == float("inf") else repr(boundary)
+                    labels_line = self._format_labels(labels, (("le", le),))
+                    value = data.get(boundary, 0.0)
+                    lines.append(f"{name}_bucket{{{labels_line}}} {value:g}")
+                sum_line = self._format_labels(labels)
+                if sum_line:
+                    lines.append(f"{name}_sum{{{sum_line}}} {data.get('_sum', 0.0):g}")
+                    lines.append(f"{name}_count{{{sum_line}}} {count:g}")
+                else:
+                    lines.append(f"{name}_sum {data.get('_sum', 0.0):g}")
+                    lines.append(f"{name}_count {count:g}")
+        return "\n".join(lines)
+
     def render(self) -> str:
         with self._lock:
             counters = dict(self._counters)
@@ -72,6 +143,7 @@ class MetricsRegistry:
         lines = [
             self._render_series(counters, "counter"),
             self._render_series(gauges, "gauge"),
+            self._render_histograms(),
         ]
         return "\n".join(line for line in lines if line)
 
@@ -82,8 +154,13 @@ metrics = MetricsRegistry()
 def init_default_metrics() -> None:
     """Register the default metrics the codebase increments."""
     metrics.register("http_requests_total", "Total HTTP requests by method, route and status.")
-    metrics.register("http_requests_duration_seconds_sum", "Sum of HTTP request durations in seconds.")
-    metrics.register("http_requests_duration_seconds_count", "Count of HTTP request durations.")
+    metrics.register("http_requests_duration_seconds", "HTTP request duration histogram in seconds.")
+    metrics.set_histogram_buckets("http_requests_duration_seconds", DEFAULT_HISTOGRAM_BUCKETS)
+    metrics.register("task_dispatch_total", "Background task enqueue attempts by task and outcome.")
+    metrics.register("task_dispatch_retries_total", "Background task enqueue retries consumed by task.")
+    metrics.register("worker_tasks_succeeded_total", "Celery worker task runs that succeeded, by task.")
+    metrics.register("worker_tasks_failed_total", "Celery worker task runs that failed, by task.")
+    metrics.register("worker_tasks_duration_seconds", "Celery worker task run duration histogram in seconds.")
     metrics.register("quiz_cache_hits_total", "Quiz read-cache hits.")
     metrics.register("quiz_cache_misses_total", "Quiz read-cache misses.")
     metrics.register("quiz_cache_errors_total", "Quiz read-cache Redis errors (fail-open).")

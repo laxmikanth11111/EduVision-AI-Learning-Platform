@@ -60,8 +60,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             path=route_path,
             status=str(response.status_code),
         )
-        metrics.increment("http_requests_duration_seconds_sum", value=elapsed)
-        metrics.increment("http_requests_duration_seconds_count")
+        metrics.observe("http_requests_duration_seconds", elapsed)
 
         if response.status_code >= 500:
             logger.error("request_failed", **log_data)
