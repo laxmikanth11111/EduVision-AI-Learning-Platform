@@ -87,9 +87,16 @@ class PresentationService:
         return await self._repo.get_by_public_id_or_raise(public_id)
 
     async def assert_ownership(self, public_id: str, owner_id: uuid.UUID) -> Presentation:
-        """Return presentation if it belongs to *owner_id*, else raise 404."""
+        """Return presentation if it belongs to *owner_id*, else raise 404.
+
+        A presentation with no owner is treated as not-found so ownership
+        resolution is uniform across resources (quiz, lesson, presentation).
+        """
         presentation = await self._get_presentation(public_id)
-        if presentation.owner_id is not None and str(presentation.owner_id) != str(owner_id):
+        if (
+            presentation.owner_id is None
+            or str(presentation.owner_id) != str(owner_id)
+        ):
             raise NotFoundError(
                 message="Presentation not found",
                 details={"presentation_id": public_id},

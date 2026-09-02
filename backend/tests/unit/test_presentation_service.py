@@ -158,6 +158,47 @@ class TestGetPresentation:
             await presentation_service.get_presentation("pres_missing")
 
 
+class TestAssertOwnership:
+    async def test_owner_gets_presentation(
+        self, presentation_service: PresentationService,
+    ) -> None:
+        owner_id = uuid.uuid4()
+        presentation = _make_presentation(owner_id=owner_id)
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+        result = await presentation_service.assert_ownership(
+            presentation.public_id, owner_id
+        )
+        assert result.public_id == presentation.public_id
+
+    async def test_other_user_denied(
+        self, presentation_service: PresentationService,
+    ) -> None:
+        presentation = _make_presentation(owner_id=uuid.uuid4())
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+        with pytest.raises(NotFoundError, match="not found"):
+            await presentation_service.assert_ownership(
+                presentation.public_id, uuid.uuid4()
+            )
+
+    async def test_null_owner_denied_for_everyone(
+        self, presentation_service: PresentationService,
+    ) -> None:
+        """A null-owner presentation is not accessible to any authenticated user,
+        matching the uniform ownership policy used by quizzes and lessons."""
+        presentation = _make_presentation(owner_id=None)
+        presentation_service._repo.get_by_public_id_or_raise = AsyncMock(
+            return_value=presentation
+        )
+        with pytest.raises(NotFoundError, match="not found"):
+            await presentation_service.assert_ownership(
+                presentation.public_id, uuid.uuid4()
+            )
+
+
 class TestUpdatePresentation:
     async def test_update_success(
         self, presentation_service: PresentationService,
