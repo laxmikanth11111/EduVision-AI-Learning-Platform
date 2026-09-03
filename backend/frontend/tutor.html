@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mastery Tutor — EduVision AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0E1A2B;
+            --paper: #F4EFE4;
+            --amber: #F2A623;
+            --teal: #1D9E75;
+            --coral: #D85A30;
+            --line: rgba(244,239,228,0.14);
+            --muted: rgba(244,239,228,0.55);
+            --muted-strong: rgba(244,239,228,0.72);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--ink); color: var(--paper); font-family: 'Manrope', sans-serif; min-height: 100vh; }
+        h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+
+        nav { border-bottom: 1px solid var(--line); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+        .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+        .brand-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--amber); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink); font-family: 'Space Grotesk', sans-serif; }
+        .nav-right { display: flex; align-items: center; gap: 16px; }
+        .nav-user { font-size: .85rem; color: var(--muted-strong); }
+        .nav-links { display: flex; align-items: center; gap: 18px; }
+        .nav-links a { color: var(--muted); text-decoration: none; font-size: .86rem; font-family: 'Space Grotesk', sans-serif; transition: color .2s; }
+        .nav-links a:hover { color: var(--paper); }
+        .nav-links a.active { color: var(--paper); font-weight: 600; }
+        .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: .5rem 1rem; border-radius: 2px; cursor: pointer; font-size: .85rem; transition: border-color .2s, color .2s; }
+        .btn-ghost:hover { border-color: var(--paper); color: var(--paper); }
+        .btn-solid { background: var(--amber); color: var(--ink); border: none; padding: .5rem 1rem; border-radius: 2px; cursor: pointer; font-size: .85rem; font-weight: 600; font-family: 'Space Grotesk', sans-serif; transition: background .2s; }
+        .btn-solid:hover { background: var(--teal); }
+
+        .container { max-width: 960px; margin: 2.5rem auto; padding: 0 1.5rem; }
+        .page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .page-head h1 { font-size: 1.7rem; }
+        .page-sub { font-size: .9rem; color: var(--muted); margin-top: .25rem; }
+
+        .hint { font-size: .88rem; color: var(--muted); margin-bottom: 1.2rem; line-height: 1.5; }
+
+        /* Weak-concept quick picks */
+        .picks { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.1rem; }
+        .pick { border: 1px solid rgba(216,90,48,.55); background: rgba(216,90,48,0.08); color: var(--coral); border-radius: 999px; padding: .3rem .7rem; font-family: 'Space Grotesk', sans-serif; font-size: .8rem; cursor: pointer; transition: background .2s, color .2s; }
+        .pick:hover { background: var(--amber); color: var(--ink); }
+        .pick-none { color: var(--muted); font-size: .82rem; }
+
+        /* Chat */
+        .chat { border: 1px solid var(--line); border-radius: 4px; background: rgba(244,239,228,0.02); min-height: 320px; padding: 1.2rem; overflow-y: auto; }
+        .msg { display: flex; gap: .85rem; align-items: flex-start; margin-bottom: 1rem; max-width: 100%; }
+        .msg-avatar { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: .85rem; font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+        .msg-avatar.user { background: var(--teal); color: var(--ink); }
+        .msg-avatar.tutor { background: var(--amber); color: var(--ink); }
+        .msg-body { flex: 1; min-width: 0; }
+        .msg-bubble { background: rgba(244,239,228,0.04); border: 1px solid var(--line); border-radius: 4px; padding: .7rem .9rem; white-space: pre-wrap; line-height: 1.55; font-size: .92rem; }
+        .msg-meta { font-size: .7rem; color: var(--muted); margin-top: .35rem; }
+        .badge { font-size: .66rem; padding: .12rem .45rem; border-radius: 999px; border: 1px solid var(--line); font-family: 'Space Grotesk', sans-serif; letter-spacing: .03em; margin-right: .3rem; }
+        .badge.rag { border-color: rgba(29,158,117,.6); color: var(--teal); background: rgba(29,158,117,0.1); }
+        .badge.deterministic { border-color: rgba(242,166,35,.6); color: var(--amber); background: rgba(242,166,35,0.1); }
+
+        .composer { display: flex; gap: .6rem; margin-top: .9rem; align-items: center; }
+        .composer input[type=text] { flex: 1; background: rgba(244,239,228,0.06); border: 1px solid var(--line); color: var(--paper); padding: .65rem .8rem; border-radius: 3px; font-family: 'Manrope', sans-serif; font-size: .95rem; }
+        .composer input[type=text]:focus { outline: none; border-color: var(--amber); }
+
+        .state-loading { text-align: center; padding: 2.5rem; color: var(--amber); }
+        .state-error { text-align: center; padding: 2rem; color: var(--coral); }
+        .state-error p { margin-bottom: 1rem; }
+        footer { text-align: center; padding: 1.75rem 0; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/frontend/dashboard.html" class="nav-brand">
+            <div class="brand-mark">EV</div>
+            <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;">EduVision AI</span>
+        </a>
+        <div class="nav-right">
+            <div class="nav-links">
+                <a href="/frontend/dashboard.html">Learner Dashboard</a>
+                <a href="/frontend/tutor.html" class="active">Mastery Tutor</a>
+                <a href="/frontend/upload.html">Create a Deck</a>
+            </div>
+            <span class="nav-user" id="userName"></span>
+            <button class="btn-ghost" id="logoutBtn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-head">
+            <div>
+                <h1>Mastery Tutor</h1>
+                <p class="page-sub" id="pageSub">Answers grounded in your own content and mastery.</p>
+            </div>
+        </div>
+
+        <p class="hint">Ask about a concept you are learning. Answers are generated from your
+            lessons and graded clearly: <span class="badge rag">grounded in your material</span>
+            or <span class="badge deterministic">from your mastery data</span>.</p>
+
+        <div class="section-head">
+            <h2>Start from a weak concept</h2>
+            <div class="picks" id="picks">Loading recommendations&hellip;</div>
+        </div>
+
+        <div id="chatArea">
+            <div class="state-loading">Preparing your tutor&hellip;</div>
+        </div>
+
+        <form id="composer" class="composer" autocomplete="off">
+            <input type="text" id="input" placeholder="Ask the tutor something (e.g. 'Why is Gaussian Distributions hard for me?')" autofocus>
+            <button type="submit" class="btn-solid">Ask</button>
+        </form>
+    </div>
+
+    <footer>EduVision AI &mdash; mastery-aware, grounded tutoring.</footer>
+
+    <script>
+    const API = '/api/v1';
+
+    (async function() {
+        let user = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!user) {
+            try {
+                const r = await fetch(API + '/auth/refresh', { method: 'POST' });
+                if (r.ok) {
+                    const d = await r.json();
+                    const at = d.access_token || d.data?.access_token || d.tokens?.access_token;
+                    if (at) {
+                        localStorage.setItem('access_token', at);
+                        const me = await fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + at } });
+                        if (me.ok) {
+                            let u = await me.json();
+                            u = u.user || u;
+                            localStorage.setItem('user', JSON.stringify(u));
+                            user = u;
+                        }
+                    }
+                }
+            } catch (e) { /* fall through */ }
+        }
+        if (!user) { window.location.href = '/frontend/signin.html'; return; }
+        document.getElementById('userName').textContent = user.name || user.email;
+        init();
+    })();
+
+    function authHeaders() {
+        const token = localStorage.getItem('access_token');
+        return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    async function authFetch(url, opts = {}) {
+        if (!opts.headers) opts.headers = {};
+        Object.assign(opts.headers, authHeaders());
+        let res = await fetch(url, opts);
+        if (res.status === 401) {
+            try {
+                const refreshRes = await fetch(API + '/auth/refresh', { method: 'POST' });
+                if (refreshRes.ok) {
+                    const refreshData = await refreshRes.json();
+                    const newToken = refreshData.access_token || refreshData.data?.access_token || refreshData.tokens?.access_token;
+                    if (newToken) {
+                        localStorage.setItem('access_token', newToken);
+                        opts.headers['Authorization'] = 'Bearer ' + newToken;
+                        res = await fetch(url, opts);
+                    }
+                }
+            } catch (e) { /* refresh failed */ }
+            if (res.status === 401) {
+                window.location.href = '/frontend/signin.html';
+                throw new Error('Session expired. Please sign in again.');
+            }
+        }
+        return res;
+    }
+
+    function escHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = (s == null ? '' : String(s));
+        return div.innerHTML;
+    }
+
+    const state = { sessionId: null, pendingConcept: new URLSearchParams(window.location.search).get('concept') };
+
+    async function init() {
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await fetch(API + '/auth/logout', { method: 'POST', credentials: 'include' });
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user');
+            window.location.href = '/frontend/signin.html';
+        });
+
+        document.getElementById('composer').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            await sendMessage(text);
+        });
+
+        await loadPicks();
+        startSession();
+    }
+
+    function renderInitial() {
+        document.getElementById('chatArea').innerHTML =
+            '<div class="chat"><div class="msg"><div class="msg-avatar tutor">AI</div>' +
+            '<div class="msg-body"><div class="msg-bubble">Hi! I\'m your mastery-aware tutor. ' +
+            'Ask me anything about the concepts you are learning, or tap one of the weak concepts above.</div></div></div></div>';
+    }
+
+    async function loadPicks() {
+        const picks = document.getElementById('picks');
+        try {
+            const res = await authFetch(API + '/me/progress');
+            if (!res.ok) throw new Error('progress ' + res.status);
+            const data = (await res.json()).data || {};
+            const concepts = (data.concept_mastery || []).filter(c => String(c.status).toLowerCase() === 'weak');
+            if (!concepts.length) {
+                picks.innerHTML = '<span class="pick-none">No weak concepts right now — ask anything in the chat below.</span>';
+                return;
+            }
+            const buttons = concepts.map(c =>
+                '<button class="pick" data-concept="' + escHtml(c.concept_id || c.concept_name) + '">' + escHtml(c.concept_name) + ' (' + escHtml(c.mastery_score) + '%)</button>'
+            ).join('');
+            picks.innerHTML = buttons;
+            picks.querySelectorAll('.pick').forEach(btn => {
+                btn.addEventListener('click', () => remediate(btn.getAttribute('data-concept')));
+            });
+        } catch (e) {
+            picks.innerHTML = '<span class="pick-none">Could not load your concepts.</span>';
+        }
+    }
+
+    async function startSession() {
+        try {
+            const res = await authFetch(API + '/tutor/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: 'Mastery Tutor chat' })
+            });
+            if (res.status !== 201) throw new Error('session ' + res.status);
+            state.sessionId = (await res.json()).data.id;
+            renderInitial();
+            if (state.pendingConcept) {
+                const concept = state.pendingConcept;
+                state.pendingConcept = null;
+                setTimeout(() => remediate(concept), 100);
+            }
+        } catch (e) {
+            showError('Could not start a tutor session: ' + e.message);
+        }
+    }
+
+    function showError(msg) {
+        document.getElementById('chatArea').innerHTML =
+            '<div class="state-error"><p>' + escHtml(msg) + '</p></div>';
+    }
+
+    function sendMessage(text, clientId) {
+        clientId = clientId || ('cli_' + Date.now() + '_' + Math.random().toString(16).slice(2));
+        const chat = document.getElementById('chatArea').querySelector('.chat');
+        if (chat) {
+            chat.insertAdjacentHTML('beforeend',
+                '<div class="msg"><div class="msg-avatar user">You</div><div class="msg-body"><div class="msg-bubble">' + escHtml(text) + '</div></div></div>'
+            );
+            appendPending();
+        }
+        fetch(API + '/tutor/sessions/' + state.sessionId + '/messages', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+            body: JSON.stringify({ content: text, client_message_id: clientId })
+        })
+            .then(res => {
+                if (res.status === 401) { window.location.href = '/frontend/signin.html'; throw new Error('Session expired.'); }
+                if (!res.ok) throw new Error('message ' + res.status);
+                return res.json();
+            })
+            .then(json => {
+                const data = json.data || json;
+                const reply = data.assistant_message;
+                if (reply) appendAssistant(reply);
+            })
+            .catch(async e => {
+                // Retry once through authFetch so 401 refresh applies cleanly.
+                try {
+                    const res = await authFetch(API + '/tutor/sessions/' + state.sessionId + '/messages', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: text, client_message_id: clientId })
+                    });
+                    if (!res.ok) { appendAssistantErr('Retry failed: ' + res.status); return; }
+                    const json = await res.json();
+                    const reply = (json.data || json).assistant_message;
+                    if (reply) appendAssistant(reply);
+                } catch (err2) { appendAssistantErr('Network error: ' + err2.message); }
+            });
+    }
+
+    function appendPending() {
+        const chat = document.getElementById('chatArea').querySelector('.chat');
+        if (!chat) return;
+        chat.insertAdjacentHTML('beforeend',
+            '<div class="msg" id="pending"><div class="msg-avatar tutor">AI</div>' +
+            '<div class="msg-body"><div class="msg-bubble">Thinking&hellip;</div></div></div>'
+        );
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    function appendAssistant(reply) {
+        const pending = document.getElementById('pending');
+        const chat = document.getElementById('chatArea').querySelector('.chat');
+        if (!chat) return;
+        const kind = String(reply.source_kind || 'deterministic');
+        const kindBadge = '<span class="badge ' + escHtml(kind) + '">' + escHtml(kind) + '</span>';
+        const confidence = reply.confidence ? '<span class="badge">confidence ' + escHtml(reply.confidence) + '</span>' : '';
+        const attribution = reply.attribution ? ' &middot; source: ' + escHtml(reply.attribution) : '';
+        const bubble = '<div class="msg-body"><div class="msg-bubble">' + escHtml(reply.content) + '</div>' +
+            '<div class="msg-meta">' + kindBadge + confidence + (attribution || '') + '</div></div>';
+        if (pending) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg';
+            wrapper.innerHTML = '<div class="msg-avatar tutor">AI</div>' + bubble;
+            pending.parentNode.replaceChild(wrapper, pending);
+        } else {
+            chat.insertAdjacentHTML('beforeend', '<div class="msg"><div class="msg-avatar tutor">AI</div>' + bubble + '</div>');
+            chat.scrollTop = chat.scrollHeight;
+        }
+    }
+
+    function appendAssistantErr(msg) {
+        const pending = document.getElementById('pending');
+        const chat = document.getElementById('chatArea').querySelector('.chat');
+        const bubble = '<div class="msg-body"><div class="msg-bubble" style="color:var(--coral)">' + escHtml(msg) + '</div></div>';
+        if (pending) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg';
+            wrapper.innerHTML = '<div class="msg-avatar tutor">AI</div>' + bubble;
+            pending.parentNode.replaceChild(wrapper, pending);
+        } else if (chat) {
+            chat.insertAdjacentHTML('beforeend', '<div class="msg"><div class="msg-avatar tutor">AI</div>' + bubble + '</div>');
+        }
+    }
+
+    function remediate(conceptId) {
+        const chat = document.getElementById('chatArea').querySelector('.chat');
+        if (!chat) return;
+        chat.insertAdjacentHTML('beforeend',
+            '<div class="msg"><div class="msg-avatar user">You</div><div class="msg-body"><div class="msg-bubble">Please help me remediate this concept.</div></div></div>' +
+            '<div class="msg" id="pending"><div class="msg-avatar tutor">AI</div><div class="msg-body"><div class="msg-bubble">Building your remediation plan&hellip;</div></div></div>'
+        );
+        chat.scrollTop = chat.scrollHeight;
+        fetch(API + '/tutor/remediate', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+            body: JSON.stringify({ target_concept_id: conceptId })
+        })
+            .then(res => {
+                if (res.status === 401) { window.location.href = '/frontend/signin.html'; throw new Error('Session expired.'); }
+                if (!res.ok) throw new Error('remediate ' + res.status);
+                return res.json();
+            })
+            .then(json => {
+                const data = json.data || json;
+                appendRemediation(data);
+            })
+            .catch(e => appendAssistantErr('Could not remediate: ' + e.message));
+    }
+
+    function appendRemediation(data) {
+        const pending = document.getElementById('pending');
+        const chat = document.getElementById('chatArea').querySelector('.chat');
+        if (!chat) return;
+        const kind = String(data.source_kind || 'deterministic');
+        const badge = '<span class="badge ' + escHtml(kind) + '">' + escHtml(kind) + '</span>' +
+            (data.confidence ? '<span class="badge">confidence ' + escHtml(data.confidence) + '</span>' : '') +
+            ' &middot; mastery ' + escHtml(data.mastery_score) + '%';
+        const bubble = '<div class="msg-body"><div class="msg-bubble">' + escHtml(data.response) + '</div>' +
+            '<div class="msg-meta">' + badge + '</div></div>';
+        if (pending) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'msg';
+            wrapper.innerHTML = '<div class="msg-avatar tutor">AI</div>' + bubble;
+            pending.parentNode.replaceChild(wrapper, pending);
+        }
+    }
+    </script>
+</body>
+</html>

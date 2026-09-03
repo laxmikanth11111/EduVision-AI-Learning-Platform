@@ -80,6 +80,8 @@
         .concept { border: 1px solid var(--line); border-radius: 3px; padding: .7rem 1rem; margin-bottom: .5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); }
         .concept .concept-name { font-size: .92rem; color: var(--paper); }
         .concept .concept-score { font-family: 'Space Grotesk', sans-serif; font-size: .85rem; min-width: 48px; text-align: right; }
+        .lesson-tutor { font-size: .72rem; font-family: 'Space Grotesk', sans-serif; color: var(--amber); text-decoration: none; border: 1px solid rgba(242,166,35,.5); border-radius: 999px; padding: .12rem .5rem; transition: background .2s, color .2s; }
+        .lesson-tutor:hover { background: var(--amber); color: var(--ink); }
         .chip { font-size: .68rem; padding: .22rem .55rem; border-radius: 999px; border: 1px solid var(--line); font-family: 'Space Grotesk', sans-serif; letter-spacing: .04em; }
         .chip.mastered { border-color: rgba(29,158,117,.6); color: var(--teal); background: rgba(29,158,117,0.1); }
         .chip.developing { border-color: rgba(242,166,35,.6); color: var(--amber); background: rgba(242,166,35,0.1); }
@@ -115,6 +117,7 @@
         <div class="nav-right">
             <div class="nav-links">
                 <a href="/frontend/dashboard.html" class="active">Learner Dashboard</a>
+                <a href="/frontend/tutor.html">Mastery Tutor</a>
                 <a href="/frontend/upload.html">Create a Deck</a>
             </div>
             <span class="nav-user" id="userName"></span>
@@ -297,8 +300,12 @@
         const concepts = d.concept_mastery || [];
         const order = { 'weak': 0, 'developing': 1, 'mastered': 2 };
         concepts.slice().sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3)).forEach(c => {
+            const isWeak = String(c.status).toLowerCase() === 'weak';
+            const tutorCtl = isWeak
+                ? '<a class="lesson-tutor" href="/frontend/tutor.html?concept=' + encodeURIComponent(c.concept_id || c.concept_name) + '">Ask tutor</a>'
+                : '';
             parts.push(
-                '<div class="concept"><div><span class="concept-name">' + escHtml(c.concept_name) + '</span></div>' +
+                '<div class="concept"><div style="display:flex;align-items:center;gap:.6rem;"><span class="concept-name">' + escHtml(c.concept_name) + '</span>' + tutorCtl + '</div>' +
                 '<div style="display:flex;align-items:center;gap:.7rem;"><span class="chip ' + escHtml(c.status) + '">' + escHtml(c.status) + '</span>' +
                 '<span class="concept-score">' + pct(c.mastery_score) + '%</span></div></div>'
             );
