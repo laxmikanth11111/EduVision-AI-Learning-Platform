@@ -14,8 +14,9 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
 from shared.constants import LearningSessionStatus
@@ -54,18 +55,18 @@ class LearningSession(Base, UUIDMixin, TimestampMixin):
         default=generate_session_public_id,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         nullable=False,
         index=True,
     )
     lesson_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         ForeignKey("generated_lessons.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     lesson_version_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         ForeignKey("generated_lesson_versions.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
