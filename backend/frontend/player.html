@@ -181,6 +181,55 @@ body.presenting .present-arrow { display: block; }
     .sidebar { display: none; }
     .deck-title { display: none; }
 }
+
+/* ── Quiz / checkpoint (P6) ─────────────────────── */
+.lj-take { display: inline-block; margin-top: .4rem; background: var(--amber); color: var(--ink); border: none; border-radius: 2px; padding: .38rem .85rem; font-size: .76rem; font-weight: 700; cursor: pointer; transition: background .15s, transform .15s; }
+.lj-take:hover { background: #ffbf47; }
+.lj-take:active { transform: scale(.96); }
+.lj-take:disabled { opacity: .35; cursor: default; }
+
+.quiz-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(8,16,28,0.88); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 1.25rem; }
+.quiz-overlay.hidden { display: none; }
+.quiz-card { background: var(--ink); border: 1px solid var(--line); border-radius: 8px; width: 100%; max-width: 760px; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+.quiz-head { padding: 1rem 1.4rem; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.quiz-head h3 { font-size: 1.05rem; color: var(--paper); }
+.quiz-sub { font-size: .72rem; color: var(--muted); margin-top: .2rem; }
+.quiz-close { background: none; border: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; line-height: 1; }
+.quiz-close:hover { color: var(--coral); }
+.quiz-body { flex: 1; overflow-y: auto; padding: 1.4rem; }
+.quiz-progress { font-family: 'Space Grotesk', sans-serif; font-size: .72rem; color: var(--amber); letter-spacing: .08em; margin-bottom: .8rem; }
+.quiz-progress-bar { height: 4px; border-radius: 2px; background: rgba(244,239,228,0.12); overflow: hidden; margin-bottom: .9rem; }
+.quiz-progress-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--amber)); transition: width .25s; }
+.quiz-qstem { font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem; color: var(--paper); line-height: 1.4; margin-bottom: .3rem; }
+.quiz-qmeta { font-size: .72rem; color: var(--muted); margin-bottom: 1.1rem; display: flex; gap: 10px; flex-wrap: wrap; }
+.quiz-options { display: flex; flex-direction: column; gap: .55rem; }
+.quiz-opt { display: flex; align-items: center; gap: .75rem; border: 1px solid var(--line); border-radius: 4px; padding: .8rem 1rem; cursor: pointer; transition: border-color .15s, background .15s; background: rgba(244,239,228,0.02); }
+.quiz-opt:hover { border-color: var(--amber); }
+.quiz-opt input { accent-color: var(--amber); flex-shrink: 0; }
+.quiz-opt.selected { border-color: var(--amber); background: rgba(242,166,35,0.08); }
+.quiz-opt .q-opt-letter { font-family: 'Space Grotesk', sans-serif; font-size: .78rem; color: var(--amber); font-weight: 700; min-width: 20px; }
+.quiz-opt .q-opt-text { font-size: .92rem; color: var(--muted-strong); line-height: 1.5; }
+.quiz-opt.correct { border-color: var(--teal); background: rgba(29,158,117,0.12); }
+.quiz-opt.correct .q-opt-text { color: var(--paper); }
+.quiz-opt.incorrect { border-color: var(--coral); background: rgba(216,90,48,0.12); }
+.quiz-opt.incorrect .q-opt-text { color: var(--paper); }
+.quiz-feedback { margin-top: 1rem; border: 1px solid var(--line); border-left: 3px solid var(--teal); border-radius: 3px; padding: .8rem 1rem; font-size: .85rem; line-height: 1.6; color: var(--muted-strong); background: rgba(244,239,228,0.02); }
+.quiz-feedback.wrong { border-left-color: var(--coral); }
+.quiz-feedback b { color: var(--paper); }
+.quiz-foot { padding: .9rem 1.4rem; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+.quiz-nav { display: flex; gap: 8px; }
+.quiz-review { border: 1px dashed rgba(29,158,117,.5); border-radius: 4px; padding: 1.1rem; margin-top: .5rem; }
+
+/* Result screen */
+.quiz-result { text-align: center; padding: 1.4rem .5rem; }
+.quiz-score-ring { width: 120px; height: 120px; border-radius: 50%; margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; border: 6px solid var(--line); font-family: 'Space Grotesk', sans-serif; font-size: 1.7rem; font-weight: 700; color: var(--paper); }
+.quiz-score-ring.pass { border-color: var(--teal); }
+.quiz-score-ring.fail { border-color: var(--coral); }
+.quiz-result h3 { font-size: 1.3rem; margin-bottom: .3rem; }
+.quiz-result .quiz-result-sub { color: var(--muted); margin-bottom: 1.2rem; }
+.quiz-result-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.quiz-result-row { display: flex; justify-content: space-between; font-size: .84rem; color: var(--muted-strong); padding: .4rem 0; border-bottom: 1px solid var(--line); }
+.quiz-result-row b { color: var(--paper); }
 </style>
 </head>
 <body>
@@ -216,6 +265,10 @@ body.presenting .present-arrow { display: block; }
 <button class="present-exit" onclick="exitPresent()">Exit Present (Esc)</button>
 <button class="present-arrow" id="arrLeft" onclick="prevSlide()">&#9664;</button>
 <button class="present-arrow" id="arrRight" onclick="nextSlide()">&#9654;</button>
+
+<div class="quiz-overlay hidden" id="quizOverlay">
+    <div class="quiz-card" id="quizCard"></div>
+</div>
 
 <script>
 const API = '/api/v1';
@@ -327,6 +380,7 @@ function showState(html) {
 // ── Thumbnails ───────────────────────────────────────────────────────────
 function buildThumbnails() {
     const sb = document.getElementById('sidebar');
+    const lj = document.getElementById('ljPanel');
     sb.innerHTML = '';
     const frag = document.createDocumentFragment();
     slides.forEach((s, i) => {
@@ -341,6 +395,7 @@ function buildThumbnails() {
             '<div class="thumb-title">' + escHtml(t.title || 'Untitled') + '</div>';
         frag.appendChild(el);
     });
+    if (lj) sb.appendChild(lj);
     sb.appendChild(frag);
 }
 
@@ -387,9 +442,12 @@ function renderLearnerJourney(panel) {
                 (cp.latest_attempt.percent_score >= (q.passing_score || 0) ? ' &mdash; passed' : ' &mdash; keep going') +
                 '</div>';
         }
-        if (!cp.completed && cp.available_attempts > 0 && q.id) {
+        if (cp.available_attempts > 0 && q.id) {
             html += '<div class="lj-action">Checkpoint available &middot; ' +
                 cp.available_attempts + ' attempt(s) left</div>';
+            if (!cp.completed) {
+                html += '<button class="lj-take" onclick="startQuiz(\'' + escHtml(String(q.id)) + '\')">&#9654; Take Checkpoint</button>';
+            }
         }
     } else {
         html += '<div class="lj-row"><span>Assessment</span><span class="lj-chip toast">none yet</span></div>';
@@ -1718,6 +1776,236 @@ function showControls(idx, type) {
         ctrl.style.display = 'flex';
         ctrl.innerHTML = '';
     }
+}
+
+// ── Quiz taking (P6) ────────────────────────────────────────────────────
+let quizState = null;
+
+function quizTypeLabel(t) {
+    return (t === 'multiple_choice' || t === 'single_choice') ? 'Multiple choice'
+        : (t === 'true_false') ? 'True / False'
+        : (t === 'multiple_answer') ? 'Select all'
+        : 'Question';
+}
+
+function closeQuiz() {
+    document.getElementById('quizOverlay').classList.add('hidden');
+    document.body.style.overflow = '';
+    quizState = null;
+}
+
+async function startQuiz(quizId) {
+    const ov = document.getElementById('quizOverlay');
+    ov.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('quizCard').innerHTML =
+        '<div class="quiz-head"><div><h3>Checkpoint</h3><div class="quiz-sub">Starting your assessment&hellip;</div></div>' +
+        '<button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
+        '<div class="quiz-body" style="display:flex;align-items:center;justify-content:center;min-height:200px;">' +
+        '<div class="visual-loading"><div class="spinner"></div><div>Loading questions&hellip;</div></div></div>';
+
+    quizState = { quizId, questions: [], answers: {}, current: 0, attemptId: null, startTime: Date.now() };
+    try {
+        const res = await authFetch(API + '/quizzes/' + quizId + '/attempts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        if (!res.ok) await apiError(res);
+        const data = await res.json();
+        const attempt = data.data || data;
+        quizState.attemptId = attempt.attempt_id;
+        quizState.attemptNumber = attempt.attempt_number || 1;
+        quizState.quizId = attempt.quiz_id || quizState.quizId;
+        quizState.questions = attempt.questions || [];
+        if (!quizState.questions.length) {
+            document.getElementById('quizCard').innerHTML =
+                '<div class="quiz-head"><div><h3>Checkpoint</h3></div><button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
+                '<div class="quiz-body"><div class="visual-error">This checkpoint has no questions available.</div></div>';
+            return;
+        }
+        renderQuizQuestion();
+    } catch (e) {
+        document.getElementById('quizCard').innerHTML =
+            '<div class="quiz-head"><div><h3>Checkpoint</h3></div><button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
+            '<div class="quiz-body"><div class="visual-error">Failed to start checkpoint: ' + escHtml(e.message) + '</div></div>';
+    }
+}
+
+function quizChoose(q, optId, inputEl) {
+    const type = q.question_type;
+    const sel = quizState.answers[q.id] || [];
+    if (type === 'multiple_answer') {
+        const i = sel.indexOf(optId);
+        if (i >= 0) sel.splice(i, 1); else sel.push(optId);
+        quizState.answers[q.id] = sel.slice();
+        renderQuizOptions(q, sel);
+    } else {
+        quizState.answers[q.id] = [optId];
+        renderQuizOptions(q, sel);
+    }
+}
+
+function renderQuizOptions(q, sel) {
+    q.options.forEach((opt) => {
+        const id = 'qopt-' + q.id + '-' + opt.id;
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle('selected', sel.indexOf(opt.id) >= 0);
+        const input = el.querySelector('input');
+        if (input) input.checked = sel.indexOf(opt.id) >= 0;
+    });
+}
+
+function renderQuizQuestion() {
+    const q = quizState.questions[quizState.current];
+    if (!q) return;
+    const total = quizState.questions.length;
+    const sel = quizState.answers[q.id] || [];
+    const isMulti = q.question_type === 'multiple_answer';
+    const inputType = isMulti ? 'checkbox' : 'radio';
+    const name = 'q-' + q.id;
+
+    const optHtml = q.options.map((opt, i) => {
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const label = q.question_type === 'true_false'
+            ? (opt.position === 0 ? 'False' : 'True')
+            : (letters[i] || (i + 1));
+        return '<label class="quiz-opt' + (sel.indexOf(opt.id) >= 0 ? ' selected' : '') + '" id="qopt-' + q.id + '-' + opt.id + '">' +
+            '<input type="' + inputType + '" name="' + name + '" ' + (sel.indexOf(opt.id) >= 0 ? 'checked' : '') + '>' +
+            '<span class="q-opt-letter">' + label + '</span>' +
+            '<span class="q-opt-text">' + escHtml(opt.text || '') + '</span></label>';
+    }).join('');
+
+    document.getElementById('quizCard').innerHTML =
+        '<div class="quiz-head"><div><h3>Checkpoint ' + Math.min(quizState.attemptNumber || 1, 999) + '</h3>' +
+        '<div class="quiz-sub">Question ' + (quizState.current + 1) + ' of ' + total + '</div></div>' +
+        '<button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
+        '<div class="quiz-body">' +
+        '<div class="quiz-progress">QUESTION ' + (quizState.current + 1) + ' / ' + total + '</div>' +
+        '<div class="quiz-progress-bar"><div class="quiz-progress-fill" style="width:' + (((quizState.current + 1) / total) * 100) + '%;"></div></div>' +
+        '<div class="quiz-qstem">' + escHtml(q.stem || '') + '</div>' +
+        '<div class="quiz-qmeta"><span>' + escHtml(quizTypeLabel(q.question_type)) + '</span>' +
+        (q.points ? '<span>' + q.points + ' pt' + (q.points > 1 ? 's' : '') + '</span>' : '') +
+        (q.bloom_level ? '<span>' + escHtml(q.bloom_level) + '</span>' : '') + '</div>' +
+        '<div class="quiz-options">' + optHtml + '</div>' +
+        '</div>' +
+        '<div class="quiz-foot">' +
+        '<div class="quiz-nav">' +
+        '<button class="icon-btn" onclick="quizNav(-1)" ' + (quizState.current <= 0 ? 'disabled' : '') + '>&#9664; Previous</button>' +
+        '<button class="icon-btn" onclick="quizNav(1)" ' + (quizState.current >= total - 1 ? 'disabled' : '') + '>Next &#9654;</button>' +
+        '</div>' +
+        (quizState.current >= total - 1
+            ? '<button class="lj-take" onclick="submitQuiz()">Submit Quiz</button>'
+            : '<span style="font-size:.72rem;color:var(--muted);" onclick="submitQuiz()" class="lj-link">Submit early</span>') +
+        '</div>';
+
+    // Rebind onclick closures after innerHTML replace
+    wireQuizOptions(q);
+}
+
+function wireQuizOptions(q) {
+    q.options.forEach((opt) => {
+        const el = document.getElementById('qopt-' + q.id + '-' + opt.id);
+        if (!el) return;
+        el.onclick = () => quizChoose(q, opt.id, el.querySelector('input'));
+    });
+}
+
+function quizNav(dir) {
+    const target = quizState.current + dir;
+    if (target < 0 || target >= quizState.questions.length) return;
+    quizState.current = target;
+    renderQuizQuestion();
+}
+
+async function submitQuiz() {
+    const answers = quizState.questions.map((q) => ({
+        question_id: q.id,
+        option_ids: quizState.answers[q.id] || [],
+    }));
+    const card = document.getElementById('quizCard');
+    card.innerHTML =
+        '<div class="quiz-head"><div><h3>Checkpoint</h3><div class="quiz-sub">Scoring your answers&hellip;</div></div>' +
+        '<button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
+        '<div class="quiz-body" style="display:flex;align-items:center;justify-content:center;min-height:200px;">' +
+        '<div class="visual-loading"><div class="spinner"></div><div>Scoring&hellip;</div></div></div>';
+    try {
+        const res = await authFetch(API + '/quizzes/' + quizState.quizId + '/attempts/' + quizState.attemptId + '/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                answers,
+                time_spent_seconds: Math.max(1, Math.round((Date.now() - quizState.startTime) / 1000)),
+            }),
+        });
+        if (!res.ok) await apiError(res);
+        const data = await res.json();
+        const result = data.data || data;
+        quizState.result = result;
+        renderQuizResult(result);
+        refreshLearnerJourney();
+    } catch (e) {
+        card.innerHTML =
+            '<div class="quiz-head"><div><h3>Checkpoint</h3></div><button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
+            '<div class="quiz-body"><div class="visual-error">Failed to submit: ' + escHtml(e.message) + '</div></div>';
+    }
+}
+
+function renderQuizResult(result) {
+    const pct = result.percent_score != null ? Math.round(result.percent_score) : 0;
+    const passed = !!result.passed;
+    const sb = result.score_breakdown || {};
+
+    const qf = result.question_feedback || [];
+    const reviewHtml = qf.length ? '<div class="quiz-review"><p style="font-size:.78rem;color:var(--amber);margin-bottom:.6rem;">Detailed feedback</p>' +
+        qf.map((fb) => {
+            const q = quizState.questions.find((x) => x.id === fb.question_id);
+            const correct = fb.is_correct;
+            const marker = correct === true ? '&#10003;' : (correct === false ? '&#10007;' : '&#9654;');
+            const markCls = correct === true ? 'color:var(--teal);' : (correct === false ? 'color:var(--coral);' : 'color:var(--muted);');
+            return '<div style="padding:.5rem 0;border-bottom:1px solid var(--line);">' +
+                '<div style="font-size:.82rem;color:var(--paper);">' + marker + ' <span style="' + markCls + '"></span>' + escHtml((q && q.stem) || 'Question ' + fb.position) + '</div>' +
+                '<div style="font-size:.72rem;color:var(--muted);margin-top:.2rem;">' + escHtml((q && quizTypeLabel(q.question_type)) || '') +
+                (q && q.points ? ' &middot; ' + fb.points_earned + ' / ' + fb.points_possible + ' pts' : '') + '</div>' +
+                (fb.explanation ? '<div style="font-size:.78rem;color:var(--muted-strong);margin-top:.3rem;line-height:1.5;">' + escHtml(fb.explanation) + '</div>' : '') +
+                '</div>';
+        }).join('') + '</div>' : '';
+
+    const recs = result.recommendations;
+    let recHtml = '';
+    if (recs && recs.next_action) {
+        const na = recs.next_action;
+        recHtml = '<div style="margin-top:.9rem;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:3px;padding:.8rem 1rem;text-align:left;background:rgba(242,166,35,0.04);">' +
+            '<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:.3rem;">Recommended next</div>' +
+            '<div style="font-size:.92rem;color:var(--paper);font-weight:600;">' + escHtml(na.title || 'Revisit the topic') + '</div>' +
+            (na.reason ? '<div style="font-size:.8rem;color:var(--muted-strong);margin-top:.25rem;line-height:1.5;">' + escHtml(na.reason) + '</div>' : '') +
+            '</div>';
+    }
+
+    document.getElementById('quizCard').innerHTML =
+        '<div class="quiz-head"><div><h3>Checkpoint Complete</h3><div class="quiz-sub">Attempt ' + (result.attempt_number || 1) + '</div></div>' +
+        '<button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
+        '<div class="quiz-body"><div class="quiz-result">' +
+        '<div class="quiz-score-ring ' + (passed ? 'pass' : 'fail') + '">' + pct + '%</div>' +
+        '<h3>' + (passed ? 'Checkpoint passed!' : 'Keep going') + '</h3>' +
+        '<div class="quiz-result-sub">You scored <b>' + pct + '%</b>' +
+        (result.passing_score != null ? ' &mdash; passing is ' + Math.round(result.passing_score) + '%' : '') + '</div>' +
+        '<div class="quiz-result-actions">' +
+        '<button class="lj-take" onclick="closeQuiz()">Back to Lesson</button>' +
+        '</div></div>' +
+        (recHtml) +
+        '<div style="margin-top:.9rem;">' +
+        '<div class="quiz-result-row"><span>Correct</span><b>' + (sb.correct_count != null ? sb.correct_count : '') + '</b></div>' +
+        '<div class="quiz-result-row"><span>Incorrect</span><b>' + (sb.incorrect_count != null ? sb.incorrect_count : '') + '</b></div>' +
+        '<div class="quiz-result-row"><span>Unanswered</span><b>' + (sb.unanswered_count != null ? sb.unanswered_count : '') + '</b></div>' +
+        '</div>' +
+        reviewHtml + '</div>';
+}
+
+async function refreshLearnerJourney() {
+    learnerCompletion = 0;
+    await loadLearnerJourney();
 }
 
 // ── Utils ────────────────────────────────────────────────────────────────
