@@ -27,7 +27,7 @@ idempotent against both fresh (SQLite ``create_all``) and pre-existing
 from __future__ import annotations
 
 from alembic import op
-from sqlalchemy import inspect
+from sqlalchemy import Column, String, inspect
 
 revision = "0029_tutor_sessions"
 down_revision = "0028_ws10_idempotency_key_index"
@@ -57,24 +57,24 @@ def upgrade() -> None:
     if "target_concept_id" not in session_cols:
         op.add_column(
             "tutor_sessions",
-            op.Column("target_concept_id", op.String(length=40), nullable=True),
+            Column("target_concept_id", String(length=40), nullable=True),
         )
 
     message_cols = _columns("tutor_messages")
     if "source_kind" not in message_cols:
         op.add_column(
             "tutor_messages",
-            op.Column("source_kind", op.String(length=30), nullable=True),
+            Column("source_kind", String(length=30), nullable=True),
         )
     if "attribution" not in message_cols:
         op.add_column(
             "tutor_messages",
-            op.Column("attribution", op.String(length=1000), nullable=True),
+            Column("attribution", String(length=1000), nullable=True),
         )
     if "confidence" not in message_cols:
         op.add_column(
             "tutor_messages",
-            op.Column("confidence", op.String(length=20), nullable=True),
+            Column("confidence", String(length=20), nullable=True),
         )
 
     if not _index_exists("tutor_messages", TUTOR_MESSAGES_INDEX):
