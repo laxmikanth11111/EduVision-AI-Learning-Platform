@@ -69,6 +69,40 @@ def mock_service() -> MagicMock:
         "total_topics": 2,
         "status": "active",
     }))
+    service.get_checkpoint = AsyncMock(return_value={
+        "has_checkpoint": True,
+        "quiz": {
+            "id": "q_abc",
+            "title": "Checkpoint",
+            "description": None,
+            "mode": "practice",
+            "status": "ready",
+            "question_count": 3,
+            "passing_score": 70.0,
+            "max_attempts_per_user": 3,
+        },
+        "completed": False,
+        "latest_attempt": None,
+        "available_attempts": 3,
+    })
+    service.get_mastery_and_next_action = AsyncMock(return_value={
+        "average_mastery": 45.0,
+        "mastered_count": 1,
+        "developing_count": 2,
+        "weak_count": 1,
+        "concept_mastery": {"loops": 60.0, "list": 30.0},
+        "summary": "Two concepts need review",
+        "next_action": {
+            "action_type": "review_concept",
+            "concept_id": "list",
+            "concept_name": "List",
+            "title": "Review List",
+            "description": "Review list operations",
+            "reason": "Scored in the weak band",
+            "activity_type": "video_lesson",
+            "priority": "high",
+        },
+    })
     with patch.object(player_module, "LessonPlayerService", return_value=service):
         yield service
 
@@ -107,3 +141,31 @@ class TestStartPlayerEndpoint:
         assert mock_service.start.await_args.kwargs["client_metadata"] == {
             "source": "homepage"
         }
+
+
+class TestCheckpointEndpoint:
+    async def test_get_checkpoint(
+        self, client, mock_service, override_uow
+    ) -> None:
+        response = await client.get(
+            "/api/v1/lessons/lssn_lesson/player/checkpoint"
+        )
+        assert response.status_code == 200
+        body = response.json()["data"]
+        assert body["has_checkpoint"] is True
+        assert body["quiz"]["id"] == "q_abc"
+        mock_service.get_checkpoint.assert_awaited_once()
+
+
+class TestMasteryEndpoint:
+    async def test_get_mastery_and_next_action(
+        self, client, mock_service, override_uow
+    ) -> None:
+        response = await client.get(
+            "/api/v1/lessons/lssn_lesson/player/mastery"
+        )
+        assert response.status_code == 200
+        body = response.json()["data"]
+        assert body["next_action"]["concept_name"] == "List"
+        assert body["average_mastery"] == 45.0
+        mock_service.get_mastery_and_next_action.assert_awaited_once()
