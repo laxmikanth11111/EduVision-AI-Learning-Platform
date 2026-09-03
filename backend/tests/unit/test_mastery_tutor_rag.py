@@ -22,6 +22,7 @@ from app.schemas.tutor import TutorMessageSendRequest, TutorSessionCreateRequest
 from app.services.educational_memory_service import educational_memory_service
 from app.services.mastery_tutor_service import MasteryTutorService
 from shared.constants import TutorSourceKind
+from tests.conftest import TestSessionLocal
 from tests.learner_progress_helpers import seed_learner
 
 
@@ -29,6 +30,39 @@ from tests.learner_progress_helpers import seed_learner
 def _reset_memory_cache() -> None:
     educational_memory_service._memories.clear()  # noqa: SLF001
     return
+
+
+@pytest.fixture(autouse=True)
+async def _cleanup_seeded_source_rows():
+    """Remove learner-owned DocumentChunk/ContentUnit rows this module seeds.
+
+    ``test_rag_indexing_service`` asserts against *global* counts of
+    ``document_chunks``/``content_units`` (``_count(...) == 0``, unscoped
+    ``select(DocumentChunk)``), so P8 must not leave any such rows in the
+    shared, session-scoped SQLite DB. This teardown deletes the rows this
+    module creates (identified by the ``Gaussian Reference`` source title) so
+    the RAG-indexing subsystem's global-count assumptions stay valid.
+    """
+    yield
+    from sqlalchemy import delete, select
+
+    from app.models.content_unit import ContentUnit
+    from app.models.document_chunk import DocumentChunk
+
+    async with TestSessionLocal() as session:
+        unit_ids = list(
+            (
+                await session.execute(
+                    select(ContentUnit.id).where(ContentUnit.title == "Gaussian Reference")
+                )
+            ).scalars().all()
+        )
+        if unit_ids:
+            await session.execute(
+                delete(DocumentChunk).where(DocumentChunk.content_unit_id.in_(unit_ids))
+            )
+            await session.execute(delete(ContentUnit).where(ContentUnit.id.in_(unit_ids)))
+            await session.commit()
 
 
 async def _seed_learner_with_source(
@@ -64,8 +98,12 @@ async def _seed_learner_with_source(
         version=1,
     )
     session.add(chunk)
+    # Flush (not commit) so the tutor service can read these rows on the same
+    # session while the db_session fixture's teardown rollback removes them from
+    # the shared, session-scoped SQLite DB. This keeps the learner-owned chunks
+    # out of the global DocumentChunk/ContentUnit tables that other subsystem
+    # tests (e.g. test_rag_indexing_service) assert against with global counts.
     await session.flush()
-    await session.commit()
 
     return {
         "presentation_id": lookups["presentation_id"],
