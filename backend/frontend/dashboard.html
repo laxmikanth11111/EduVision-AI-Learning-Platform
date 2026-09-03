@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learner Dashboard — EduVision AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0E1A2B;
+            --paper: #F4EFE4;
+            --amber: #F2A623;
+            --teal: #1D9E75;
+            --coral: #D85A30;
+            --line: rgba(244,239,228,0.14);
+            --muted: rgba(244,239,228,0.55);
+            --muted-strong: rgba(244,239,228,0.72);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--ink); color: var(--paper); font-family: 'Manrope', sans-serif; min-height: 100vh; }
+        h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+
+        nav { border-bottom: 1px solid var(--line); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+        .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+        .brand-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--amber); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink); font-family: 'Space Grotesk', sans-serif; }
+        .nav-right { display: flex; align-items: center; gap: 16px; }
+        .nav-user { font-size: .85rem; color: var(--muted-strong); }
+        .nav-links { display: flex; align-items: center; gap: 18px; }
+        .nav-links a { color: var(--muted); text-decoration: none; font-size: .86rem; font-family: 'Space Grotesk', sans-serif; transition: color .2s; }
+        .nav-links a:hover { color: var(--paper); }
+        .nav-links a.active { color: var(--paper); font-weight: 600; }
+        .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: .5rem 1rem; border-radius: 2px; cursor: pointer; font-size: .85rem; transition: border-color .2s, color .2s; }
+        .btn-ghost:hover { border-color: var(--paper); color: var(--paper); }
+
+        .container { max-width: 960px; margin: 2.5rem auto; padding: 0 1.5rem; }
+        .page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .page-head h1 { font-size: 1.7rem; }
+        .page-sub { font-size: .9rem; color: var(--muted); margin-top: .25rem; }
+
+        /* Summary stat cards */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .8rem; margin-bottom: 2rem; }
+        .stat { border: 1px solid var(--line); border-radius: 3px; padding: 1rem 1.1rem; background: rgba(244,239,228,0.02); }
+        .stat .stat-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.7rem; font-weight: 700; color: var(--paper); }
+        .stat .stat-value.teal { color: var(--teal); }
+        .stat .stat-value.amber { color: var(--amber); }
+        .stat .stat-label { font-size: .74rem; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-top: .3rem; }
+
+        /* Sections */
+        .section { margin-bottom: 2.25rem; }
+        .section > h2 { font-size: 1.05rem; color: var(--muted-strong); border-bottom: 1px solid var(--line); padding-bottom: .55rem; margin-bottom: .9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+        .section > h2 span { font-size: .78rem; font-weight: 400; color: var(--muted); font-family: 'Manrope', sans-serif; }
+
+        /* Recommendation summary callout */
+        .reco-summary { border: 1px solid rgba(242,166,35,.4); border-left: 3px solid var(--amber); border-radius: 3px; padding: .9rem 1.1rem; margin-bottom: 1.2rem; background: rgba(242,166,35,0.05); }
+        .reco-summary p { color: var(--muted-strong); font-size: .92rem; }
+
+        /* Recommendations list */
+        .reco { border: 1px solid var(--line); border-radius: 3px; padding: .95rem 1.15rem; margin-bottom: .7rem; display: flex; gap: 1rem; align-items: flex-start; background: rgba(244,239,228,0.02); }
+        .reco-priority { flex-shrink: 0; font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; padding: .22rem .55rem; border-radius: 999px; font-family: 'Space Grotesk', sans-serif; }
+        .reco-priority.critical { background: rgba(216,90,48,0.18); color: var(--coral); }
+        .reco-priority.high { background: rgba(242,166,35,0.16); color: var(--amber); }
+        .reco-priority.medium { background: rgba(244,239,228,0.1); color: var(--muted-strong); }
+        .reco-priority.low { background: rgba(29,158,117,0.16); color: var(--teal); }
+        .reco .reco-title { font-weight: 600; color: var(--paper); font-size: .95rem; }
+        .reco .reco-desc { color: var(--muted); font-size: .85rem; margin-top: .25rem; line-height: 1.55; }
+        .reco .reco-reason { font-size: .76rem; color: var(--muted); margin-top: .3rem; opacity: .9; }
+        .reco .reco-meta { font-size: .72rem; color: var(--amber); margin-top: .35rem; letter-spacing: .04em; }
+
+        /* Lessons */
+        .lesson { border: 1px solid var(--line); border-radius: 3px; padding: .9rem 1.15rem; margin-bottom: .6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); cursor: pointer; transition: border-color .2s; }
+        .lesson:hover { border-color: var(--amber); }
+        .lesson .lesson-title { font-weight: 500; color: var(--paper); font-size: .95rem; }
+        .lesson .lesson-meta { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+        .lesson .lesson-right { display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+        .lesson-bar { width: 110px; height: 6px; border-radius: 3px; background: rgba(244,239,228,0.12); overflow: hidden; }
+        .lesson-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--amber)); }
+        .lesson-pct { font-family: 'Space Grotesk', sans-serif; font-size: .9rem; color: var(--paper); min-width: 42px; text-align: right; }
+
+        /* Concept mastery */
+        .concept { border: 1px solid var(--line); border-radius: 3px; padding: .7rem 1rem; margin-bottom: .5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); }
+        .concept .concept-name { font-size: .92rem; color: var(--paper); }
+        .concept .concept-score { font-family: 'Space Grotesk', sans-serif; font-size: .85rem; min-width: 48px; text-align: right; }
+        .chip { font-size: .68rem; padding: .22rem .55rem; border-radius: 999px; border: 1px solid var(--line); font-family: 'Space Grotesk', sans-serif; letter-spacing: .04em; }
+        .chip.mastered { border-color: rgba(29,158,117,.6); color: var(--teal); background: rgba(29,158,117,0.1); }
+        .chip.developing { border-color: rgba(242,166,35,.6); color: var(--amber); background: rgba(242,166,35,0.1); }
+        .chip.weak { border-color: rgba(216,90,48,.6); color: var(--coral); background: rgba(216,90,48,0.1); }
+
+        /* Attempts */
+        .attempt { border: 1px solid var(--line); border-radius: 3px; padding: .7rem 1rem; margin-bottom: .5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); }
+        .attempt .attempt-title { font-size: .9rem; color: var(--paper); }
+        .attempt .attempt-meta { font-size: .76rem; color: var(--muted); margin-top: .2rem; }
+        .attempt .attempt-score { font-family: 'Space Grotesk', sans-serif; font-size: 1.05rem; font-weight: 700; }
+        .attempt .attempt-score.pass { color: var(--teal); }
+        .attempt .attempt-score.fail { color: var(--coral); }
+
+        /* Trend (simple bar chart) */
+        .trend { display: flex; align-items: flex-end; gap: 10px; height: 130px; padding: .5rem .25rem 0; }
+        .trend-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .3rem; min-width: 0; }
+        .trend-bar { width: 100%; max-width: 46px; border-radius: 2px 2px 0 0; background: linear-gradient(180deg, var(--amber), var(--teal)); min-height: 2px; }
+        .trend-label { font-size: .66rem; color: var(--muted); text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .empty { color: var(--muted); font-size: .9rem; padding: .6rem 0; }
+        .state-loading { text-align: center; padding: 3rem; color: var(--amber); }
+        .state-error { text-align: center; padding: 2rem; color: var(--coral); }
+        .state-error p { margin-bottom: 1rem; }
+        footer { text-align: center; padding: 1.75rem 0; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/frontend/dashboard.html" class="nav-brand">
+            <div class="brand-mark">EV</div>
+            <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;">EduVision AI</span>
+        </a>
+        <div class="nav-right">
+            <div class="nav-links">
+                <a href="/frontend/dashboard.html" class="active">Learner Dashboard</a>
+                <a href="/frontend/upload.html">Create a Deck</a>
+            </div>
+            <span class="nav-user" id="userName"></span>
+            <button class="btn-ghost" id="logoutBtn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-head">
+            <div>
+                <h1>Learner Dashboard</h1>
+                <p class="page-sub" id="pageSub">Your progress at a glance.</p>
+            </div>
+        </div>
+        <div id="content">
+            <div class="state-loading">Loading your learner progress&hellip;</div>
+        </div>
+    </div>
+
+    <footer>EduVision AI &mdash; learner intelligence made simple.</footer>
+
+    <script>
+    const API = '/api/v1';
+    (async function() {
+        let user = JSON.parse(localStorage.getItem('user') || 'null');
+        if (!user) {
+            try {
+                const r = await fetch(API + '/auth/refresh', { method: 'POST' });
+                if (r.ok) {
+                    const d = await r.json();
+                    const at = d.access_token || d.data?.access_token || d.tokens?.access_token;
+                    const rt = d.refresh_token || d.data?.refresh_token || d.tokens?.refresh_token;
+                    if (at) {
+                        localStorage.setItem('access_token', at);
+                        if (rt) localStorage.setItem('refresh_token', rt);
+                        const me = await fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + at } });
+                        if (me.ok) {
+                            let u = await me.json();
+                            u = u.user || u;
+                            localStorage.setItem('user', JSON.stringify(u));
+                            user = u;
+                        }
+                    }
+                }
+            } catch (e) { /* fall through to sign-in redirect */ }
+        }
+        if (!user) { window.location.href = '/frontend/signin.html'; }
+        else { document.getElementById('userName').textContent = user.name || user.email; document.getElementById('pageSub').textContent = 'Hi ' + (user.name || user.email) + ' — here is your progress.'; }
+        loadDashboard();
+    })();
+
+    function authHeaders() {
+        const token = localStorage.getItem('access_token');
+        return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    async function authFetch(url, opts = {}) {
+        if (!opts.headers) opts.headers = {};
+        Object.assign(opts.headers, authHeaders());
+        let res = await fetch(url, opts);
+        if (res.status === 401) {
+            try {
+                const refreshRes = await fetch(API + '/auth/refresh', { method: 'POST' });
+                if (refreshRes.ok) {
+                    const refreshData = await refreshRes.json();
+                    const newToken = refreshData.access_token || refreshData.data?.access_token || refreshData.tokens?.access_token;
+                    if (newToken) {
+                        localStorage.setItem('access_token', newToken);
+                        if (refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token) {
+                            localStorage.setItem('refresh_token', refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token);
+                        }
+                        opts.headers['Authorization'] = 'Bearer ' + newToken;
+                        res = await fetch(url, opts);
+                    }
+                }
+            } catch (e) { /* refresh failed */ }
+            if (res.status === 401) {
+                window.location.href = '/frontend/signin.html';
+                throw new Error('Session expired. Please sign in again.');
+            }
+        }
+        return res;
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+        await fetch(API + '/auth/logout', { method: 'POST', credentials: 'include' });
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        window.location.href = '/frontend/signin.html';
+    });
+
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = (s == null ? '' : String(s));
+        return d.innerHTML;
+    }
+
+    function pct(v) {
+        const n = Number(v);
+        return isNaN(n) ? '0' : String(Math.round(n));
+    }
+
+    async function loadDashboard() {
+        const content = document.getElementById('content');
+        try {
+            const res = await authFetch(API + '/me/progress');
+            if (!res.ok) {
+                let msg = 'Failed to load progress (' + res.status + ')';
+                try { const j = await res.json(); if (j.error && j.error.message) msg = j.error.message; } catch (e) {}
+                throw new Error(msg);
+            }
+            const json = await res.json();
+            const data = json.data || {};
+            content.innerHTML = renderDashboard(data);
+        } catch (e) {
+            content.innerHTML = '<div class="state-error"><p>Could not load your progress: ' + escHtml(e.message) + '</p>' +
+                '<button class="btn-ghost" onclick="loadDashboard()">Retry</button></div>';
+        }
+    }
+
+    function renderDashboard(d) {
+        const s = d.summary || {};
+        const parts = [];
+
+        // Summary stats
+        parts.push('<div class="stats">');
+        parts.push(stat(s.lessons_completed, 'Lessons Completed', 'teal'));
+        parts.push(stat(s.lessons_in_progress, 'In Progress', 'amber'));
+        parts.push(stat(pct(s.average_mastery) + '%', 'Avg Mastery', ''));
+        parts.push(stat(s.mastered_concepts, 'Mastered Concepts', 'teal'));
+        parts.push(stat(s.developing_concepts, 'Developing', 'amber'));
+        parts.push(stat(s.weak_concepts, 'Needs Review', 'amber'));
+        parts.push(stat(s.attempts_total, 'Checkpoints Taken', ''));
+        parts.push('</div>');
+
+        // Recommendations
+        parts.push('<div class="section"><h2>Next Best Actions<span>what to focus on next</span></h2>');
+        const recoSummary = (d.recommendations_summary || '').trim();
+        if (recoSummary) parts.push('<div class="reco-summary"><p>' + escHtml(recoSummary) + '</p></div>');
+        const recos = d.recommendations || [];
+        if (recos.length) {
+            recos.forEach(r => {
+                const pr = String(r.priority || 'medium').toLowerCase();
+                parts.push(
+                    '<div class="reco"><span class="reco-priority ' + pr + '">' + escHtml(pr) + '</span>' +
+                    '<div><div class="reco-title">' + escHtml(r.title) + '</div>' +
+                    (r.description ? '<div class="reco-desc">' + escHtml(r.description) + '</div>' : '') +
+                    (r.reason ? '<div class="reco-reason">' + escHtml(r.reason) + '</div>' : '') +
+                    (r.concept_name ? '<div class="reco-meta">' + escHtml(r.concept_name) + '</div>' : '') +
+                    '</div></div>'
+                );
+            });
+        } else {
+            parts.push('<div class="empty">No recommendations yet &mdash; start a lesson to get guidance.</div>');
+        }
+        parts.push('</div>');
+
+        // Lesson progress (dashboard → lesson navigation)
+        parts.push('<div class="section"><h2>Lesson Progress<span>click a lesson to resume</span></h2>');
+        const lessons = d.lesson_progress || [];
+        if (lessons.length) {
+            lessons.forEach(l => {
+                const cp = Math.min(100, Math.max(0, Number(l.completion_percentage) || 0));
+                parts.push(
+                    '<div class="lesson" onclick="window.location.href=\'/frontend/player.html?lesson=' + encodeURIComponent(l.lesson_id) + '\'">' +
+                    '<div><div class="lesson-title">' + escHtml(l.title) + '</div>' +
+                    '<div class="lesson-meta">' + escHtml(l.status) + '</div></div>' +
+                    '<div class="lesson-right"><div class="lesson-bar"><div class="lesson-bar-fill" style="width:' + cp + '%;"></div></div>' +
+                    '<span class="lesson-pct">' + pct(cp) + '%</span></div></div>'
+                );
+            });
+        } else {
+            parts.push('<div class="empty">No lessons yet &mdash; create a deck to get started.</div>');
+        }
+        parts.push('</div>');
+
+        // Concept mastery
+        parts.push('<div class="section"><h2>Concept Mastery<span>weak items first</span></h2>');
+        const concepts = d.concept_mastery || [];
+        const order = { 'weak': 0, 'developing': 1, 'mastered': 2 };
+        concepts.slice().sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3)).forEach(c => {
+            parts.push(
+                '<div class="concept"><div><span class="concept-name">' + escHtml(c.concept_name) + '</span></div>' +
+                '<div style="display:flex;align-items:center;gap:.7rem;"><span class="chip ' + escHtml(c.status) + '">' + escHtml(c.status) + '</span>' +
+                '<span class="concept-score">' + pct(c.mastery_score) + '%</span></div></div>'
+            );
+        });
+        if (!concepts.length) parts.push('<div class="empty">No concepts tracked yet.</div>');
+        parts.push('</div>');
+
+        // Recent attempts
+        parts.push('<div class="section"><h2>Recent Checkpoints<span>last attempts</span></h2>');
+        const attempts = d.recent_attempts || [];
+        if (attempts.length) {
+            attempts.forEach(a => {
+                const passCls = a.passed === true ? 'pass' : (a.passed === false ? 'fail' : '');
+                parts.push(
+                    '<div class="attempt"><div><div class="attempt-title">' + escHtml(a.title) + '</div>' +
+                    '<div class="attempt-meta">' + (a.completed_at ? escHtml(a.completed_at) : '—') + '</div></div>' +
+                    '<span class="attempt-score ' + passCls + '">' + (a.percent_score != null ? pct(a.percent_score) + '%' : '—') + '</span></div>'
+                );
+            });
+        } else {
+            parts.push('<div class="empty">No checkpoints taken yet.</div>');
+        }
+        parts.push('</div>');
+
+        // Trend
+        parts.push('<div class="section"><h2>Recent Performance Trend<span>scores over time</span></h2>');
+        const trend = d.trend || [];
+        if (trend.length) {
+            parts.push('<div class="trend">');
+            trend.forEach(t => {
+                parts.push('<div class="trend-col"><div class="trend-bar" style="height:' + Math.min(100, Math.max(2, Number(t.value) || 0)) + '%;"></div>' +
+                    '<div class="trend-label">' + (t.value != null ? pct(t.value) + '%' : '—') + '</div></div>');
+            });
+            parts.push('</div>');
+        } else {
+            parts.push('<div class="empty">Not enough data to show a trend yet.</div>');
+        }
+        parts.push('</div>');
+
+        return parts.join('');
+    }
+
+    function stat(value, label, cls) {
+        return '<div class="stat"><div class="stat-value ' + cls + '">' + escHtml(value) + '</div>' +
+            '<div class="stat-label">' + escHtml(label) + '</div></div>';
+    }
+    </script>
+</body>
+</html>
