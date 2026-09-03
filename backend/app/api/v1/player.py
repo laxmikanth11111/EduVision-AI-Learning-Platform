@@ -7,6 +7,8 @@ no quiz sessions, no bookmarks, no notes.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -78,6 +80,8 @@ async def advance_topic(
 ) -> APIResponse[PlayerSessionResponse]:
     service = LessonPlayerService(uow)
     state = await service.advance_topic(request.session_id, owner_id=str(user.id))
+    if state is None:
+        raise ValueError(f"Session {request.session_id} not found")
     return APIResponse(data=PlayerSessionResponse(**state), message="Topic advanced")
 
 
@@ -100,4 +104,48 @@ async def set_topic(
     state = await service.set_topic(
         request.session_id, request.topic_index, owner_id=str(user.id)
     )
+    if state is None:
+        raise ValueError(f"Session {request.session_id} not found")
     return APIResponse(data=PlayerSessionResponse(**state), message="Topic set")
+
+
+@player_router.get(
+    "/checkpoint",
+    response_model=APIResponse[dict[str, Any]],
+)
+async def get_checkpoint(
+    lesson_id: str,
+    user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> APIResponse[dict[str, Any]]:
+    """Return the assessment checkpoint bound to a lesson, if any."""
+    try:
+        result = await LessonPlayerService(uow).get_checkpoint(
+            lesson_id, owner_id=str(user.id)
+        )
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return APIResponse(data=result)
+
+
+@player_router.get(
+    "/mastery",
+    response_model=APIResponse[dict[str, Any]],
+)
+async def get_mastery_and_next_action(
+    lesson_id: str,
+    user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> APIResponse[dict[str, Any]]:
+    """Return the learner's mastery and a deterministic next learning action."""
+    try:
+        result = await LessonPlayerService(uow).get_mastery_and_next_action(
+            lesson_id, owner_id=str(user.id)
+        )
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return APIResponse(data=result)

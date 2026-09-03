@@ -58,6 +58,19 @@ class QuizRepository(BaseRepository[Quiz]):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_by_lesson(
+        self,
+        lesson_id: uuid.UUID,
+        *,
+        status: str | None = None,
+    ) -> list[Quiz]:
+        stmt = select(Quiz).where(Quiz.lesson_id == lesson_id)
+        if status:
+            stmt = stmt.where(Quiz.status == status)
+        stmt = stmt.order_by(Quiz.created_at.desc())
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_published_version(self, quiz_id: uuid.UUID) -> QuizVersion | None:
         stmt = (
             select(QuizVersion)
