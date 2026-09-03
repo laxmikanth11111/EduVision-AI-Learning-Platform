@@ -46,6 +46,9 @@ from app.models.quiz_content import Question, QuestionOption
 from app.models.quiz_version import QuizVersion
 from app.models.score_summary import ScoreSummary
 from app.models.topic_outline import TopicOutline
+from app.models.tutor_conversation import TutorConversation
+from app.models.tutor_message import TutorMessage
+from app.models.tutor_session import TutorSession
 from app.models.user import User
 from app.models.user_answer import UserAnswer
 from app.models.user_feedback import UserFeedback
@@ -122,4 +125,7 @@ __all__ = [
     "Concept",
     "User",
     "UserFeedback",
+    "TutorSession",
+    "TutorConversation",
+    "TutorMessage",
 ]

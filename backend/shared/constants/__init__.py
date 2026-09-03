@@ -787,6 +787,13 @@ class TutorConfidenceLevel(str, Enum):
     LOW = "low"
 
 
+class TutorSourceKind(str, Enum):
+    """Provenance of a tutor answer (P8)."""
+
+    RAG = "rag"
+    DETERMINISTIC = "deterministic"
+
+
 class TutorRetryState(str, Enum):
     """Retry state shared by every tutor row."""
 
