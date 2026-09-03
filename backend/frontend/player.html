@@ -47,6 +47,21 @@ header { display: flex; align-items: center; justify-content: space-between; pad
 .thumb-title { font-size: .8rem; color: var(--muted-strong); margin-top: .2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .thumb.active .thumb-title { color: var(--paper); }
 
+/* ── Learner journey panel ───────────────────────── */
+.lj-panel { border: 1px solid var(--line); border-radius: 3px; padding: .6rem .7rem; margin-bottom: .6rem; background: rgba(29,158,117,0.05); }
+.lj-panel h4 { font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--teal); margin-bottom: .4rem; }
+.lj-row { display: flex; justify-content: space-between; align-items: center; font-size: .76rem; color: var(--muted-strong); margin-bottom: .3rem; }
+.lj-row b { color: var(--paper); font-weight: 600; }
+.lj-bar { height: 5px; border-radius: 3px; background: rgba(244,239,228,0.12); overflow: hidden; margin: .35rem 0 .5rem; }
+.lj-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--teal), var(--amber)); }
+.lj-chip { display: inline-flex; align-items: center; gap: 5px; font-size: .68rem; padding: .2rem .55rem; border-radius: 999px; border: 1px solid var(--line); }
+.lj-chip.ok { border-color: rgba(29,158,117,.6); color: var(--teal); }
+.lj-chip.warn { border-color: rgba(242,166,35,.6); color: var(--amber); }
+.lj-chip.toast { border-color: var(--muted); color: var(--muted); }
+.lj-action { font-size: .74rem; line-height: 1.5; color: var(--muted-strong); margin-top: .25rem; }
+.lj-action .act-title { color: var(--paper); font-weight: 600; }
+.lj-link { color: var(--teal); cursor: pointer; text-decoration: underline; }
+
 /* Stage */
 .stage { flex: 1; min-width: 0; display: flex; align-items: stretch; justify-content: center; padding: 1.5rem; }
 .frame { width: 100%; max-width: 980px; border: 1px solid var(--line); background: rgba(244,239,228,0.02); position: relative; display: flex; flex-direction: column; overflow: hidden; }
@@ -180,7 +195,9 @@ body.presenting .present-arrow { display: block; }
 </header>
 
 <div class="main">
-    <aside class="sidebar" id="sidebar"></aside>
+    <aside class="sidebar" id="sidebar">
+        <div id="ljPanel"></div>
+    </aside>
     <section class="stage">
         <div class="frame" id="frame" style="display:none;">
             <div class="corner corner-tl"></div><div class="corner corner-br"></div>
@@ -264,6 +281,7 @@ async function init() {
         const state = startData.data;
         topics = state.topics || [];
         sessionId = state.session ? state.session.session_id : null;
+        learnerCompletion = state.session ? (state.session.completion_percentage || 0) : 0;
 
         if (!topics.length) {
             showState('<div class="state-icon">&#128196;</div>' +
@@ -284,6 +302,7 @@ async function init() {
         document.getElementById('frame').style.display = 'flex';
         document.getElementById('stateWrap').style.display = 'none';
         buildThumbnails();
+        loadLearnerJourney();
         goTo(startIndexFromUrl(), false);
     } catch (e) {
         showState('<div class="state-icon">&#9888;</div>' +
@@ -323,6 +342,68 @@ function buildThumbnails() {
         frag.appendChild(el);
     });
     sb.appendChild(frag);
+}
+
+let learnerState = { completion: 0, checkpoint: null, mastery: null };
+let learnerCompletion = 0;
+
+async function loadLearnerJourney() {
+    const panel = document.getElementById('ljPanel');
+    if (!panel) return;
+    try {
+        const [cpRes, msRes] = await Promise.all([
+            authFetch(API + '/lessons/' + lessonId + '/player/checkpoint'),
+            authFetch(API + '/lessons/' + lessonId + '/player/mastery'),
+        ]);
+        const cp = cpRes.ok ? (await cpRes.json()).data : null;
+        const ms = msRes.ok ? (await msRes.json()).data : null;
+
+        learnerState = { completion: learnerCompletion, checkpoint: cp, mastery: ms };
+        renderLearnerJourney(panel);
+    } catch (e) {
+        panel.innerHTML = '';
+    }
+}
+
+function renderLearnerJourney(panel) {
+    if (!panel) return;
+    let html = '<div class="lj-panel"><h4>Learner Progress</h4>';
+
+    html += '<div class="lj-row"><span>Lesson progress</span><b>' +
+        Math.round(learnerState.completion) + '%</b></div>' +
+        '<div class="lj-bar"><div class="lj-bar-fill" style="width:' +
+        Math.min(100, Math.max(0, learnerState.completion)) + '%;"></div></div>';
+
+    const cp = learnerState.checkpoint;
+    if (cp && cp.has_checkpoint) {
+        const q = cp.quiz || {};
+        const chip = cp.completed
+            ? '<span class="lj-chip ok">&#10003; Checkpoint passed</span>'
+            : '<span class="lj-chip warn">&#9654; Checkpoint pending</span>';
+        html += '<div class="lj-row"><span>Assessment</span>' + chip + '</div>';
+        if (cp.latest_attempt && cp.latest_attempt.percent_score != null) {
+            html += '<div class="lj-action">Score: <b>' +
+                Math.round(cp.latest_attempt.percent_score) + '%</b>' +
+                (cp.latest_attempt.percent_score >= (q.passing_score || 0) ? ' &mdash; passed' : ' &mdash; keep going') +
+                '</div>';
+        }
+        if (!cp.completed && cp.available_attempts > 0 && q.id) {
+            html += '<div class="lj-action">Checkpoint available &middot; ' +
+                cp.available_attempts + ' attempt(s) left</div>';
+        }
+    } else {
+        html += '<div class="lj-row"><span>Assessment</span><span class="lj-chip toast">none yet</span></div>';
+    }
+
+    const na = learnerState.mastery && learnerState.mastery.next_action;
+    if (na && na.title) {
+        html += '<div class="lj-action"><span class="act-title">Next up:</span> ' +
+            escHtml(na.title) + '<br><span style="color:var(--muted);font-size:.68rem;">' +
+            escHtml(na.reason || '') + '</span></div>';
+    }
+
+    html += '</div>';
+    panel.innerHTML = html;
 }
 
 // ── Rendering (active slide only — scales to any deck size) ─────────────
