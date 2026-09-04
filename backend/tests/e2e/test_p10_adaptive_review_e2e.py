@@ -564,12 +564,16 @@ def test_p10_ng3_critical_learning_loop(server_env, page):
     # Re-open to a freshly-rendered panel (dashboard may be cached).
     page.reload()
     page.wait_for_load_state("domcontentloaded")
-    mark = page.locator("button.reco-btn").first
+    # Scope to the review panel so the P11 Today-plan buttons (also reco-btn)
+    # introduced on the shared dashboard never collide with this queue action.
+    review_body = page.locator("#reviewPanelBody")
+    review_body.wait_for(state="visible", timeout=20_000)
+    mark = review_body.locator("button.reco-btn").first
     mark.wait_for(state="visible", timeout=20_000)
     mark.scroll_into_view_if_needed()
     mark.click()
     # The panel refreshes to an empty (or reduced) due state after completion.
-    page.locator("button.reco-btn").wait_for(state="detached", timeout=20_000)
+    review_body.locator("button.reco-btn").wait_for(state="detached", timeout=20_000)
 
     # Verify scheduling advanced via the review API (completion -> no longer due).
     review_href = f"{base}/api/v1/me/review?limit=20"

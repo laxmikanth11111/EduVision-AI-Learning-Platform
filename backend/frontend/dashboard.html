@@ -69,6 +69,25 @@
         .reco-btn:hover { background: var(--amber); color: var(--ink); border-color: var(--amber); }
         .reco-btn:disabled { opacity: .5; cursor: default; }
 
+        /* P11: Today plan / goals / learning path */
+        .plan-summary { font-size: .78rem; color: var(--muted-strong); margin-top: -.35rem; margin-bottom: .85rem; }
+        .plan-type { flex-shrink: 0; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; padding: .2rem .5rem; border-radius: 999px; font-family: 'Space Grotesk', sans-serif; border: 1px solid var(--line); color: var(--muted-strong); background: rgba(244,239,228,0.04); }
+        .plan-type.review { border-color: rgba(242,166,35,.5); color: var(--amber); }
+        .plan-type.practice { border-color: rgba(216,90,48,.5); color: var(--coral); }
+        .plan-type.lesson { border-color: rgba(29,158,117,.5); color: var(--teal); }
+        .goal { border: 1px solid var(--line); border-radius: 3px; padding: .8rem 1.05rem; margin-bottom: .6rem; background: rgba(244,239,228,0.02); }
+        .goal .goal-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .goal .goal-name { font-weight: 500; color: var(--paper); font-size: .92rem; }
+        .goal .goal-meta { font-size: .72rem; color: var(--muted); margin-top: .2rem; }
+        .goal .goal-pct { font-family: 'Space Grotesk', sans-serif; font-size: .92rem; color: var(--paper); min-width: 46px; text-align: right; }
+        .goal .goal-bar { width: 100%; height: 6px; border-radius: 3px; background: rgba(244,239,228,0.12); overflow: hidden; margin-top: .55rem; }
+        .goal .goal-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--amber)); }
+        .path-row { border: 1px solid var(--line); border-radius: 3px; padding: .7rem 1rem; margin-bottom: .5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); }
+        .path-row.current { border-color: var(--amber); background: rgba(242,166,35,0.06); }
+        .path-row .path-title { font-size: .92rem; color: var(--paper); }
+        .path-row .path-meta { font-size: .74rem; color: var(--muted); margin-top: .2rem; }
+        .path-row .path-pos { font-size: .68rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: .06em; color: var(--ink); background: var(--amber); border-radius: 999px; padding: .17rem .5rem; }
+
         /* Lessons */
         .lesson { border: 1px solid var(--line); border-radius: 3px; padding: .9rem 1.15rem; margin-bottom: .6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); cursor: pointer; transition: border-color .2s; }
         .lesson:hover { border-color: var(--amber); }
@@ -237,6 +256,9 @@
             const data = json.data || {};
             content.innerHTML = renderDashboard(data);
             loadReviewPanel();
+            loadTodayPlanPanel();
+            loadGoalsPanel();
+            loadPathPanel();
         } catch (e) {
             content.innerHTML = '<div class="state-error"><p>Could not load your progress: ' + escHtml(e.message) + '</p>' +
                 '<button class="btn-ghost" onclick="loadDashboard()">Retry</button></div>';
@@ -257,6 +279,9 @@
         parts.push(stat(s.weak_concepts, 'Needs Review', 'amber'));
         parts.push(stat(s.attempts_total, 'Checkpoints Taken', ''));
         parts.push('</div>');
+
+        // Today plan (P11)
+        parts.push(todayPlanPanelHtml(d));
 
         // Recommendations
         parts.push('<div class="section"><h2>Next Best Actions<span>what to focus on next</span></h2>');
@@ -282,6 +307,9 @@
 
         parts.push(reviewPanelHtml(d));
 
+        // Learning goals (P11)
+        parts.push(goalsPanelHtml(d));
+
         // Lesson progress (dashboard → lesson navigation)
         parts.push('<div class="section"><h2>Lesson Progress<span>click a lesson to resume</span></h2>');
         const lessons = d.lesson_progress || [];
@@ -301,7 +329,10 @@
         }
         parts.push('</div>');
 
-        // Concept mastery
+        // Learning path (P11)
+        parts.push(pathPanelHtml(d));
+
+        // Concepts mastery
         parts.push('<div class="section"><h2>Concept Mastery<span>weak items first</span></h2>');
         const concepts = d.concept_mastery || [];
         const order = { 'weak': 0, 'developing': 1, 'mastered': 2 };
@@ -373,6 +404,171 @@
                 encodeURIComponent(String(r.concept_id)) + '">Review this concept</a></div>';
         }
         return '';
+    }
+
+    // P11 ───────────────────────────────────────────────────────────────
+    // Today plan panel: deterministic day plan with deep-linkable items.
+    function todayPlanPanelHtml() {
+        return '<div class="section"><h2>Today\u2019s Plan<span>what to do next</span></h2>' +
+            '<div id="todayPlanBody"><div class="empty">Loading today\u2019s plan&hellip;</div></div></div>';
+    }
+
+    async function loadTodayPlanPanel() {
+        const body = document.getElementById('todayPlanBody');
+        if (!body) return;
+        try {
+            const res = await authFetch(API + '/me/plan/today');
+            if (!res.ok) {
+                body.innerHTML = '<div class="empty">Today plan unavailable.</div>';
+                return;
+            }
+            const json = await res.json();
+            const data = json.data || {};
+            const items = data.items || [];
+            if (!items.length) {
+                body.innerHTML = '<div class="empty">All caught up \u2014 nothing pending today.</div>';
+                return;
+            }
+            body.innerHTML =
+                (data.summary ? '<div class="plan-summary">' + escHtml(data.summary) + '</div>' : '') +
+                items.map(function (it) {
+                    const done = String(it.status) === 'completed';
+                    const typeLabel = ({review: 'Review', practice: 'Practice', lesson: 'Lesson'})[it.item_type] || it.item_type;
+                    const link = it.deep_link
+                        ? '<a class="lesson-tutor" href="' + escHtml(it.deep_link) + '">Open</a>'
+                        : '';
+                    const btn = done
+                        ? '<span class="chip mastered">done</span>'
+                        : '<button type="button" class="reco-btn" data-key="' + escHtml(it.item_key) + '" onclick="completePlanItem(this)">' +
+                          (it.item_type === 'review' ? 'Mark reviewed' : 'Mark complete') + '</button>';
+                    return '<div class="reco"><span class="plan-type ' + escHtml(it.item_type) + '">' + typeLabel + '</span>' +
+                        '<div><div class="reco-title">' + escHtml(it.title) + '</div>' +
+                        '<div class="reco-reason">' + escHtml(it.reason) + '</div>' +
+                        '<div class="reco-meta">' + link + ' ' + btn + '</div></div></div>';
+                }).join('');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">Today plan unavailable.</div>';
+        }
+    }
+
+    // P11: complete a plan item through the real API (review items route
+    // through the P10 completion loop), then refresh the panel.
+    async function completePlanItem(btn) {
+        const key = btn && btn.getAttribute('data-key');
+        if (!key) return;
+        btn.disabled = true;
+        btn.textContent = 'Recording\u2026';
+        try {
+            const res = await authFetch(API + '/me/plan/today/items/' + encodeURIComponent(key) + '/complete', { method: 'POST' });
+            if (!res.ok) throw new Error('complete ' + res.status);
+            await loadTodayPlanPanel();
+        } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Retry';
+            const body = document.getElementById('todayPlanBody');
+            if (body) body.innerHTML = '<div class="empty">Could not record item: ' + escHtml(err.message) + '</div>';
+        }
+    }
+
+    // Goals panel: derived progress with a mark-achieved action.
+    function goalsPanelHtml() {
+        return '<div class="section"><h2>Learning Goals<span>derived progress</span></h2>' +
+            '<div id="goalsBody"><div class="empty">Loading goals&hellip;</div></div></div>';
+    }
+
+    async function loadGoalsPanel() {
+        const body = document.getElementById('goalsBody');
+        if (!body) return;
+        try {
+            const res = await authFetch(API + '/me/goals');
+            if (!res.ok) {
+                body.innerHTML = '<div class="empty">Goals unavailable.</div>';
+                return;
+            }
+            const json = await res.json();
+            const goals = (json.data && json.data.goals) || [];
+            if (!goals.length) {
+                body.innerHTML = '<div class="empty">No goals yet \u2014 set a target to start tracking.</div>';
+                return;
+            }
+            body.innerHTML = goals.map(function (g) {
+                const pctVal = Math.min(100, Math.max(0, Number(g.progress_percent) || 0));
+                const achieved = String(g.status) === 'achieved';
+                const action = achieved
+                    ? '<span class="chip mastered">Achieved</span>'
+                    : (pctVal >= 100
+                        ? '<button type="button" class="reco-btn" data-goal="' + escHtml(g.id) + '" onclick="completeGoal(this)">Mark achieved</button>'
+                        : '<span class="chip ' + (pctVal < 50 ? 'weak' : 'developing') + '">in progress</span>');
+                return '<div class="goal"><div class="goal-top"><div><div class="goal-name">' + escHtml(g.title) + '</div>' +
+                    '<div class="goal-meta">' + escHtml(g.goal_type.replace('_', ' ')) + (g.target_value != null ? ' \u00b7 target ' + escHtml(String(g.target_value)) : '') + '</div></div>' +
+                    '<span class="goal-pct">' + pct(pctVal) + '%</span></div>' +
+                    '<div class="goal-bar"><div class="goal-bar-fill" style="width:' + pctVal + '%;"></div></div>' +
+                    '<div style="margin-top:.5rem;">' + action + '</div></div>';
+            }).join('');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">Goals unavailable.</div>';
+        }
+    }
+
+    // P11: mark a goal achieved (server enforces the target is actually met).
+    async function completeGoal(btn) {
+        const goalId = btn && btn.getAttribute('data-goal');
+        if (!goalId) return;
+        btn.disabled = true;
+        btn.textContent = 'Recording\u2026';
+        try {
+            const res = await authFetch(API + '/me/goals/' + encodeURIComponent(goalId) + '/complete', { method: 'POST' });
+            if (!res.ok) {
+                let msg = 'complete ' + res.status;
+                try { const j = await res.json(); if (j.error && j.error.message) msg = j.error.message; } catch (e2) {}
+                throw new Error(msg);
+            }
+            await loadGoalsPanel();
+        } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Mark achieved';
+            const body = document.getElementById('goalsBody');
+            if (body) body.innerHTML = '<div class="empty">Could not complete goal: ' + escHtml(err.message) + '</div>';
+        }
+    }
+
+    // Learning-path panel: the ordered path with the current lesson marked.
+    function pathPanelHtml() {
+        return '<div class="section"><h2>Learning Path<span>weakest first</span></h2>' +
+            '<div id="pathBody"><div class="empty">Loading learning path&hellip;</div></div></div>';
+    }
+
+    async function loadPathPanel() {
+        const body = document.getElementById('pathBody');
+        if (!body) return;
+        try {
+            const res = await authFetch(API + '/me/path');
+            if (!res.ok) {
+                body.innerHTML = '<div class="empty">Learning path unavailable.</div>';
+                return;
+            }
+            const json = await res.json();
+            const data = json.data || {};
+            const seq = data.sequence || [];
+            if (!seq.length) {
+                body.innerHTML = '<div class="empty">No lessons yet \u2014 create a deck to start your path.</div>';
+                return;
+            }
+            const pos = Number(data.position) || 0;
+            body.innerHTML = '<div class="plan-summary">' + pct(data.progress_percent) + '% complete \u00b7 ' + seq.length + ' lessons</div>' +
+                seq.map(function (s, i) {
+                    const isCurrent = (i + 1) === pos;
+                    const statusCls = s.status === 'completed' ? 'mastered' : (isCurrent ? 'developing' : '');
+                    return '<div class="path-row' + (isCurrent ? ' current' : '') + '">' +
+                        '<div><div class="path-title">' + escHtml(s.title) + '</div>' +
+                        '<div class="path-meta">' + escHtml(s.status) + (isCurrent ? ' \u00b7 up next' : '') + '</div></div>' +
+                        '<div style="display:flex;align-items:center;gap:.6rem;">' +
+                        '<span class="chip ' + statusCls + '">' + pct(s.completion_percentage) + '%</span>' +
+                        '<a class="lesson-tutor" href="/frontend/player.html?lesson=' + encodeURIComponent(s.lesson_id) + '">Open</a></div></div>';
+                }).join('');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">Learning path unavailable.</div>';
+        }
     }
 
     function reviewPanelHtml() {

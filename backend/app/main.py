@@ -17,9 +17,12 @@ from app.api.v1.assistant import assistant_router
 from app.api.v1.auth import auth_router
 from app.api.v1.effectiveness import effectiveness_router
 from app.api.v1.exports import exports_router
+from app.api.v1.goals import goals_router
 from app.api.v1.health import health_router
 from app.api.v1.learner_progress import learner_progress_router
 from app.api.v1.metrics import metrics_router
+from app.api.v1.path import path_router
+from app.api.v1.plan import plan_router
 from app.api.v1.player import player_router
 from app.api.v1.presentation_folders import folders_router
 from app.api.v1.presentations import presentations_router
@@ -167,6 +170,9 @@ app.include_router(assistant_router, prefix="/api/v1")
 app.include_router(effectiveness_router, prefix="/api/v1")
 app.include_router(learner_progress_router, prefix="/api/v1")
 app.include_router(review_router, prefix="/api/v1")
+app.include_router(plan_router, prefix="/api/v1")
+app.include_router(goals_router, prefix="/api/v1")
+app.include_router(path_router, prefix="/api/v1")
 app.include_router(exports_router, prefix="/api/v1")
 app.include_router(tutor_router, prefix="/api/v1")
 

@@ -31,6 +31,8 @@ from app.models.generated_lesson import GeneratedLesson
 from app.models.generated_lesson_version import GeneratedLessonVersion
 from app.models.learning_activity import LearningActivity
 from app.models.learning_event import LearningEvent
+from app.models.learning_goal import LearningGoal
+from app.models.learning_path import LearningPath
 from app.models.learning_session import LearningSession
 from app.models.presentation import Presentation
 from app.models.presentation_analytics import PresentationAnalytics
@@ -46,6 +48,7 @@ from app.models.quiz_content import Question, QuestionOption
 from app.models.quiz_version import QuizVersion
 from app.models.review_schedule import ReviewSchedule
 from app.models.score_summary import ScoreSummary
+from app.models.study_plan import StudyPlan
 from app.models.topic_outline import TopicOutline
 from app.models.tutor_conversation import TutorConversation
 from app.models.tutor_message import TutorMessage
@@ -124,6 +127,9 @@ __all__ = [
     "EffectivenessAssessment",
     "LearningEvent",
     "LearningSession",
+    "LearningGoal",
+    "LearningPath",
+    "StudyPlan",
     "Concept",
     "User",
     "UserFeedback",

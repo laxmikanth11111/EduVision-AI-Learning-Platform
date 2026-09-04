@@ -184,6 +184,13 @@ def init_default_metrics() -> None:
     metrics.register("embedding_storage_bytes", "Estimated storage footprint of active embedding vectors in bytes.")
     metrics.register("embedding_dimension", "Average active embedding vector dimension.")
     metrics.register("embedding_queue_backlog", "Queued embedding jobs awaiting a worker.")
+    # ── P11 personalised plan / goals / learning path ─────────────────────────
+    metrics.register("p11_plan_reads_total", "Today-plan reads, by outcome.")
+    metrics.register("p11_plan_items_completed_total", "Today-plan items completed, by item type.")
+    metrics.register("p11_goal_reads_total", "Learning-goal list/read calls, by outcome.")
+    metrics.register("p11_goals_created_total", "Learning goals created, by goal type.")
+    metrics.register("p11_goals_completed_total", "Learning goals completed, by outcome.")
+    metrics.register("p11_path_reads_total", "Learning-path reads, by outcome.")
 
 
 
