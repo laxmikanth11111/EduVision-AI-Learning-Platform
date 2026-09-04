@@ -307,6 +307,104 @@ async def test_submit_quiz_all_correct(client: AsyncClient, quiz_id: str):
 
 
 @pytest.mark.asyncio
+async def test_submit_quiz_returns_lesson_public_id_deeplink(
+    client: AsyncClient, quiz_id: str, db_session: AsyncSession
+):
+    """NG-1: submit_quiz must return the bound lesson's *public* id so the
+    quiz-result CTA can deep-link to a real player route (never an internal
+    UUID). The public id must also be stained onto the recommendations'
+    next_action and every action so the UI has a usable destination."""
+    from app.models.generated_lesson import GeneratedLesson
+    from app.models.quiz import Quiz
+
+    q = (
+        await db_session.execute(select(Quiz).where(Quiz.public_id == quiz_id))
+    ).scalar_one()
+    lesson = GeneratedLesson(
+        presentation_id=q.presentation_id,
+        user_id=TEST_USER_ID,
+        mode="slide",
+        status="ready",
+        title="NG-1 Deeplink Lesson",
+        latest_version=1,
+    )
+    db_session.add(lesson)
+    await db_session.flush()
+    q.lesson_id = lesson.id
+    await db_session.commit()
+
+    # Start attempt
+    resp = await client.post(f"/api/v1/quizzes/{quiz_id}/attempts")
+    data = resp.json()["data"]
+    attempt_id = data["attempt_id"]
+    questions = data["questions"]
+
+    answers = []
+    for question in questions:
+        if question["question_type"] == "multiple_choice":
+            opt = next(o for o in question["options"] if o["position"] == 2)
+            answers.append({"question_id": question["id"], "option_ids": [opt["id"]]})
+        elif question["question_type"] == "true_false":
+            opt = next(o for o in question["options"] if o["position"] == 1)
+            answers.append({"question_id": question["id"], "option_ids": [opt["id"]]})
+        elif question["question_type"] == "multiple_select":
+            opts = [o for o in question["options"] if o["position"] in (1, 2, 4)]
+            answers.append({"question_id": question["id"], "option_ids": [o["id"] for o in opts]})
+
+    resp = await client.post(
+        f"/api/v1/quizzes/{quiz_id}/attempts/{attempt_id}/submit",
+        json={"answers": answers, "time_spent_seconds": 90},
+    )
+    assert resp.status_code == 200
+    result = resp.json()["data"]
+
+    # Top-level lesson_id is the *public* id, not the internal UUID.
+    assert result["lesson_id"] == lesson.public_id
+    assert result["lesson_id"] != str(lesson.id)
+
+    # The same public id is stained onto next_action and every action.
+    recs = result["recommendations"] or {}
+    next_act = recs.get("next_action")
+    assert next_act is not None
+    assert next_act.get("metadata", {}).get("lesson_id") == lesson.public_id
+    assert next_act["metadata"]["lesson_id"] == result["lesson_id"]
+    for action in recs.get("actions", []) or []:
+        assert action.get("metadata", {}).get("lesson_id") == lesson.public_id
+
+
+@pytest.mark.asyncio
+async def test_submit_quiz_returns_null_lesson_id_when_unbound(
+    client: AsyncClient, quiz_id: str
+):
+    """NG-1 fallback: a quiz with no bound lesson yields lesson_id None so the
+    frontend never renders a dead deep-link for a missing target."""
+    resp = await client.post(f"/api/v1/quizzes/{quiz_id}/attempts")
+    data = resp.json()["data"]
+    attempt_id = data["attempt_id"]
+    questions = data["questions"]
+
+    answers = []
+    for question in questions:
+        if question["question_type"] == "multiple_choice":
+            opt = next(o for o in question["options"] if o["position"] == 2)
+            answers.append({"question_id": question["id"], "option_ids": [opt["id"]]})
+        elif question["question_type"] == "true_false":
+            opt = next(o for o in question["options"] if o["position"] == 1)
+            answers.append({"question_id": question["id"], "option_ids": [opt["id"]]})
+        elif question["question_type"] == "multiple_select":
+            opts = [o for o in question["options"] if o["position"] in (1, 2, 4)]
+            answers.append({"question_id": question["id"], "option_ids": [o["id"] for o in opts]})
+
+    resp = await client.post(
+        f"/api/v1/quizzes/{quiz_id}/attempts/{attempt_id}/submit",
+        json={"answers": answers, "time_spent_seconds": 90},
+    )
+    assert resp.status_code == 200
+    result = resp.json()["data"]
+    assert result["lesson_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_submit_quiz_partial_score(client: AsyncClient, quiz_id: str):
     resp = await client.post(f"/api/v1/quizzes/{quiz_id}/attempts")
     data = resp.json()["data"]

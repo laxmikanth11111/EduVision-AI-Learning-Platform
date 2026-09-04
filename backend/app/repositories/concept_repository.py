@@ -113,3 +113,11 @@ class ConceptRepository(BaseRepository[Concept]):
         stmt = select(Concept).where(Concept.id.in_(concept_ids))
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_by_public_ids(self, public_ids: list[str]) -> list[Concept]:
+        """Return concepts matching the given public ids (batched, no N+1)."""
+        if not public_ids:
+            return []
+        stmt = select(Concept).where(Concept.public_id.in_(public_ids))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

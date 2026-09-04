@@ -160,6 +160,40 @@ class EducationalMemoryService:
         memory.updated_at = now
         return memory
 
+    def record_review_activity(
+        self,
+        user_id: str,
+        concept_id: str,
+        concept_name: str | None = None,
+    ) -> EducationalMemory:
+        """Record that a learner reviewed a concept (P10).
+
+        Resets the review clock (``last_reviewed_at``) and increments
+        ``review_count`` without changing the mastery score. Used when a concept
+        review is completed through the adaptive review engine, so the decay
+        signal reflects the review without rewriting mastery.
+        """
+        memory = self.get_or_create_memory(user_id)
+        now = time.time()
+
+        record = memory.concept_records.get(concept_id)
+        if record:
+            record.last_reviewed_at = now
+            record.review_count += 1
+        elif concept_name:
+            record = ConceptMasteryRecord(
+                concept_id=concept_id,
+                concept_name=concept_name,
+                first_learned_at=now,
+                last_reviewed_at=now,
+                review_count=1,
+            )
+            memory.concept_records[concept_id] = record
+            memory.updated_at = now
+
+        memory.updated_at = now
+        return memory
+
     def add_milestone(
         self,
         user_id: str,

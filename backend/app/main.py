@@ -24,6 +24,7 @@ from app.api.v1.player import player_router
 from app.api.v1.presentation_folders import folders_router
 from app.api.v1.presentations import presentations_router
 from app.api.v1.quiz import quiz_router
+from app.api.v1.review import review_router
 from app.api.v1.simulation import simulation_router
 from app.api.v1.storage import storage_router
 from app.api.v1.tutor import tutor_router
@@ -165,6 +166,7 @@ app.include_router(video_runtime_router, prefix="/api/v1")
 app.include_router(assistant_router, prefix="/api/v1")
 app.include_router(effectiveness_router, prefix="/api/v1")
 app.include_router(learner_progress_router, prefix="/api/v1")
+app.include_router(review_router, prefix="/api/v1")
 app.include_router(exports_router, prefix="/api/v1")
 app.include_router(tutor_router, prefix="/api/v1")
 

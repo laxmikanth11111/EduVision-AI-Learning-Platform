@@ -447,6 +447,31 @@ class MasteryTutorService:
                 "reviews": record.review_count if record else 0,
                 "difficulty": concept.difficulty_level,
             },
+            "next_action": self._remediate_next_action(
+                concept, lesson_public_id=lesson.public_id if lesson else None
+            ),
+        }
+
+    def _remediate_next_action(
+        self,
+        concept: Concept,
+        *,
+        lesson_public_id: str | None,
+    ) -> dict[str, Any] | None:
+        """Structured re-practice action closing the remediation loop (NG-3)."""
+        return {
+            "action_type": "take_knowledge_check",
+            "concept_id": concept.public_id,
+            "concept_name": concept.name,
+            "reason": f"Keep practising {concept.name} to lock in the concept.",
+            "activity_type": "quiz",
+            "priority": "high",
+            "title": f"Practice {concept.name}",
+            "description": "Re-open the lesson checkpoint to practice this concept.",
+            "metadata": {
+                "lesson_id": lesson_public_id,
+                "source": "remediation",
+            },
         }
 
     # ── Internal helpers ────────────────────────────────────────────────────

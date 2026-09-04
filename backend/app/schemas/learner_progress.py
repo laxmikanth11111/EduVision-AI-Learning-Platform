@@ -35,6 +35,7 @@ class RecommendationAction(BaseModel):
     reason: str = ""
     activity_type: str = ""
     priority: str = "medium"
+    lesson_id: str | None = None
 
 
 class LessonProgressItem(BaseModel):

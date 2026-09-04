@@ -1976,10 +1976,12 @@ function renderQuizResult(result) {
     let recHtml = '';
     if (recs && recs.next_action) {
         const na = recs.next_action;
+        const cta = nextActionCta(na);
         recHtml = '<div style="margin-top:.9rem;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:3px;padding:.8rem 1rem;text-align:left;background:rgba(242,166,35,0.04);">' +
             '<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:.3rem;">Recommended next</div>' +
             '<div style="font-size:.92rem;color:var(--paper);font-weight:600;">' + escHtml(na.title || 'Revisit the topic') + '</div>' +
             (na.reason ? '<div style="font-size:.8rem;color:var(--muted-strong);margin-top:.25rem;line-height:1.5;">' + escHtml(na.reason) + '</div>' : '') +
+            (cta ? '<div style="margin-top:.6rem;">' + cta + '</div>' : '') +
             '</div>';
     }
 
@@ -2006,6 +2008,28 @@ function renderQuizResult(result) {
 async function refreshLearnerJourney() {
     learnerCompletion = 0;
     await loadLearnerJourney();
+}
+
+// NG-1: turn a structured next_action into a real, clickable CTA that resolves
+// to a valid application destination. Returns '' (renders nothing) when the
+// target data is missing so we never emit a dead button or dead link.
+function nextActionCta(na) {
+    if (!na) return '';
+    const meta = (na.metadata && typeof na.metadata === 'object') ? na.metadata : {};
+    const lessonPublicId = meta.lesson_id || resultLessonPublicId();
+    let label = na.title || 'Review this concept';
+    if (lessonPublicId) {
+        return '<a class="lj-take" href="/frontend/player.html?lesson=' + encodeURIComponent(lessonPublicId) + '">' + escHtml(label) + '</a>';
+    }
+    if (na.concept_id) {
+        return '<a class="lj-take" href="/frontend/tutor.html?concept=' + encodeURIComponent(na.concept_id) + '">' + escHtml(label) + '</a>';
+    }
+    return '';
+}
+
+function resultLessonPublicId() {
+    const rl = quizState.result && quizState.result.lesson_id;
+    return rl ? String(rl) : '';
 }
 
 // ── Utils ────────────────────────────────────────────────────────────────

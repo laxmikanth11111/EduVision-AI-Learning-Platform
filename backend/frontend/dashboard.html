@@ -65,6 +65,9 @@
         .reco .reco-desc { color: var(--muted); font-size: .85rem; margin-top: .25rem; line-height: 1.55; }
         .reco .reco-reason { font-size: .76rem; color: var(--muted); margin-top: .3rem; opacity: .9; }
         .reco .reco-meta { font-size: .72rem; color: var(--amber); margin-top: .35rem; letter-spacing: .04em; }
+        .reco-btn { font-size: .72rem; font-family: 'Space Grotesk', sans-serif; color: var(--amber); border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: .3rem .7rem; cursor: pointer; letter-spacing: .04em; transition: background .2s, color .2s, border-color .2s; }
+        .reco-btn:hover { background: var(--amber); color: var(--ink); border-color: var(--amber); }
+        .reco-btn:disabled { opacity: .5; cursor: default; }
 
         /* Lessons */
         .lesson { border: 1px solid var(--line); border-radius: 3px; padding: .9rem 1.15rem; margin-bottom: .6rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); cursor: pointer; transition: border-color .2s; }
@@ -233,6 +236,7 @@
             const json = await res.json();
             const data = json.data || {};
             content.innerHTML = renderDashboard(data);
+            loadReviewPanel();
         } catch (e) {
             content.innerHTML = '<div class="state-error"><p>Could not load your progress: ' + escHtml(e.message) + '</p>' +
                 '<button class="btn-ghost" onclick="loadDashboard()">Retry</button></div>';
@@ -267,7 +271,7 @@
                     '<div><div class="reco-title">' + escHtml(r.title) + '</div>' +
                     (r.description ? '<div class="reco-desc">' + escHtml(r.description) + '</div>' : '') +
                     (r.reason ? '<div class="reco-reason">' + escHtml(r.reason) + '</div>' : '') +
-                    (r.concept_name ? '<div class="reco-meta">' + escHtml(r.concept_name) + '</div>' : '') +
+                    recoAction(r) +
                     '</div></div>'
                 );
             });
@@ -275,6 +279,8 @@
             parts.push('<div class="empty">No recommendations yet &mdash; start a lesson to get guidance.</div>');
         }
         parts.push('</div>');
+
+        parts.push(reviewPanelHtml(d));
 
         // Lesson progress (dashboard → lesson navigation)
         parts.push('<div class="section"><h2>Lesson Progress<span>click a lesson to resume</span></h2>');
@@ -351,6 +357,85 @@
     function stat(value, label, cls) {
         return '<div class="stat"><div class="stat-value ' + cls + '">' + escHtml(value) + '</div>' +
             '<div class="stat-label">' + escHtml(label) + '</div></div>';
+    }
+
+    // NG-2: a dashboard recommendation must be an actionable, deep-linked CTA.
+    // Returns a working link when a real destination (lesson or concept) exists;
+    // otherwise '' so we never render a dead button/link.
+    function recoAction(r) {
+        if (!r) return '';
+        if (r.lesson_id) {
+            return '<div class="reco-meta"><a class="lesson-tutor" href="/frontend/player.html?lesson=' +
+                encodeURIComponent(String(r.lesson_id)) + '">Open lesson</a></div>';
+        }
+        if (r.concept_id) {
+            return '<div class="reco-meta"><a class="lesson-tutor" href="/frontend/tutor.html?concept=' +
+                encodeURIComponent(String(r.concept_id)) + '">Review this concept</a></div>';
+        }
+        return '';
+    }
+
+    function reviewPanelHtml() {
+        return '<div class="section"><h2>Review Queue<span>spaced repetition</span></h2>' +
+            '<div id="reviewPanelBody"><div class="empty">Loading review queue&hellip;</div></div></div>';
+    }
+
+    async function loadReviewPanel() {
+        const body = document.getElementById('reviewPanelBody');
+        if (!body) return;
+        try {
+            const res = await authFetch(API + '/me/review?limit=20');
+            if (!res.ok) {
+                body.innerHTML = '<div class="empty">Review queue unavailable.</div>';
+                return;
+            }
+            const json = await res.json();
+            const data = json.data || {};
+            const items = data.items || [];
+            if (!items.length) {
+                body.innerHTML = '<div class="empty">Nothing due for review &mdash; keep practising to stay sharp.</div>';
+                return;
+            }
+            const parts = items.map(function (it) {
+                const pr = String(it.priority || 'medium').toLowerCase();
+                const due = it.due_at ? it.due_at.replace('T', ' ').slice(0, 16) + ' UTC' : 'due now';
+                const lessonId = it.lesson_id ? encodeURIComponent(String(it.lesson_id)) : '';
+                const practice = lessonId
+                    ? '<a class="lesson-tutor" href="/frontend/player.html?lesson=' + lessonId + '">Practice</a>'
+                    : '';
+                const actions = '<div class="reco-meta">' +
+                    (practice ? practice : '') +
+                    ' <button type="button" class="reco-btn" data-schedule="' + escHtml(String(it.schedule_id || '')) + '" onclick="completeReview(this)">Mark reviewed</button>' +
+                    '</div>';
+                return '<div class="reco"><span class="reco-priority ' + pr + '">' + escHtml(it.priority || 'due') + '</span>' +
+                    '<div><div class="reco-title">' + escHtml(it.concept_name || it.topic || 'Concept') + '</div>' +
+                    '<div class="reco-reason">due: ' + escHtml(due) + '</div>' +
+                    actions +
+                    '</div></div>';
+            });
+            body.innerHTML = parts.join('');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">Review queue unavailable.</div>';
+        }
+    }
+
+    // P10: complete a due review through the real API, then refresh the panel so
+    // the interval/due state visibly advances (closes the learn -> review loop).
+    async function completeReview(btn) {
+        const scheduleId = btn && btn.getAttribute('data-schedule');
+        if (!scheduleId) return;
+        btn.disabled = true;
+        btn.textContent = 'Recording\u2026';
+        try {
+            const res = await authFetch(API + '/me/review/' + encodeURIComponent(scheduleId) + '/complete', { method: 'POST' });
+            if (!res.ok) throw new Error('complete ' + res.status);
+            await loadReviewPanel();
+        } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Mark reviewed';
+            const body = document.getElementById('reviewPanelBody');
+            if (body) body.innerHTML = '<div class="empty">Could not record review: ' + escHtml(err.message) + '</div>';
+        }
     }
     </script>
 </body>

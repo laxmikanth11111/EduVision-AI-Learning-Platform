@@ -363,12 +363,17 @@ class QuizAttemptService:
         }
         concept_ids = {q.concept_id for q in questions if q.concept_id}
         concept_names: dict[uuid.UUID, str] = {}
+        concept_public: dict[uuid.UUID, str] = {}
         if concept_ids:
             try:
                 concepts = await ConceptRepository(self._uow.session).list_by_ids(
                     sorted(concept_ids)
                 )
                 concept_names = {c.id: c.name for c in concepts}
+                # Map internal concept ids -> public ids so quiz-derived mastery is
+                # recorded under the same public_id keys the review/recommendation
+                # engine reads (NG-3 loop closure).
+                concept_public = {c.id: str(c.public_id) for c in concepts}
             except Exception:
                 logger.warning(
                     "quiz_concept_name_preload_failed",
@@ -483,23 +488,53 @@ class QuizAttemptService:
             quiz=quiz,
             feedback_list=feedback_list,
             percent_score=percent,
+            concept_public=concept_public,
         )
 
         # Generate recommendations based on updated mastery
         recommendations = None
+        lesson_public_id: str | None = None
         try:
+            from sqlalchemy import select as _sel
+
+            from app.models.generated_lesson import GeneratedLesson
             from app.services.educational_memory_service import educational_memory_service
             from app.services.recommendation_engine import generate_recommendations
+
             user_str = str(user_id)
             memory = await educational_memory_service.load_from_db(self._uow.session, user_str)
             recommendation = generate_recommendations(user_str, memory)
             recommendations = recommendation.model_dump()
+
+            # Resolve the quiz's bound lesson public id once (single round trip, no
+            # N+1) so the UI can deep-link the next action to the real player.
+            if quiz.lesson_id is not None:
+                lesson_public_id = (
+                    await self._uow.session.execute(
+                        _sel(GeneratedLesson.public_id).where(
+                            GeneratedLesson.id == quiz.lesson_id
+                        )
+                    )
+                ).scalar_one_or_none()
+            # Stain every serialized action with a usable lesson deep-link (NG-1).
+            if recommendations and lesson_public_id:
+                rec_actions = recommendations.get("actions") or []
+                for action in rec_actions:
+                    meta = dict(action.get("metadata") or {})
+                    meta["lesson_id"] = lesson_public_id
+                    action["metadata"] = meta
+                next_act = recommendations.get("next_action")
+                if isinstance(next_act, dict):
+                    nmeta = dict(next_act.get("metadata") or {})
+                    nmeta["lesson_id"] = lesson_public_id
+                    next_act["metadata"] = nmeta
         except Exception:
             pass
 
         return {
             "attempt_id": attempt.public_id,
             "quiz_id": quiz.public_id,
+            "lesson_id": lesson_public_id,
             "status": "completed",
             "attempt_number": attempt.attempt_number,
             "score": total_earned,
@@ -695,6 +730,7 @@ class QuizAttemptService:
         quiz: Quiz,
         feedback_list: list[dict[str, Any]],
         percent_score: float,
+        concept_public: dict[uuid.UUID, str] | None = None,
     ) -> None:
         """Update educational memory with concept mastery from quiz results.
 
@@ -725,12 +761,24 @@ class QuizAttemptService:
                 else:
                     score = 50.0
 
-                if concept_id not in concept_scores:
-                    concept_scores[concept_id] = {
+                # Record mastery under the concept's public_id (the key the review
+                # and recommendation engines read) rather than the internal id, so a
+                # correct answer actually closes the learner gap (NG-3 loop closure).
+                memory_key = concept_id
+                if concept_public and fb.get("concept_id"):
+                    try:
+                        resolved = concept_public.get(uuid.UUID(concept_id))
+                    except (ValueError, TypeError):
+                        resolved = None
+                    if resolved:
+                        memory_key = resolved
+
+                if memory_key not in concept_scores:
+                    concept_scores[memory_key] = {
                         "scores": [],
-                        "name": concept_name or f"Concept {concept_id[:8]}",
+                        "name": concept_name or f"Concept {memory_key[:8]}",
                     }
-                concept_scores[concept_id]["scores"].append(score)
+                concept_scores[memory_key]["scores"].append(score)
 
             # Update mastery once per concept with averaged score
             for concept_id, data in concept_scores.items():

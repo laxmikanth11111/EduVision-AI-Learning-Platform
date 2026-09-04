@@ -490,7 +490,9 @@
         const badge = '<span class="badge ' + escHtml(kind) + '">' + escHtml(kind) + '</span>' +
             (data.confidence ? '<span class="badge">confidence ' + escHtml(data.confidence) + '</span>' : '') +
             ' &middot; mastery ' + escHtml(data.mastery_score) + '%';
+        const practiceCta = practiceCtaHtml(data && data.next_action);
         const bubble = '<div class="msg-body"><div class="msg-bubble">' + escHtml(data.response) + '</div>' +
+            (practiceCta ? '<div style="margin-top:.6rem;">' + practiceCta + '</div>' : '') +
             '<div class="msg-meta">' + badge + '</div></div>';
         if (pending) {
             const wrapper = document.createElement('div');
@@ -498,6 +500,17 @@
             wrapper.innerHTML = '<div class="msg-avatar tutor">AI</div>' + bubble;
             pending.parentNode.replaceChild(wrapper, pending);
         }
+    }
+
+    // NG-3: the remediation reply closes the loop with a real "Practice this"
+    // CTA that deep-links to the lesson checkpoint. Returns '' when the target
+    // lesson id is missing so we never emit a dead button/link.
+    function practiceCtaHtml(nextAction) {
+        if (!nextAction) return '';
+        const meta = (nextAction.metadata && typeof nextAction.metadata === 'object') ? nextAction.metadata : {};
+        const lessonId = meta.lesson_id;
+        if (!lessonId) return '';
+        return '<a class="btn-solid" style="display:inline-block;text-decoration:none;" href="/frontend/player.html?lesson=' + encodeURIComponent(String(lessonId)) + '">Practice this</a>';
     }
     </script>
 </body>

@@ -314,7 +314,9 @@ class TestP18FullAdaptiveLearningChain:
 
         # ── Step 5: Verify educational memory updated ────────────────────
         memory = await educational_memory_service.load_from_db(db_session, user_str)
-        concept_str = str(concept.id)
+        # Quiz-derived mastery is recorded under the concept's PUBLIC id (the
+        # key the learner/review/recommendation engine reads), not its internal id.
+        concept_str = str(concept.public_id)
 
         # Concept mastery should exist with 0% (all wrong)
         assert concept_str in memory.concept_records, (
@@ -437,8 +439,8 @@ class TestP18FullAdaptiveLearningChain:
         # Reload from DB directly (not from cache)
         educational_memory_service._memories.clear()
         memory_fresh = await educational_memory_service.load_from_db(db_session, user_str)
-        assert str(concept.id) in memory_fresh.concept_records
-        assert memory_fresh.concept_records[str(concept.id)].mastery_score == 100.0
+        assert str(concept.public_id) in memory_fresh.concept_records
+        assert memory_fresh.concept_records[str(concept.public_id)].mastery_score == 100.0
         assert memory_fresh.profile.average_mastery == 100.0
 
         # ── Step 12: Verify question_feedback includes concept_id ─────────
@@ -542,7 +544,9 @@ class TestP18MasteryProgression:
         assert r1["percent_score"] == pytest.approx(33.33, abs=1)
 
         mem = await educational_memory_service.load_from_db(db_session, user_str)
-        cid = str(concept.id)
+        # Quiz-derived mastery (incl. weak/developing/mastered buckets) is keyed
+        # by the concept's public id, matching the learner/review/recommendation engine.
+        cid = str(concept.public_id)
         assert cid in mem.weak_concepts
 
         # Attempt 2: 2 correct, 1 wrong → 67% → developing

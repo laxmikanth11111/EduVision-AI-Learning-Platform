@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.next_action import NextAction
+
 # ── Request models ───────────────────────────────────────────────────────────
 
 
@@ -91,3 +93,4 @@ class TutorRemediateResponse(BaseModel):
     conversation_id: str | None = None
     message_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    next_action: NextAction | None = None

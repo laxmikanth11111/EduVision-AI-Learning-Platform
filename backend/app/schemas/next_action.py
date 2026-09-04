@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class ActionType(str, Enum):
@@ -59,3 +59,15 @@ class LearningRecommendation(BaseModel):
     mastered_concepts: list[str] = Field(default_factory=list)
     actions: list[NextAction] = Field(default_factory=list)
     summary: str = ""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def next_action(self) -> NextAction | None:
+        """The single highest-priority next action (NG-1 convenience).
+
+        ``actions`` are already priority-sorted by the recommendation engine, so
+        the first element is the single best next step a learner should take.
+        """
+        if not self.actions:
+            return None
+        return self.actions[0]

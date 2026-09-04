@@ -44,6 +44,7 @@ from app.models.quiz import Quiz
 from app.models.quiz_attempt import QuizAttempt
 from app.models.quiz_content import Question, QuestionOption
 from app.models.quiz_version import QuizVersion
+from app.models.review_schedule import ReviewSchedule
 from app.models.score_summary import ScoreSummary
 from app.models.topic_outline import TopicOutline
 from app.models.tutor_conversation import TutorConversation
@@ -110,6 +111,7 @@ __all__ = [
     "QuestionOption",
     "QuizAttempt",
     "QuestionAttempt",
+    "ReviewSchedule",
     "UserAnswer",
     "AnswerKey",
     "QuestionExplanation",

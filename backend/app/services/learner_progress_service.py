@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy import func, select
 
 from app.database.unit_of_work import UnitOfWork
+from app.models.concept import Concept
 from app.models.generated_lesson import GeneratedLesson
 from app.models.learning_session import LearningSession
 from app.models.quiz import Quiz
@@ -90,6 +91,7 @@ class LearnerProgressService:
 
         # 4. Deterministic recommendations (reuse the engine, no rewrite).
         recommendation = generate_recommendations(user_str, memory, max_actions=_MAX_ACTIONS)
+        lesson_by_concept = await self._action_lesson_map(session, recommendation.actions)
         actions = [
             RecommendationAction(
                 action_type=a.action_type.value,
@@ -100,6 +102,7 @@ class LearnerProgressService:
                 reason=a.reason,
                 activity_type=a.activity_type.value,
                 priority=a.priority.value,
+                lesson_id=lesson_by_concept.get(a.concept_id),
             )
             for a in recommendation.actions
         ]
@@ -235,6 +238,31 @@ class LearnerProgressService:
                 )
             )
         return attempts, int(total)
+
+    async def _action_lesson_map(
+        self, session: Any, actions: list[Any]
+    ) -> dict[str, str | None]:
+        """Resolve concept -> lesson public id for recommendation actions.
+
+        A single set-based join (concept -> lesson) so deep-linking a dashboard
+        action to the lesson player is O(1) per action with no N+1.
+        """
+        concept_ids = [a.concept_id for a in actions if a.concept_id]
+        result: dict[str, str | None] = {}
+        if not concept_ids:
+            return result
+        rows = (
+            await session.execute(
+                select(Concept.public_id, GeneratedLesson.public_id)
+                .join(GeneratedLesson, Concept.lesson_id == GeneratedLesson.id)
+                .where(Concept.public_id.in_(concept_ids))
+            )
+        ).all()
+        for cid, lesson_public_id in rows:
+            result[cid] = lesson_public_id
+        for cid in concept_ids:
+            result.setdefault(cid, None)
+        return result
 
     def _concept_mastery_summaries(
         self, concept_records: dict[str, Any]

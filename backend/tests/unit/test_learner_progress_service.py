@@ -140,3 +140,62 @@ async def test_learner_scoped_never_leaks(db_session: AsyncSession) -> None:
     assert data_b.recent_attempts == []
     assert data_b.weak_concepts == []
     assert data_b.strong_concepts == []
+
+
+@pytest.mark.asyncio
+async def test_recommendations_carry_lesson_deeplink(db_session: AsyncSession) -> None:
+    """NG-2: recommendation actions are deep-linkable to the lesson player.
+
+    When a ``Concept`` row exists and is linked to the learner's generated
+    lesson (via ``Concept.lesson_id``), the dashboard's ``lesson_id`` on each
+    recommendation action resolves to that lesson's public id (not None).
+    """
+    from sqlalchemy import select
+
+    from app.models.concept import Concept
+    from app.models.generated_lesson import GeneratedLesson
+
+    uid = uuid.uuid4()
+    lookups = await seed_learner(db_session, uid, email="svc_linked@example.com")
+
+    # Anchor the weak concept to the seeded generated lesson so the enrichment
+    # join (Concept -> GeneratedLesson) resolves a real lesson id.
+    lesson = (
+        await db_session.execute(
+            select(GeneratedLesson).where(
+                GeneratedLesson.public_id == lookups["lesson_id"]
+            )
+        )
+    ).scalar_one()
+    existing = await db_session.execute(
+        select(Concept).where(Concept.public_id == "concept_gauss")
+    )
+    if existing.scalar_one_or_none() is None:
+        from app.models.presentation import Presentation
+
+        pres = (
+            await db_session.execute(
+                select(Presentation).where(
+                    Presentation.public_id == lookups["presentation_id"]
+                )
+            )
+        ).scalar_one()
+        db_session.add(
+            Concept(
+                public_id="concept_gauss",
+                name="Gaussian Distributions",
+                presentation_id=pres.id,
+                lesson_id=lesson.id,
+            )
+        )
+        await db_session.commit()
+
+    data = await _progress_for(db_session, uid)
+    assert data.recommendations
+    gauss_actions = [
+        r for r in data.recommendations if r.concept_id == "concept_gauss"
+    ]
+    assert gauss_actions
+    # Every action referencing the linked concept resolves to the lesson deep-link.
+    for action in gauss_actions:
+        assert action.lesson_id == lookups["lesson_id"]

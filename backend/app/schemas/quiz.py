@@ -149,6 +149,7 @@ class AttemptResult(BaseModel):
 
     attempt_id: str
     quiz_id: str
+    lesson_id: str | None = None
     status: str
     attempt_number: int
     score: float | None = None
