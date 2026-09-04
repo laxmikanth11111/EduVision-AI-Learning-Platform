@@ -52,8 +52,20 @@ def _seed_tutor_data(user_id: str, presentation_id: str) -> str:
     Synchronous SQLAlchemy over the shared SQLite test file (``asyncio.run``
     fails under ``asyncio_mode = \"auto\"``). Returns the concept public_id owned
     by the learner so the tutor/remediation flow can target it.
+
+    Also seeds a learner-owned ``ContentUnit`` + ``DocumentChunk`` + a
+    ``ChunkEmbedding`` (deterministic ``local`` embedding) so the browser E2E
+    exercises the *real semantic RAG path* (``source_kind = "rag"``), not just
+    the deterministic fallback (P9 F2). The embedding vector is computed with
+    ``LocalEmbeddingProvider`` so it matches what the server produces at query
+    time when ``AI_PROVIDER=local``.
     """
+    from app.ai.embeddings.config import EmbeddingProviderConfig
+    from app.ai.embeddings.providers.local import LocalEmbeddingProvider
+    from app.models.chunk_embedding import ChunkEmbedding
     from app.models.concept import Concept
+    from app.models.content_unit import ContentUnit
+    from app.models.document_chunk import DocumentChunk
     from app.models.educational_memory import EducationalMemoryRecord
     from app.models.presentation import Presentation
     from tests.conftest import TEST_DB_PATH
@@ -84,6 +96,47 @@ def _seed_tutor_data(user_id: str, presentation_id: str) -> str:
                 ),
                 presentation_id=pres.id,
                 lesson_id=None,
+            )
+        )
+        s.flush()
+
+        # Learner-owned RAG content unit + chunk under the presentation, with a
+        # deterministic local embedding so the semantic RAG path can engage.
+        source_text = (
+            "Gaussian Distributions are symmetric bell curves. The mean sets the "
+            "centre and the standard deviation sets the spread. Roughly 95% of "
+            "values lie within two standard deviations of the mean."
+        )
+        unit = ContentUnit(
+            presentation_id=pres.id,
+            position=999,
+            title="Gaussian Reference",
+            raw_text=source_text,
+        )
+        s.add(unit)
+        s.flush()
+        chunk = DocumentChunk(
+            presentation_id=pres.id,
+            content_unit_id=unit.id,
+            title="Gaussian Reference",
+            content=source_text,
+            position=0,
+            version=1,
+        )
+        s.add(chunk)
+        s.flush()
+        local_provider = LocalEmbeddingProvider(
+            EmbeddingProviderConfig(provider="local", model="local-embedding-1", dimension=384)
+        )
+        s.add(
+            ChunkEmbedding(
+                chunk_id=chunk.id,
+                provider="local",
+                model="local-embedding-1",
+                dimension=384,
+                vector=local_provider._vector(source_text),  # noqa: SLF001
+                status="active",
+                version=1,
             )
         )
         s.flush()
@@ -159,6 +212,23 @@ def _sign_in(page, base_url: str, email: str, password: str) -> None:
     page.wait_for_load_state("domcontentloaded")
 
 
+def _configure_local_providers() -> None:
+    """Point the shared-process AI + embedding singletons at the deterministic
+    local providers so the browser E2E exercises the real AI+RAG path without
+    any paid API. The uvicorn server runs in a background thread of the same
+    process, so resetting these process-wide singletons applies to it too.
+    """
+    from app.ai.embeddings import factory as _embed_factory  # noqa: PLC2701
+    from app.core.config import settings
+
+    settings.AI_PROVIDER = "local"
+    settings.EMBEDDING_PROVIDER = "local"
+    _embed_factory._singleton = None  # noqa: SLF001
+    import app.ai.service as _ai_service
+
+    _ai_service._ai_content_service_singleton = None  # noqa: SLF001
+
+
 @pytest.mark.e2e
 def test_mastery_tutor_e2e(server_env, page):
     # Use real JWT auth so the tutor flows are learner-scoped; the root conftest's
@@ -179,6 +249,9 @@ def test_mastery_tutor_e2e(server_env, page):
 
     _ems._memories.clear()  # noqa: SLF001
     _seed_tutor_data(learner["user_id"], learner["presentation_id"])
+    # Deterministic local AI + embedding providers so the semantic RAG path
+    # (not just the deterministic fallback) is exercised in the browser.
+    _configure_local_providers()
 
     # STEP 1 — sign in through the real form.
     page.goto(f"{base}/frontend/signin.html")
@@ -196,9 +269,10 @@ def test_mastery_tutor_e2e(server_env, page):
     tutor_link.wait_for(state="visible", timeout=20_000)
     assert tutor_link.inner_text().strip() == "Mastery Tutor"
 
-    # STEP 3 — open the mastery tutor page; a session is created and a weak
-    # concept quick pick appears.
-    page.goto(f"{base}/frontend/tutor.html")
+    # STEP 3 — open the mastery tutor page anchored to the learner's lesson (P9
+    # F2) so the session resolves the learner-owned RAG content; a session is
+    # created and a weak-concept quick pick appears.
+    page.goto(f"{base}/frontend/tutor.html?lesson={learner['lesson_id']}")
     page.wait_for_load_state("domcontentloaded")
 
     picks_wrap = page.locator("#picks")
@@ -220,10 +294,10 @@ def test_mastery_tutor_e2e(server_env, page):
     reply_row = page.locator(".msg-meta").first
     assert reply_row.inner_text().strip()
 
-    # STEP 5 — the reply is attributed/confident and grounded in the learner's
-    # data (rag or deterministic), never fabricated.
+    # STEP 5 — the reply is genuinely grounded: real AI+RAG path with a seeded
+    # learner-owned chunk+embedding, so source_kind is "rag" (P9 F2).
     reply_meta = reply_row.inner_text().lower()
-    assert ("rag" in reply_meta) or ("deterministic" in reply_meta) or ("confidence" in reply_meta)
+    assert "rag" in reply_meta
 
     body_text = page.locator("#chatArea .msg-bubble").last.inner_text().lower()
     assert ("gaussian" in body_text) or ("mastery" in body_text)

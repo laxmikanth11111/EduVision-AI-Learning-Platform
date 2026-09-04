@@ -47,6 +47,19 @@
         .pick:hover { background: var(--amber); color: var(--ink); }
         .pick-none { color: var(--muted); font-size: .82rem; }
 
+        /* Session history / resume */
+        .resume { margin-bottom: 1.4rem; }
+        .resume .section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .6rem; margin-bottom: .7rem; }
+        .resume h2 { font-size: 1.05rem; }
+        .resume-list { display: flex; flex-direction: column; gap: .5rem; }
+        .resume-item { display: flex; align-items: center; gap: .8rem; border: 1px solid var(--line); border-radius: 3px; background: rgba(244,239,228,0.02); padding: .55rem .8rem; cursor: pointer; transition: border-color .2s, background .2s; }
+        .resume-item:hover { border-color: var(--amber); background: rgba(242,166,35,0.06); }
+        .resume-item .r-title { flex: 1; min-width: 0; font-family: 'Space Grotesk', sans-serif; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .resume-item .r-title.status-archived { color: var(--muted); text-decoration: line-through; }
+        .resume-item .r-meta { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+        .resume-item .r-status { font-size: .62rem; letter-spacing: .04em; text-transform: uppercase; color: var(--teal); }
+        .btn-link { background: none; border: none; color: var(--amber); cursor: pointer; font-family: 'Space Grotesk', sans-serif; font-size: .82rem; text-decoration: underline; padding: 0; }
+
         /* Chat */
         .chat { border: 1px solid var(--line); border-radius: 4px; background: rgba(244,239,228,0.02); min-height: 320px; padding: 1.2rem; overflow-y: auto; }
         .msg { display: flex; gap: .85rem; align-items: flex-start; margin-bottom: 1rem; max-width: 100%; }
@@ -102,6 +115,14 @@
         <div class="section-head">
             <h2>Start from a weak concept</h2>
             <div class="picks" id="picks">Loading recommendations&hellip;</div>
+        </div>
+
+        <div class="resume" id="resumePanel" style="display:none;">
+            <div class="section-head">
+                <h2>Your tutor sessions</h2>
+                <button type="button" class="btn-link" id="newSessionBtn">+ Start a new session</button>
+            </div>
+            <div class="resume-list" id="resumeList">Loading&hellip;</div>
         </div>
 
         <div id="chatArea">
@@ -181,7 +202,12 @@
         return div.innerHTML;
     }
 
-    const state = { sessionId: null, pendingConcept: new URLSearchParams(window.location.search).get('concept') };
+    const state = {
+        sessionId: null,
+        pendingConcept: new URLSearchParams(window.location.search).get('concept'),
+        resumeSessionId: new URLSearchParams(window.location.search).get('session'),
+        lessonId: new URLSearchParams(window.location.search).get('lesson')
+    };
 
     async function init() {
         document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -201,8 +227,15 @@
             await sendMessage(text);
         });
 
+        document.getElementById('newSessionBtn').addEventListener('click', newSession);
+
         await loadPicks();
-        startSession();
+        await loadSessions();
+        if (state.resumeSessionId) {
+            resumeSession(state.resumeSessionId);
+        } else {
+            startSession();
+        }
     }
 
     function renderInitial() {
@@ -235,12 +268,91 @@
         }
     }
 
+    async function loadSessions() {
+        const panel = document.getElementById('resumePanel');
+        const list = document.getElementById('resumeList');
+        try {
+            const res = await authFetch(API + '/tutor/sessions?page=1&page_size=10');
+            if (!res.ok) { panel.style.display = 'none'; return; }
+            const json = await res.json();
+            const sessions = json.data || [];
+            if (!sessions.length) { panel.style.display = 'none'; return; }
+            panel.style.display = '';
+            list.innerHTML = sessions.map(function (s) {
+                const title = s.title || 'Untitled chat';
+                const meta = (s.last_message_at ? new Date(s.last_message_at).toLocaleString() : 'no activity') +
+                    ' &middot; ' + (s.message_count || 0) + ' messages';
+                return '<div class="resume-item" data-session="' + escHtml(s.id) + '">' +
+                    '<span class="r-status">' + escHtml(s.status) + '</span>' +
+                    '<span class="r-title' + (s.status === 'archived' ? ' status-archived' : '') + '">' + escHtml(title) + '</span>' +
+                    '<span class="r-meta">' + meta + '</span></div>';
+            }).join('');
+            list.querySelectorAll('.resume-item').forEach(function (el) {
+                el.addEventListener('click', function () {
+                    resumeSession(el.getAttribute('data-session'));
+                });
+            });
+        } catch (e) {
+            panel.style.display = 'none';
+        }
+    }
+
+    async function resumeSession(sessionId) {
+        state.sessionId = sessionId;
+        try {
+            const res = await authFetch(API + '/tutor/conversations/' + encodeURIComponent(sessionId) + '/messages?page=1&page_size=200');
+            if (!res.ok) throw new Error('history ' + res.status);
+            const json = await res.json();
+            const messages = (json.data || []).slice().sort(function (a, b) {
+                return new Date(a.created_at) - new Date(b.created_at);
+            });
+            renderInitial();
+            const chat = document.getElementById('chatArea').querySelector('.chat');
+            if (chat) {
+                messages.forEach(function (m) {
+                    if (m.role === 'user') {
+                        chat.insertAdjacentHTML('beforeend',
+                            '<div class="msg"><div class="msg-avatar user">You</div><div class="msg-body"><div class="msg-bubble">' + escHtml(m.content) + '</div></div></div>');
+                    } else if (m.content) {
+                        appendMessageInline(chat, m);
+                    }
+                });
+                chat.scrollTop = chat.scrollHeight;
+            }
+            if (state.pendingConcept) {
+                const concept = state.pendingConcept;
+                state.pendingConcept = null;
+                setTimeout(function () { remediate(concept); }, 100);
+            }
+        } catch (e) {
+            showError('Could not load your session: ' + e.message);
+        }
+    }
+
+    function appendMessageInline(chat, reply) {
+        const kind = String(reply.source_kind || 'deterministic');
+        const kindBadge = '<span class="badge ' + escHtml(kind) + '">' + escHtml(kind) + '</span>';
+        const confidence = reply.confidence ? '<span class="badge">confidence ' + escHtml(reply.confidence) + '</span>' : '';
+        const attribution = reply.attribution ? ' &middot; source: ' + escHtml(reply.attribution) : '';
+        chat.insertAdjacentHTML('beforeend',
+            '<div class="msg"><div class="msg-avatar tutor">AI</div>' +
+            '<div class="msg-body"><div class="msg-bubble">' + escHtml(reply.content) + '</div>' +
+            '<div class="msg-meta">' + kindBadge + confidence + (attribution || '') + '</div></div></div>');
+    }
+
+    function newSession() {
+        state.resumeSessionId = null;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('session')) { params.delete('session'); history.replaceState({}, '', window.location.pathname + (params.toString() ? '?' + params.toString() : '')); }
+        startSession();
+    }
+
     async function startSession() {
         try {
             const res = await authFetch(API + '/tutor/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: 'Mastery Tutor chat' })
+                body: JSON.stringify({ title: 'Mastery Tutor chat', lesson_id: state.lessonId || null })
             });
             if (res.status !== 201) throw new Error('session ' + res.status);
             state.sessionId = (await res.json()).data.id;
