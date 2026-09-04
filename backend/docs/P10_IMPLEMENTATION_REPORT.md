@@ -4,7 +4,7 @@
 `acbfad0` (`docs(p9): add post-p9 capability matrix and p10 foundation`) -- before any P10 implementation work. Working tree was clean at the start of P10.
 
 ## 2. Final Commit
-The P10 completion commit (`docs(p10): finalize adaptive remediation and review engine`) contains all P10 work described below. See the git history for the exact `HEAD`.
+`125023c` (`docs(p10): finalize adaptive remediation and review engine`) -- the P10 completion commit containing all P10 work described below.
 
 ## 3. P10 Scope
 Close the interactive-learning gaps NG-1..NG-5 from the Post-P9 audit by reusing the deterministic intelligence stack and the vanilla frontend:
