@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.core.config import settings
 from app.core.exceptions import NotFoundError
@@ -32,6 +33,7 @@ from app.models.content_unit import ContentUnit
 from app.models.generated_lesson import GeneratedLesson
 from app.models.presentation import Presentation
 from app.models.quiz_attempt import QuizAttempt
+from app.models.tutor_conversation import TutorConversation
 from app.models.tutor_message import TutorMessage
 from app.models.tutor_session import TutorSession
 from app.repositories.tutor_repository import (
@@ -49,6 +51,7 @@ from app.services.recommendation_engine import generate_recommendations
 from shared.constants import (
     TutorConfidenceLevel,
     TutorMessageStatus,
+    TutorSessionStatus,
     TutorSourceKind,
 )
 
@@ -179,12 +182,67 @@ class MasteryTutorService:
         session = await self._session_repo.get_for_user_or_raise(user_id, session_public_id)
         return _serialize_session(session)
 
+    async def enforce_retention(
+        self, now: datetime | None = None
+    ) -> tuple[int, int]:
+        """Enforce the configured tutor retention policy (P9 F3).
+
+        Bounded, on-read cleanup so ``tutor_sessions`` and ``tutor_messages``
+        stop growing without bound. Deterministic and idempotent:
+
+        * Idle active sessions whose ``updated_at`` is older than
+          ``TUTOR_SESSION_IDLE_DAYS`` are archived (status flip only).
+        * Conversations whose ``updated_at`` is older than
+          ``TUTOR_CONVERSATION_CLEANUP_DAYS`` are soft-deleted (audit trail
+          preserved) and their message rows are hard-deleted (the actual
+          unbounded-storage bound, since messages cascade from conversations).
+
+        Fresh records never match the cutoffs, so this is safe to run on every
+        session-history read. Returns ``(archived_sessions, removed_conversations)``.
+        """
+        now = now if now is not None else datetime.now(UTC)
+        idle_cutoff = now - timedelta(days=settings.TUTOR_SESSION_IDLE_DAYS)
+        cleanup_cutoff = now - timedelta(days=settings.TUTOR_CONVERSATION_CLEANUP_DAYS)
+
+        idle_sessions = (
+            await self._uow.session.execute(
+                select(TutorSession).where(
+                    TutorSession.deleted_at.is_(None),
+                    TutorSession.status == TutorSessionStatus.ACTIVE.value,
+                    TutorSession.updated_at < idle_cutoff,
+                )
+            )
+        ).scalars().all()
+        for session in idle_sessions:
+            session.status = TutorSessionStatus.ARCHIVED.value
+        await self._uow.flush()
+
+        expired = (
+            await self._uow.session.execute(
+                select(TutorConversation).where(
+                    TutorConversation.deleted_at.is_(None),
+                    TutorConversation.updated_at < cleanup_cutoff,
+                )
+            )
+        ).scalars().all()
+        expired_ids = [c.id for c in expired]
+        if expired_ids:
+            await self._uow.session.execute(
+                delete(TutorMessage).where(TutorMessage.conversation_id.in_(expired_ids))
+            )
+            for conversation in expired:
+                conversation.soft_delete()
+        await self._uow.flush()
+
+        return len(idle_sessions), len(expired)
+
     async def list_sessions(
         self,
         user_id: uuid.UUID,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[dict[str, Any]], int]:
+        await self.enforce_retention()
         items, total = await self._session_repo.list_for_user(user_id, page, page_size)
         return [_serialize_session(s) for s in items], total
 
@@ -595,12 +653,23 @@ class MasteryTutorService:
         user_query: str,
         lesson_id: uuid.UUID | None,
         limit: int,
+        provider: Any = None,
     ) -> list[str]:
-        """Retrieve RAG chunks exclusively from the learner's content units."""
+        """Retrieve RAG chunks exclusively from the learner's content units.
+
+        Primary path is semantic retrieval (query embedding + cosine ranking via
+        the shared ``app.ai.retrieval.semantic_retrieve_chunks`` helper), which
+        degrades to a deterministic positional fallback whenever embeddings are
+        unavailable. Chunks are always scoped to content units belonging to the
+        learner's own presentation (resolved from the learner-scoped session's
+        lesson), so retrieval can never be a cross-user leakage vector.
+
+        ``provider`` is a test-only seam: when supplied it is used instead of
+        the configured embedding singleton so tests can exercise the semantic
+        path deterministically without a paid provider.
+        """
         try:
-            from app.ai.embeddings.factory import get_embedding_provider
-            from app.models.document_chunk import DocumentChunk
-            from app.repositories.rag_repository import DocumentChunkRepository
+            from app.ai.retrieval import semantic_retrieve_chunks
 
             content_unit_ids: list[uuid.UUID] = []
             if lesson_id:
@@ -620,22 +689,20 @@ class MasteryTutorService:
             if not content_unit_ids:
                 return []
 
-            provider = get_embedding_provider()
-            if provider is not None and user_query and user_query.strip():
-                pairs = await DocumentChunkRepository(self._uow.session).list_embedded_pairs_for_content_units(
-                    content_unit_ids=content_unit_ids,
-                    provider=provider.name or provider.config.provider,
-                    model=provider.model,
-                    limit=settings.TUTOR_EMBEDDING_SEARCH_LIMIT,
-                )
-                if pairs:
-                    return [
-                        c.content[:500]
-                        for c, _ in pairs
-                        if c.content
-                    ][:limit]
+            semantic = await semantic_retrieve_chunks(
+                self._uow.session,
+                user_query=user_query,
+                content_unit_ids=content_unit_ids,
+                limit=limit,
+                provider=provider,
+            )
+            if semantic:
+                return semantic
 
-            # Positional, learner-scoped fallback.
+            # Positional, learner-scoped fallback (generic import to mirror the
+            # repository's soft-delete-safe predicates).
+            from app.models.document_chunk import DocumentChunk
+
             stmt = (
                 select(DocumentChunk)
                 .where(DocumentChunk.content_unit_id.in_(content_unit_ids))
@@ -678,7 +745,9 @@ class MasteryTutorService:
             return []
 
     async def _load_history(self, conversation_id: uuid.UUID) -> list[Any]:
-        msgs = await self._message_repo.recent_for_conversation(conversation_id, limit=20)
+        msgs = await self._message_repo.recent_for_conversation(
+            conversation_id, limit=settings.TUTOR_MAX_HISTORY_MESSAGES
+        )
         from typing import cast
 
         from app.ai.models import AIMessage, RoleName

@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import select
 
 from app.ai.embeddings.base import EmbeddingProvider
+from app.ai.retrieval import cosine_similarity
 from app.core.config import settings
 from app.core.exceptions import NotFoundError
 from app.database.unit_of_work import UnitOfWork
@@ -103,48 +104,6 @@ def _serialize_exchange(
         "prompt_hash": prompt_hash,
         "conversation_id": conversation_id,
     }
-
-
-def _cosine_similarity(
-    query: list[float] | None,
-    candidate: list[float] | None,
-) -> float | None:
-    """Numerically safe cosine similarity between two vectors.
-
-    Returns ``None`` (rather than raising) when either vector is missing,
-    empty, non-numeric, dimension-mismatched, or zero-norm, so a single
-    malformed vector can never crash the surrounding retrieval operation.
-    The returned value is always finite and lies in ``[-1, 1]``.
-    """
-    if not query or not candidate:
-        return None
-    if len(query) != len(candidate):
-        return None
-    dot: float = 0.0
-    norm_q: float = 0.0
-    norm_c: float = 0.0
-    try:
-        for q, c in zip(query, candidate, strict=False):
-            q = float(q)
-            c = float(c)
-            dot += q * c
-            norm_q += q * q
-            norm_c += c * c
-    except (TypeError, ValueError):
-        return None
-    if norm_q == 0.0 or norm_c == 0.0:
-        return None
-    denom = (norm_q * norm_c) ** 0.5
-    if not denom or denom != denom:
-        return None
-    sim = dot / denom
-    if sim != sim or sim in (float("inf"), float("-inf")):
-        return None
-    if sim > 1.0:
-        return 1.0
-    if sim < -1.0:
-        return -1.0
-    return float(sim)
 
 
 class LearningAssistantService:
@@ -621,7 +580,7 @@ class LearningAssistantService:
             scored: list[tuple[float, int, uuid.UUID, str]] = []
             for chunk, embedding in pairs:
                 chunk_vector = embedding.vector
-                similarity = _cosine_similarity(query_vector, chunk_vector)
+                similarity = cosine_similarity(query_vector, chunk_vector)
                 if similarity is None:
                     continue
                 if similarity < settings.TUTOR_RETRIEVAL_SIMILARITY_THRESHOLD:

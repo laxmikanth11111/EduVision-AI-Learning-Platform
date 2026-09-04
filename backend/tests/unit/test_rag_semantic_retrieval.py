@@ -18,10 +18,8 @@ from app.models.chunk_embedding import ChunkEmbedding
 from app.models.content_unit import ContentUnit
 from app.models.document_chunk import DocumentChunk
 from app.models.generated_lesson import GeneratedLesson
-from app.services.learning_assistant_service import (
-    LearningAssistantService,
-    _cosine_similarity,
-)
+from app.ai.retrieval import cosine_similarity as _cosine_similarity
+from app.services.learning_assistant_service import LearningAssistantService
 from shared.constants import ContentUnitType, EmbeddingVersionStatus, LessonStatus
 
 FAKE_PROVIDER = "fake"
