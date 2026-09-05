@@ -109,6 +109,22 @@
         .chip.developing { border-color: rgba(242,166,35,.6); color: var(--amber); background: rgba(242,166,35,0.1); }
         .chip.weak { border-color: rgba(216,90,48,.6); color: var(--coral); background: rgba(216,90,48,0.1); }
 
+        /* P13: analytics panels */
+        .reco-summary strong { color: var(--paper); }
+        .trend-date { font-size: .62rem; color: var(--muted); text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .trend-arrow { font-size: .8rem; font-family: 'Space Grotesk', sans-serif; line-height: 1; }
+        .trend-arrow.trend-up { color: var(--teal); }
+        .trend-arrow.trend-flat { color: var(--muted-strong); }
+        .trend-arrow.trend-down { color: var(--coral); }
+        .delta { font-size: .72rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: .03em; }
+        .delta.delta-up { color: var(--teal); }
+        .delta.delta-flat { color: var(--muted); }
+        .delta.delta-down { color: var(--coral); }
+        .effort-delta { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: .95rem; }
+        .effort-delta.up { color: var(--teal); }
+        .effort-delta.flat { color: var(--muted-strong); }
+        .effort-delta.down { color: var(--coral); }
+
         /* Attempts */
         .attempt { border: 1px solid var(--line); border-radius: 3px; padding: .7rem 1rem; margin-bottom: .5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: rgba(244,239,228,0.02); }
         .attempt .attempt-title { font-size: .9rem; color: var(--paper); }
@@ -259,6 +275,7 @@
             loadTodayPlanPanel();
             loadGoalsPanel();
             loadPathPanel();
+            loadAnalyticsPanels();
         } catch (e) {
             content.innerHTML = '<div class="state-error"><p>Could not load your progress: ' + escHtml(e.message) + '</p>' +
                 '<button class="btn-ghost" onclick="loadDashboard()">Retry</button></div>';
@@ -349,6 +366,15 @@
         });
         if (!concepts.length) parts.push('<div class="empty">No concepts tracked yet.</div>');
         parts.push('</div>');
+
+        // P13: analytics panels (trajectory / concepts-at-a-glance / effort)
+        parts.push('<div class="section"><h2>Your Trajectory<span>accuracy over time</span></h2>' +
+            '<div id="analyticsFocus"></div>' +
+            '<div id="analyticsTrendBody"><div class="empty">Loading trajectory&hellip;</div></div></div>');
+        parts.push('<div class="section"><h2>Concepts at a Glance<span>band + trend</span></h2>' +
+            '<div id="analyticsConceptsBody"><div class="empty">Loading concepts&hellip;</div></div></div>');
+        parts.push('<div class="section"><h2>Effort vs Mastery<span>does practice pay off?</span></h2>' +
+            '<div id="analyticsEffortBody"><div class="empty">Loading effort&hellip;</div></div></div>');
 
         // Recent attempts
         parts.push('<div class="section"><h2>Recent Checkpoints<span>last attempts</span></h2>');
@@ -631,6 +657,136 @@
             btn.textContent = 'Mark reviewed';
             const body = document.getElementById('reviewPanelBody');
             if (body) body.innerHTML = '<div class="empty">Could not record review: ' + escHtml(err.message) + '</div>';
+        }
+    }
+
+    // P13 ───────────────────────────────────────────────────────────────
+    // Mastery-analytics panels fed by the (read-only, learner-scoped)
+    // /me/analytics/* endpoints. Every deep-link is built server-side, so the
+    // dashboard never renders a dead button. All injection is escaped.
+    async function loadAnalyticsPanels() {
+        await Promise.all([
+            loadAnalyticsTrajectory(),
+            loadAnalyticsConcepts(),
+            loadAnalyticsEffort()
+        ]);
+    }
+
+    // "Your trajectory" — bar chart from /trend plus a current-focus callout
+    // from /overview so the insight resolves to an actionable next step.
+    async function loadAnalyticsTrajectory() {
+        const trendBody = document.getElementById('analyticsTrendBody');
+        if (!trendBody) return;
+        try {
+            const res = await authFetch(API + '/me/analytics/trend');
+            if (!res.ok) {
+                trendBody.innerHTML = '<div class="empty">Trajectory unavailable (' + escHtml(String(res.status)) + ').</div>';
+                return;
+            }
+            const data = (await res.json()).data || {};
+            const points = data.points || [];
+            const focusEl = document.getElementById('analyticsFocus');
+            try {
+                const oRes = await authFetch(API + '/me/analytics/overview');
+                if (oRes.ok) {
+                    const o = (await oRes.json()).data || {};
+                    const f = o.current_focus;
+                    if (f && focusEl) {
+                        const cta = f.deep_link
+                            ? ' <a class="lesson-tutor" href="' + escHtml(f.deep_link) + '">Focus here</a>'
+                            : '';
+                        focusEl.innerHTML = '<div class="reco-summary"><p><strong>Focus:</strong> ' + escHtml(f.name) +
+                            ' &mdash; ' + escHtml(f.band) + ' band.' + cta + '</p></div>';
+                    }
+                }
+            } catch (e) { /* focus callout is optional */ }
+            if (!points.length) {
+                trendBody.innerHTML = '<div class="empty">No checkpoints yet &mdash; take a checkpoint to start seeing your trajectory.</div>';
+                return;
+            }
+            trendBody.innerHTML = '<div class="trend">' + points.map(function (p) {
+                const bar = Math.min(100, Math.max(2, Number(p.percent) || 0));
+                return '<div class="trend-col"><div class="trend-bar" style="height:' + bar + '%;"></div>' +
+                    '<div class="trend-label">' + (p.percent != null ? pct(p.percent) + '%' : '&mdash;') + '</div>' +
+                    '<div class="trend-date">' + escHtml(String(p.date).slice(0, 10)) + '</div></div>';
+            }).join('') + '</div>';
+        } catch (e) {
+            trendBody.innerHTML = '<div class="empty">Trajectory unavailable: ' + escHtml(e.message) + '</div>';
+        }
+    }
+
+    // "Concepts at a glance" — band chip, trend arrow, mastery delta and the
+    // server-built Practice / Ask-tutor deep-links.
+    async function loadAnalyticsConcepts() {
+        const body = document.getElementById('analyticsConceptsBody');
+        if (!body) return;
+        try {
+            const res = await authFetch(API + '/me/analytics/concepts');
+            if (!res.ok) {
+                body.innerHTML = '<div class="empty">Concepts unavailable.</div>';
+                return;
+            }
+            const data = (await res.json()).data || {};
+            const concepts = data.concepts || [];
+            if (!concepts.length) {
+                body.innerHTML = '<div class="empty">No concepts tracked yet \u2014 complete a lesson to get started.</div>';
+                return;
+            }
+            body.innerHTML = concepts.map(function (c) {
+                const arrow = c.trend === 'up' ? '&#9650;' : (c.trend === 'down' ? '&#9660;' : '&#9654;');
+                const delta = c.delta_mastery != null
+                    ? '<span class="delta delta-' + escHtml(c.trend) + '">' + (c.delta_mastery > 0 ? '+' : '') + pct(c.delta_mastery) + '</span>'
+                    : '<span class="delta delta-flat">n/a</span>';
+                const links = (c.deep_link_practice
+                    ? '<a class="lesson-tutor" href="' + escHtml(c.deep_link_practice) + '">Practice</a>'
+                    : '') +
+                    (c.deep_link_tutor
+                    ? ' <a class="lesson-tutor" href="' + escHtml(c.deep_link_tutor) + '">Ask tutor</a>'
+                    : '');
+                return '<div class="concept"><div style="display:flex;align-items:center;gap:.6rem;">' +
+                    '<span class="concept-name">' + escHtml(c.name) + '</span>' +
+                    '<span class="trend-arrow trend-' + escHtml(c.trend) + '">' + arrow + '</span>' + delta + '</div>' +
+                    '<div style="display:flex;align-items:center;gap:.7rem;">' +
+                    '<span class="chip ' + escHtml(c.band) + '">' + escHtml(c.band) + '</span>' +
+                    '<span class="concept-score">' + pct(c.current_mastery) + '%</span>' +
+                    (links ? '<div class="reco-meta">' + links + '</div>' : '') + '</div></div>';
+            }).join('');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">Concepts unavailable: ' + escHtml(e.message) + '</div>';
+        }
+    }
+
+    // "Effort vs mastery" — attempts/sessions/minutes spent vs mastery gained.
+    async function loadAnalyticsEffort() {
+        const body = document.getElementById('analyticsEffortBody');
+        if (!body) return;
+        try {
+            const res = await authFetch(API + '/me/analytics/effort');
+            if (!res.ok) {
+                body.innerHTML = '<div class="empty">Effort unavailable.</div>';
+                return;
+            }
+            const data = (await res.json()).data || {};
+            const effort = data.effort || [];
+            if (!effort.length) {
+                body.innerHTML = '<div class="empty">No checkpoint effort yet \u2014 take a checkpoint to see what your work is yielding.</div>';
+                return;
+            }
+            body.innerHTML = effort.map(function (e) {
+                const delta = e.mastery_delta != null
+                    ? '<span class="effort-delta ' + (e.mastery_delta > 0 ? 'up' : (e.mastery_delta < 0 ? 'down' : 'flat')) + '">' +
+                      (e.mastery_delta > 0 ? '+' : '') + pct(e.mastery_delta) + ' mastery</span>'
+                    : '<span class="effort-delta flat">no movement yet</span>';
+                const minutes = Math.round((Number(e.time_seconds) || 0) / 60);
+                const perEffort = e.efficiency != null ? ' &middot; ' + pct(e.efficiency) + ' pts/attempt' : '';
+                return '<div class="reco"><span class="plan-type practice">effort</span>' +
+                    '<div><div class="reco-title">' + escHtml(e.name) + '</div>' +
+                    '<div class="reco-reason">' + e.attempts + ' attempt' + (e.attempts === 1 ? '' : 's') + ' &middot; ' +
+                    e.sessions + ' session' + (e.sessions === 1 ? '' : 's') + ' &middot; ' + minutes + ' min' + perEffort + '</div>' +
+                    '<div class="reco-meta">' + delta + '</div></div></div>';
+            }).join('');
+        } catch (e) {
+            body.innerHTML = '<div class="empty">Effort unavailable: ' + escHtml(e.message) + '</div>';
         }
     }
     </script>

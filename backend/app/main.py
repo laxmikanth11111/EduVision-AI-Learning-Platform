@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.v1.analytics import analytics_router
 from app.api.v1.animation_router import animation_router
 from app.api.v1.animation_runtime_router import animation_runtime_router
 from app.api.v1.assistant import assistant_router
@@ -173,6 +174,7 @@ app.include_router(review_router, prefix="/api/v1")
 app.include_router(plan_router, prefix="/api/v1")
 app.include_router(goals_router, prefix="/api/v1")
 app.include_router(path_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(exports_router, prefix="/api/v1")
 app.include_router(tutor_router, prefix="/api/v1")
 

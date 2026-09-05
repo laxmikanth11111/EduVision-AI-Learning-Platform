@@ -195,6 +195,9 @@ def init_default_metrics() -> None:
     metrics.register("p12_adaptive_starts_total", "Adaptive attempts started, by question count.")
     metrics.register("p12_adaptive_orders_total", "Adaptive question selections returned, by outcome (matched/up/down).")
     metrics.register("p12_adaptive_rejections_total", "Adaptive start requests rejected, by reason.")
+    # ── P13 learner analytics ("know my trajectory") ──────────────────────────
+    metrics.register("p13_analytics_views_total", "Learner-analytics endpoint reads, by endpoint and outcome.")
+    metrics.register("p13_analytics_errors_total", "Learner-analytics endpoint failures, by endpoint and reason.")
 
 
 

@@ -31,6 +31,8 @@ header { display: flex; align-items: center; justify-content: space-between; pad
 .btn-present { background: var(--amber); color: var(--ink); border: none; font-weight: 700; padding: .55rem 1.3rem; border-radius: 2px; cursor: pointer; font-size: .9rem; transition: transform .15s, background .15s; }
 .btn-present:hover { background: #ffbf47; }
 .btn-present:active { transform: scale(.96); }
+.nav-link { font-size: .82rem; color: var(--muted); text-decoration: none; font-family: 'Space Grotesk', sans-serif; margin-left: 1.1rem; transition: color .2s; }
+.nav-link:hover { color: var(--paper); }
 
 /* ── Main layout ────────────────────────────────── */
 .main { flex: 1; display: flex; min-height: 0; }
@@ -240,6 +242,7 @@ body.presenting .present-arrow { display: block; }
         <span class="brand-name">EduVision Player</span>
     </a>
     <span class="deck-title" id="deckName"></span>
+    <a class="nav-link" href="/frontend/dashboard.html">Dashboard</a>
     <button class="btn-present" id="presentBtn" onclick="enterPresent()">&#9654; Present</button>
 </header>
 

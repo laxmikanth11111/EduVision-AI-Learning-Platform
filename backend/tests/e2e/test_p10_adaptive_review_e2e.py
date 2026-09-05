@@ -343,6 +343,32 @@ def _read_memory_concept(user_id: str, concept_id: str) -> float | None:
 # ---------------------------------------------------------------------------
 
 
+def _wait_for_question(page, expected_stem: str, timeout: float = 20.0) -> None:
+    """Wait until the quiz player shows the given question stem.
+
+    The adaptive /next handshake rebuilds the question DOM asynchronously; a
+    click that lands before that render completes can hit the still-visible
+    previous question's option and leave the new one blank (server score 1/2).
+    Waiting on the stem makes the transition deterministic.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if page.locator(".quiz-qstem").inner_text().strip() == expected_stem:
+                return
+        except Exception:
+            pass
+        time.sleep(0.25)
+    raise AssertionError(
+        f"expected stem never appeared: {expected_stem!r} "
+        f"actual={page.locator('.quiz-qstem').inner_text()!r}"
+    )
+
+
+P10_Q1_STEM = "Which distribution is a symmetric bell curve?"
+P10_Q2_STEM = "What does the mean set in a Gaussian?"
+
+
 @pytest.mark.e2e
 def test_p10_ng1_quiz_next_action_cta(server_env, page):
     from app.core.dependencies import get_current_user as _get_current_user
@@ -381,6 +407,7 @@ def test_p10_ng1_quiz_next_action_cta(server_env, page):
 
     overlay.locator(".quiz-opt", has_text="A symmetric bell curve").first.click()
     overlay.locator("button", has_text="Next").click()
+    _wait_for_question(page, P10_Q2_STEM)
     overlay.locator(".quiz-opt", has_text="A symmetric bell curve").first.click()
     overlay.locator("button", has_text="Submit Quiz").click()
     ring = overlay.locator(".quiz-score-ring")
@@ -527,6 +554,7 @@ def test_p10_ng3_critical_learning_loop(server_env, page):
     # 2) ASSESS — answer Q1 (tagged to the weak concept) and Q2 correctly.
     overlay.locator(".quiz-opt", has_text="A symmetric bell curve").first.click()
     overlay.locator("button", has_text="Next").click()
+    _wait_for_question(page, P10_Q2_STEM)
     overlay.locator(".quiz-opt", has_text="A symmetric bell curve").first.click()
     overlay.locator("button", has_text="Submit Quiz").click()
     ring = overlay.locator(".quiz-score-ring")
