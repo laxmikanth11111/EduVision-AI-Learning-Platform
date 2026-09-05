@@ -4,7 +4,7 @@
 `b2edd65` (`docs: add post-p11 product architecture audit and p12 scope`) -- before any P12 implementation work. Branch: `feature/individual-user-foundation`. Working tree was clean at the start of P12.
 
 ## 2. Final Commit
-Pending -- three P12 implementation commits are in (`be2b8c6`, `c0e1199`, `0fa5114`); the C10 parity/drift repairs (migration `0033_educational_memories` + ORM parity on `user_answers`/`score_summaries`) and the C11 browser E2E suite are uncommitted working changes at HEAD `0fa5114`. This report describes the complete P12 work; it is ready to be committed as the P12 completion commit once the release gate is signed off.
+`150ec1f` (`feat(p12): complete pg parity 0033, adaptive browser E2E and implementation report`) on `feature/individual-user-foundation`. Working tree is clean at the release gate. P12 commits in order: `be2b8c6` (0032 attempt parity), `c0e1199` (adaptive engine + schemas + endpoints), `0fa5114` (adaptive player, dead-code retirement, metrics), `150ec1f` (0033 educational-memories parity, `user_answers`/`score_summaries` ORM parity, PG behavioral suite, browser E2E, this report).
 
 ## 3. P12 Scope
 Close the assessment gap **NG-4** from the Post-P11 audit, on top of a mandatory repair of the empirically-proven PostgreSQL attempt-path drift, exactly as contracted in `docs/P12_SCOPE_AND_FOUNDATION.md`:
@@ -154,4 +154,4 @@ All P12 release gates are **GREEN**:
 - User isolation preserved on every touched endpoint (404/409/422 semantics verified).
 - Full regression contract green: SQLite 1183 (>1161), PG 19 (≥15 + new drift gate), E2E 15 (≥13 + 2 P12), Ruff clean, mypy 83/24 zero-new, single head `0033`, secret scan clean, `git diff --check` clean.
 - Observability counters added; migration additions are additive and idempotent.
-- Completion commit pending user request (git commit is not performed unless explicitly asked).
+- Release gate **signed off** at HEAD `150ec1f`; working tree clean.
