@@ -27,6 +27,7 @@ two completed attempts back it.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -38,8 +39,10 @@ from app.models.generated_lesson import GeneratedLesson
 from app.models.learning_session import LearningSession
 from app.models.quiz import Quiz
 from app.models.quiz_attempt import QuizAttempt
+from app.models.review_schedule import ReviewSchedule
 from app.models.score_summary import ScoreSummary
-from app.schemas.educational_memory import EducationalMemory
+from app.repositories.review_schedule_repository import ReviewScheduleRepository
+from app.schemas.educational_memory import ConceptMasteryRecord, EducationalMemory
 from app.schemas.learner_analytics import (
     AnalyticsOverview,
     ConceptAnalytic,
@@ -47,9 +50,13 @@ from app.schemas.learner_analytics import (
     ConceptsResponse,
     EffortAnalytic,
     EffortResponse,
+    RetentionConcept,
+    RetentionResponse,
+    RetentionSummary,
     TrendPoint,
     TrendResponse,
 )
+from app.services import retention
 from app.services.educational_memory_service import educational_memory_service
 from app.services.learner_analytics import (
     band,
@@ -258,6 +265,108 @@ class LearnerAnalyticsService:
         return EffortResponse(
             effort=[anal for _, anal in entries][:_MAX_EFFORT_ROWS],
             max=_MAX_EFFORT_ROWS,
+        )
+
+    async def get_retention(self, user_id: uuid.UUID) -> RetentionResponse:
+        """Deterministic, learner-scoped retention/recall surface (P14).
+
+        Composes the learner's own review schedules + recall-outcome history
+        into an overdue-first list of concept signals. Read-only: it never
+        rewrites mastery or review state.
+        """
+        session = self.session
+        now = datetime.now(UTC)
+        memory = await self._load_memory(session, str(user_id))
+
+        records = list(memory.concept_records.items())[:_MAX_CONCEPTS]
+        concept_ids = [cid for cid, _ in records]
+        if not concept_ids:
+            return RetentionResponse(
+                summary=RetentionSummary(
+                    retention_average=None,
+                    on_track_count=0,
+                    at_risk_count=0,
+                    overdue_count=0,
+                    new_count=0,
+                ),
+                concepts=[],
+                max=_MAX_CONCEPTS,
+            )
+
+        links = await self._resolve_lessons(session, concept_ids, user_id)
+        schedules = await ReviewScheduleRepository(session).list_due(
+            user_id, limit=_MAX_CONCEPTS
+        )
+        by_concept: dict[str, ReviewSchedule] = {}
+        for sched_row in schedules:
+            if sched_row.concept is not None and sched_row.concept.public_id:
+                by_concept.setdefault(sched_row.concept.public_id, sched_row)
+        rows: list[RetentionConcept] = []
+        for cid, rec in records:
+            schedule = by_concept.get(cid)
+            history = (
+                retention.history_outcomes(schedule.review_metadata)
+                if schedule is not None
+                else []
+            )
+            days_since = _retention_days_since(rec, schedule, now)
+            is_due = False
+            due_dt: datetime | None = None
+            if schedule is not None:
+                due_dt = _aware(schedule.due_at)
+                is_due = due_dt is None or due_dt <= now
+
+            signal = retention.retention_signal(
+                mastery=float(rec.mastery_score),
+                days_since_review=days_since,
+                is_due=is_due,
+                history=history,
+            )
+            score = float(rec.mastery_score)
+            rows.append(
+                RetentionConcept(
+                    concept_public_id=cid,
+                    name=rec.concept_name or cid,
+                    band=band(score),
+                    mastery_score=round(score, 1),
+                    retained_strength=signal["retained_strength"],
+                    status=signal["status"],
+                    due_at=due_dt,
+                    days_since_review=days_since,
+                    review_count=int(rec.review_count),
+                    review_accuracy=retention.review_accuracy(history),
+                    deep_link_practice=(
+                        f"/frontend/player.html?lesson={links[cid]['lesson_public']}"
+                        if links[cid]["lesson_public"]
+                        else None
+                    ),
+                    deep_link_tutor=f"/frontend/tutor.html?concept={cid}",
+                )
+            )
+
+        rows.sort(
+            key=lambda row: (
+                retention.status_sort_key(row.status),
+                -_strength_rank(row.retained_strength),
+                row.concept_public_id,
+            )
+        )
+        bounded = rows[:_MAX_CONCEPTS]
+
+        summary = retention.retention_summary(
+            strengths=[row.retained_strength for row in bounded],
+            statuses=[row.status for row in bounded],
+        )
+        return RetentionResponse(
+            summary=RetentionSummary(
+                retention_average=summary["retention_average"],
+                on_track_count=summary["on_track_count"],
+                at_risk_count=summary["at_risk_count"],
+                overdue_count=summary["overdue_count"],
+                new_count=summary["new_count"],
+            ),
+            concepts=bounded,
+            max=_MAX_CONCEPTS,
         )
 
     # ------------------------------------------------------------------
@@ -549,3 +658,41 @@ def _rounded(value: float | None, digits: int = 1) -> float | None:
 
 def _rounded2(value: float | None) -> float | None:
     return _rounded(value, digits=2)
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    """Treat a naive stored datetime as UTC (SQLite drops tzinfo on read)."""
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=UTC)
+
+
+def _strength_rank(strength: float | None) -> float:
+    """Deterministic sort helper: ``None`` sorts behind any real strength."""
+    return strength if strength is not None else -1.0
+
+
+def _retention_days_since(
+    record: ConceptMasteryRecord,
+    schedule: ReviewSchedule | None,
+    now: datetime,
+) -> float | None:
+    """Days since a concept was last reviewed (None means never reviewed).
+
+    A concept only enters the retention loop once it has a review schedule;
+    unscheduled concepts are ``new`` (no fabricated strength). Prefers the
+    educational-memory anchor (same precedence as the review scheduler's decay
+    signal), then the schedule's own review clock.
+    """
+    if schedule is None:
+        return None
+    anchor = None
+    if record.last_reviewed_at or record.first_learned_at:
+        anchor = float(record.last_reviewed_at or record.first_learned_at)
+    elif schedule.last_reviewed_at is not None:
+        aware = _aware(schedule.last_reviewed_at)
+        if aware is not None:
+            anchor = aware.timestamp()
+    if anchor is None:
+        return None
+    return max(0.0, (now.timestamp() - anchor) / 86400.0)

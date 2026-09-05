@@ -22,6 +22,7 @@ from app.schemas.learner_analytics import (
     AnalyticsOverview,
     ConceptsResponse,
     EffortResponse,
+    RetentionResponse,
     TrendResponse,
 )
 from app.services.learner_analytics_service import LearnerAnalyticsService
@@ -107,3 +108,21 @@ async def get_analytics_effort(
 ) -> APIResponse[EffortResponse]:
     effort = await _build("effort", uow, user.id, lambda svc, uid: svc.get_effort(uid))
     return APIResponse(data=effort, message="Effort vs mastery")
+
+
+@analytics_router.get(
+    "/retention",
+    response_model=APIResponse[RetentionResponse],
+    summary="Get the learner's retention/recall signal per concept (P14)",
+)
+async def get_analytics_retention(
+    user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> APIResponse[RetentionResponse]:
+    try:
+        payload = await LearnerAnalyticsService(uow).get_retention(user.id)
+    except Exception:
+        metrics.increment("p14_retention_errors_total", reason="build_failed")
+        raise
+    metrics.increment("p14_retention_views_total", outcome="ok")
+    return APIResponse(data=payload, message="Learner retention")

@@ -389,13 +389,14 @@ async def test_unauthenticated_analytics_requests_rejected() -> None:
 
 
 async def test_analytics_are_learner_scoped_user_b_sees_empty() -> None:
-    # Fresh learner ids so the shared test DB / in-process memory cache cannot
-    # carry rows from unrelated P11/P12 tests over the same well-known ids.
+    # Fresh ids + unique emails for both learners so this test never collides
+    # with the module fixture's reserved p13_a/p13_b users (or with any other
+    # test module reusing the same well-known ids/emails in the shared DB).
     uid_a = uuid.uuid4()
-    lookups = await _seed_analytics_learner(_JWT_USERS, uid_a, "p13_a@test.com")
+    lookups = await _seed_analytics_learner(_JWT_USERS, uid_a, f"p13_scope_a_{uuid.uuid4().hex[:8]}@test.com")
 
     uid_b = uuid.uuid4()
-    await _create_bare_user(uid_b, "p13_b@test.com", "P13 User B")
+    await _create_bare_user(uid_b, f"p13_scope_b_{uuid.uuid4().hex[:8]}@test.com", "P13 User B")
 
     async with await _make_client() as client:
         a_resp = await client.get("/api/v1/me/analytics", headers=_headers(uid_a))

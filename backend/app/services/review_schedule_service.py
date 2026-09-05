@@ -30,13 +30,12 @@ from app.schemas.review import (
     ReviewQueueItem,
     ReviewQueueResponse,
 )
-from app.services import review_scheduler
+from app.services import retention, review_scheduler
 from app.services.educational_memory_service import educational_memory_service
 from app.services.review_scheduler import (
     compute_decay_signal,
     initial_step,
     interval_at_step,
-    next_interval,
     priority_bucket,
 )
 
@@ -115,13 +114,20 @@ class ReviewScheduleService:
         user_id: uuid.UUID,
         schedule_public_id: str,
         *,
+        outcome: str = retention.DEFAULT_OUTCOME,
         now: datetime | None = None,
     ) -> ReviewCompleteResponse:
         """Mark a review schedule complete, advancing its spaced interval.
 
-        The routine does not change mastery; it resets the review clock on the
-        learner's educational memory and advances the interval ladder.
+        The routine uses the learner's self-reported recall outcome (P14) to
+        drive the next step: ``again`` -> tightest interval, ``hard`` -> hold,
+        ``good`` -> +1 (identical to legacy), ``easy`` -> +2 (capped). The
+        outcome and the resulting retention signal are recorded in the
+        ``review_metadata`` JSONB (bounded history). It never changes mastery;
+        it resets the review clock on the learner's educational memory and
+        advances the interval ladder.
         """
+        outcome = retention.validate_outcome(outcome)
         user_str = str(user_id)
         session = self._uow.session
         now = now or datetime.now(UTC)
@@ -137,12 +143,15 @@ class ReviewScheduleService:
 
         memory = await educational_memory_service.load_from_db(session, user_str)
         step = int((schedule.review_metadata or {}).get("step", 0) or 0)
-        next_step, next_interval_days = next_interval(step)
+        next_step = retention.outcome_next_step(step, outcome)
+        next_interval_days = retention.outcome_interval_days(step, outcome)
 
         schedule.last_reviewed_at = now
         schedule.completed_at = now
         schedule.interval_days = int(next_interval_days)
-        schedule.review_metadata = dict(schedule.review_metadata or {})
+        schedule.review_metadata = retention.apply_outcome_to_metadata(
+            schedule.review_metadata, outcome, at=now
+        )
         schedule.review_metadata["step"] = next_step
         schedule.review_metadata["last_pressure"] = None
 
@@ -172,6 +181,15 @@ class ReviewScheduleService:
         )
         await educational_memory_service.save_to_db(session, user_str)
 
+        # Retention signal after this completion (fresh review, not yet due).
+        history = retention.history_outcomes(schedule.review_metadata)
+        signal = retention.retention_signal(
+            mastery=current_mastery,
+            days_since_review=0.0,
+            is_due=False,
+            history=history,
+        )
+
         return ReviewCompleteResponse(
             schedule_id=schedule.public_id,
             concept_id=concept_public_id or "",
@@ -180,6 +198,9 @@ class ReviewScheduleService:
             next_due_at=_aware(schedule.due_at),
             next_interval_days=next_interval_days,
             mastery_score=current_mastery,
+            outcome=outcome,
+            retained_strength=signal["retained_strength"],
+            review_accuracy=retention.review_accuracy(history),
         )
 
     async def skip(
@@ -303,6 +324,14 @@ class ReviewScheduleService:
         is_due = due_dt is None or due_dt <= now
         priority = priority_bucket(float(pressure["pressure"]), due=is_due)
 
+        history = retention.history_outcomes(schedule.review_metadata)
+        signal = retention.retention_signal(
+            mastery=mastery,
+            days_since_review=_days_since_review(record, schedule, now),
+            is_due=is_due,
+            history=history,
+        )
+
         return ReviewQueueItem(
             schedule_id=schedule.public_id,
             concept_id=concept_public_id or "",
@@ -316,6 +345,8 @@ class ReviewScheduleService:
             scheduled_date=schedule.scheduled_date,
             review_count=int(record.review_count) if record else 0,
             priority=priority,
+            retention_status=signal["status"],
+            review_accuracy=retention.review_accuracy(history),
         )
 
 
@@ -366,3 +397,26 @@ def _memory_record(
 def _memory_mastery(memory: EducationalMemory, concept_public_id: str | None) -> float | None:
     rec = _memory_record(memory, concept_public_id)
     return float(rec.mastery_score) if rec and rec.mastery_score is not None else None
+
+
+def _days_since_review(
+    record: ConceptMasteryRecord | None,
+    schedule: ReviewSchedule,
+    now: datetime,
+) -> float | None:
+    """Days since the last review touchpoint, tolerant of missing/legacy rows.
+
+    Prefers the educational-memory anchor (same precedence as
+    ``compute_decay_signal``), then the schedule's own review clock. ``None``
+    means the concept has never been reviewed.
+    """
+    anchor = None
+    if record is not None and (record.last_reviewed_at or record.first_learned_at):
+        anchor = float(record.last_reviewed_at or record.first_learned_at)
+    elif schedule.last_reviewed_at is not None:
+        aware = _aware(schedule.last_reviewed_at)
+        if aware is not None:
+            anchor = aware.timestamp()
+    if anchor is None:
+        return None
+    return max(0.0, (now.timestamp() - anchor) / 86400.0)

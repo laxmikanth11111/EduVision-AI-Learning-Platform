@@ -108,6 +108,7 @@
         .chip.mastered { border-color: rgba(29,158,117,.6); color: var(--teal); background: rgba(29,158,117,0.1); }
         .chip.developing { border-color: rgba(242,166,35,.6); color: var(--amber); background: rgba(242,166,35,0.1); }
         .chip.weak { border-color: rgba(216,90,48,.6); color: var(--coral); background: rgba(216,90,48,0.1); }
+        .chip.new { border-color: rgba(244,239,228,.5); color: var(--muted-strong); background: rgba(244,239,228,0.04); }
 
         /* P13: analytics panels */
         .reco-summary strong { color: var(--paper); }
@@ -376,6 +377,10 @@
         parts.push('<div class="section"><h2>Effort vs Mastery<span>does practice pay off?</span></h2>' +
             '<div id="analyticsEffortBody"><div class="empty">Loading effort&hellip;</div></div></div>');
 
+        // P14: retention surface (recall signal + outcomes, read-only)
+        parts.push('<div class="section"><h2>Retention<span>how well you remember</span></h2>' +
+            '<div id="retentionBody"><div class="empty">Loading retention&hellip;</div></div></div>');
+
         // Recent attempts
         parts.push('<div class="section"><h2>Recent Checkpoints<span>last attempts</span></h2>');
         const attempts = d.recent_attempts || [];
@@ -625,13 +630,26 @@
                 const practice = lessonId
                     ? '<a class="lesson-tutor" href="/frontend/player.html?lesson=' + lessonId + '">Practice</a>'
                     : '';
+                const statusChip = it.retention_status
+                    ? '<span class="chip ' + ({ on_track: 'mastered', at_risk: 'developing', overdue: 'weak', new: 'new' })[it.retention_status] + '">' + escHtml(it.retention_status) + '</span>'
+                    : '';
+                const accuracy = it.review_accuracy != null
+                    ? ' <span class="delta delta-flat">' + pct(it.review_accuracy) + '% recalled</span>'
+                    : '';
+                // P14: outcome buttons — "Mark reviewed" (good, the default /
+                // legacy path) FIRST, then Again/Hard/Easy for self-reported
+                // recall. The first .reco-btn stays the good/default action.
+                const outcomeButtons =
+                    ' <button type="button" class="reco-btn" data-schedule="' + escHtml(String(it.schedule_id || '')) + '" data-outcome="good" onclick="completeReview(this)">Mark reviewed</button>' +
+                    '<button type="button" class="reco-btn" data-schedule="' + escHtml(String(it.schedule_id || '')) + '" data-outcome="again" onclick="completeReview(this)">Again</button>' +
+                    '<button type="button" class="reco-btn" data-schedule="' + escHtml(String(it.schedule_id || '')) + '" data-outcome="hard" onclick="completeReview(this)">Hard</button>' +
+                    '<button type="button" class="reco-btn" data-schedule="' + escHtml(String(it.schedule_id || '')) + '" data-outcome="easy" onclick="completeReview(this)">Easy</button>';
                 const actions = '<div class="reco-meta">' +
-                    (practice ? practice : '') +
-                    ' <button type="button" class="reco-btn" data-schedule="' + escHtml(String(it.schedule_id || '')) + '" onclick="completeReview(this)">Mark reviewed</button>' +
+                    (practice ? practice : '') + outcomeButtons +
                     '</div>';
                 return '<div class="reco"><span class="reco-priority ' + pr + '">' + escHtml(it.priority || 'due') + '</span>' +
                     '<div><div class="reco-title">' + escHtml(it.concept_name || it.topic || 'Concept') + '</div>' +
-                    '<div class="reco-reason">due: ' + escHtml(due) + '</div>' +
+                    '<div class="reco-reason">due: ' + escHtml(due) + ' ' + statusChip + accuracy + '</div>' +
                     actions +
                     '</div></div>';
             });
@@ -641,20 +659,27 @@
         }
     }
 
-    // P10: complete a due review through the real API, then refresh the panel so
-    // the interval/due state visibly advances (closes the learn -> review loop).
+    // P10 + P14: complete a due review through the real API, then refresh the
+    // panel so the interval/due state visibly advances. The outcome comes from
+    // the button (good by default/legacy) — again/hard/easy move the interval
+    // ladder accordingly.
     async function completeReview(btn) {
         const scheduleId = btn && btn.getAttribute('data-schedule');
         if (!scheduleId) return;
+        const outcome = (btn.getAttribute('data-outcome') || 'good');
         btn.disabled = true;
         btn.textContent = 'Recording\u2026';
         try {
-            const res = await authFetch(API + '/me/review/' + encodeURIComponent(scheduleId) + '/complete', { method: 'POST' });
+            const res = await authFetch(API + '/me/review/' + encodeURIComponent(scheduleId) + '/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ outcome: outcome })
+            });
             if (!res.ok) throw new Error('complete ' + res.status);
             await loadReviewPanel();
         } catch (err) {
             btn.disabled = false;
-            btn.textContent = 'Mark reviewed';
+            btn.textContent = outcome === 'good' ? 'Mark reviewed' : outcome.charAt(0).toUpperCase() + outcome.slice(1);
             const body = document.getElementById('reviewPanelBody');
             if (body) body.innerHTML = '<div class="empty">Could not record review: ' + escHtml(err.message) + '</div>';
         }
@@ -668,7 +693,8 @@
         await Promise.all([
             loadAnalyticsTrajectory(),
             loadAnalyticsConcepts(),
-            loadAnalyticsEffort()
+            loadAnalyticsEffort(),
+            loadRetentionPanel()
         ]);
     }
 
@@ -787,6 +813,59 @@
             }).join('');
         } catch (e) {
             body.innerHTML = '<div class="empty">Effort unavailable: ' + escHtml(e.message) + '</div>';
+        }
+    }
+
+    // P14 ───────────────────────────────────────────────────────────────
+    // "Retention" — recall signal per concept (overdue-first), fed by the
+    // read-only /me/analytics/retention endpoint. Statuses map onto the shared
+    // chip vocabulary; strengths are honest (never fabricated for 'new').
+    async function loadRetentionPanel() {
+        const body = document.getElementById('retentionBody');
+        if (!body) return;
+        try {
+            const res = await authFetch(API + '/me/analytics/retention');
+            if (!res.ok) {
+                body.innerHTML = '<div class="empty">Retention unavailable (' + escHtml(String(res.status)) + ').</div>';
+                return;
+            }
+            const data = (await res.json()).data || {};
+            const summary = data.summary || {};
+            const concepts = data.concepts || [];
+            const statusChip = { on_track: 'mastered', at_risk: 'developing', overdue: 'weak', new: 'new' };
+            let html = '<div class="stats">' +
+                stat(summary.retention_average != null ? pct(summary.retention_average) + '%' : '\u2014', 'Retention Avg', '') +
+                stat(summary.on_track_count, 'On Track', 'teal') +
+                stat(summary.at_risk_count, 'At Risk', 'amber') +
+                stat(summary.overdue_count, 'Overdue', 'amber') +
+                stat(summary.new_count, 'New', '') +
+                '</div>';
+            if (!concepts.length) {
+                body.innerHTML = html + '<div class="empty">No retention signals yet \u2014 review a concept to start tracking recall.</div>';
+                return;
+            }
+            html += concepts.map(function (c) {
+                const chip = statusChip[c.status] || 'new';
+                const strength = c.retained_strength != null ? pct(c.retained_strength) + '%' : '\u2014';
+                const accuracy = c.review_accuracy != null ? ' \u00b7 ' + pct(c.review_accuracy) + '% recalled' : '';
+                const reviewed = c.days_since_review != null
+                    ? Math.round(c.days_since_review) + 'd since review'
+                    : 'never reviewed';
+                const links = (c.deep_link_practice
+                    ? '<a class="lesson-tutor" href="' + escHtml(c.deep_link_practice) + '">Practice</a>'
+                    : '') +
+                    (c.deep_link_tutor
+                    ? ' <a class="lesson-tutor" href="' + escHtml(c.deep_link_tutor) + '">Ask tutor</a>'
+                    : '');
+                return '<div class="reco"><span class="chip ' + chip + '">' + escHtml(c.status) + '</span>' +
+                    '<div><div class="reco-title">' + escHtml(c.name) + '</div>' +
+                    '<div class="reco-reason">' + escHtml(reviewed) + accuracy + '</div>' +
+                    '<div class="reco-meta">' + links + '</div></div>' +
+                    '<span class="concept-score">' + escHtml(strength) + '</span></div>';
+            }).join('');
+            body.innerHTML = html;
+        } catch (e) {
+            body.innerHTML = '<div class="empty">Retention unavailable: ' + escHtml(e.message) + '</div>';
         }
     }
     </script>

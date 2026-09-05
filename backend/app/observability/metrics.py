@@ -198,6 +198,10 @@ def init_default_metrics() -> None:
     # ── P13 learner analytics ("know my trajectory") ──────────────────────────
     metrics.register("p13_analytics_views_total", "Learner-analytics endpoint reads, by endpoint and outcome.")
     metrics.register("p13_analytics_errors_total", "Learner-analytics endpoint failures, by endpoint and reason.")
+    # ── P14 retention & review automation (closing the review loop) ───────────
+    metrics.register("p14_review_outcomes_total", "Review completions recorded, by reported recall outcome.")
+    metrics.register("p14_retention_views_total", "Learner retention-endpoint reads, by outcome.")
+    metrics.register("p14_retention_errors_total", "Learner retention-endpoint failures, by reason.")
 
 
 

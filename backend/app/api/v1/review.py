@@ -12,8 +12,13 @@ from fastapi import APIRouter, Depends, Query
 from app.core.dependencies import get_current_user
 from app.database.unit_of_work import UnitOfWork, get_unit_of_work
 from app.models.user import User
+from app.observability.metrics import metrics
 from app.schemas.common import APIResponse
-from app.schemas.review import ReviewCompleteResponse, ReviewQueueResponse
+from app.schemas.review import (
+    ReviewCompleteIn,
+    ReviewCompleteResponse,
+    ReviewQueueResponse,
+)
 from app.services.review_schedule_service import ReviewScheduleService
 
 review_router = APIRouter(prefix="/me/review", tags=["Adaptive Review"])
@@ -43,11 +48,15 @@ async def get_review_queue(
 )
 async def complete_review(
     schedule_id: str,
+    payload: ReviewCompleteIn | None = None,
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> APIResponse[ReviewCompleteResponse]:
+    # Absent/empty body behaves exactly as before P14 (plain successful review).
+    outcome = payload.outcome.value if payload is not None and payload.outcome is not None else "good"
     service = ReviewScheduleService(uow)
-    result = await service.complete(user.id, schedule_id)
+    result = await service.complete(user.id, schedule_id, outcome=outcome)
+    metrics.increment("p14_review_outcomes_total", outcome=result.outcome)
     return APIResponse(data=result, message="Review completed")
 
 

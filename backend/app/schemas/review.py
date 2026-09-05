@@ -9,8 +9,31 @@ ownership chain (404-equalized).
 from __future__ import annotations
 
 from datetime import date, datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
+
+
+class ReviewOutcome(str, Enum):
+    """Controlled self-reported recall outcome vocabulary (P14).
+
+    ``good`` is the default so legacy callers keep today's exact behavior.
+    """
+
+    again = "again"
+    hard = "hard"
+    good = "good"
+    easy = "easy"
+
+
+class ReviewCompleteIn(BaseModel):
+    """Optional request body for a review completion (P14).
+
+    An absent/empty body is fully backward compatible and behaves exactly as
+    today: the learner performed a plain successful review (``good``).
+    """
+
+    outcome: ReviewOutcome = ReviewOutcome.good
 
 
 class ReviewQueueItem(BaseModel):
@@ -28,6 +51,9 @@ class ReviewQueueItem(BaseModel):
     scheduled_date: date | None = None
     review_count: int = 0
     priority: str = "medium"
+    # P14 retention enrichments (additive; may be "new" / None for legacy rows).
+    retention_status: str = "new"
+    review_accuracy: float | None = None
 
 
 class ReviewQueueResponse(BaseModel):
@@ -48,3 +74,7 @@ class ReviewCompleteResponse(BaseModel):
     next_due_at: datetime | None = None
     next_interval_days: int = 1
     mastery_score: float | None = None
+    # P14: echoed outcome + the updated retention signal for this concept.
+    outcome: str = "good"
+    retained_strength: float | None = None
+    review_accuracy: float | None = None

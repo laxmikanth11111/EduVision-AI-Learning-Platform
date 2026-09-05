@@ -601,7 +601,9 @@ def test_p10_ng3_critical_learning_loop(server_env, page):
     mark.scroll_into_view_if_needed()
     mark.click()
     # The panel refreshes to an empty (or reduced) due state after completion.
-    review_body.locator("button.reco-btn").wait_for(state="detached", timeout=20_000)
+    # (P14 adds Again/Hard/Easy beside the default "Mark reviewed", so wait on
+    # the specific clicked button detaching rather than the whole .reco-btn set.)
+    mark.wait_for(state="detached", timeout=20_000)
 
     # Verify scheduling advanced via the review API (completion -> no longer due).
     review_href = f"{base}/api/v1/me/review?limit=20"

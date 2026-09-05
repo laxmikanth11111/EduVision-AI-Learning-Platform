@@ -10,6 +10,8 @@ server-side so the dashboard never emits a dead button.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -89,4 +91,39 @@ class EffortResponse(BaseModel):
     """Bounded list of effort-vs-mastery rows (``max`` mirrors the hard cap)."""
 
     effort: list[EffortAnalytic] = Field(default_factory=list)
+    max: int = Field(ge=0)
+
+
+class RetentionConcept(BaseModel):
+    """Per-concept retention/recall signal with actionable deep-links (P14)."""
+
+    concept_public_id: str
+    name: str
+    band: str = "new"
+    mastery_score: float | None = None
+    retained_strength: float | None = None
+    status: str = "new"  # on_track | at_risk | overdue | new
+    due_at: datetime | None = None
+    days_since_review: float | None = None
+    review_count: int = Field(ge=0)
+    review_accuracy: float | None = None
+    deep_link_practice: str | None = None
+    deep_link_tutor: str | None = None
+
+
+class RetentionSummary(BaseModel):
+    """Bucketed retention summary over the surfaced concepts (P14)."""
+
+    retention_average: float | None = None
+    on_track_count: int = Field(ge=0)
+    at_risk_count: int = Field(ge=0)
+    overdue_count: int = Field(ge=0)
+    new_count: int = Field(ge=0)
+
+
+class RetentionResponse(BaseModel):
+    """Bounded list of concept retention signals ordered overdue-first."""
+
+    summary: RetentionSummary
+    concepts: list[RetentionConcept] = Field(default_factory=list)
     max: int = Field(ge=0)
