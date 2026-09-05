@@ -192,6 +192,12 @@ class QuizAttemptService:
         # Create question attempts
         questions = await self._question_repo.list_by_version_with_options(version.id)
         question_responses = []
+        # The production schema (0005) declares quiz_attempts.max_score and
+        # time_spent_seconds NOT NULL, so both are populated at creation rather
+        # than left for the final submit (which previously crashed PG inserts).
+        max_score_total = sum(float(q.points) for q in questions)
+        attempt.max_score = max_score_total
+        attempt.time_spent_seconds = 0
         for q in questions:
             await self._qa_repo.create(
                 attempt_id=attempt.id,
@@ -264,6 +270,7 @@ class QuizAttemptService:
         text_value: str | None = None,
         matching_pairs: list[dict[str, str]] | None = None,
         order_values: list[str] | None = None,
+        time_spent_seconds: int | None = None,
     ) -> dict[str, Any]:
         """Submit or update the answer for a single question within an attempt."""
         attempt = await self._get_active_attempt(quiz_public_id, attempt_public_id, user_id)
@@ -278,6 +285,11 @@ class QuizAttemptService:
                 message="Question not found in this attempt",
                 details={"question_id": question_public_id},
             )
+
+        # Persist elapsed time when the client provides it (schema 0005 keeps
+        # question_attempts.time_spent_seconds NOT NULL; default 0 at creation).
+        if time_spent_seconds is not None:
+            qa.time_spent_seconds = max(0, time_spent_seconds)
 
         # Delete existing answer if re-answering
         existing_answer = await self._answer_repo.get_by_question_attempt(qa.id)
@@ -467,7 +479,7 @@ class QuizAttemptService:
         attempt.score = total_earned
         attempt.max_score = total_possible
         attempt.percent_score = percent
-        attempt.time_spent_seconds = time_spent_seconds
+        attempt.time_spent_seconds = max(0, time_spent_seconds or 0)
         attempt.completed_at = datetime.now(UTC)
 
         # Create score summary
