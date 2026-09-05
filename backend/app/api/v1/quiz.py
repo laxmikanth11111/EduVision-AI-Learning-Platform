@@ -13,8 +13,11 @@ from app.schemas.quiz import (
     AttemptSummary,
     GenerateQuizRequest,
     GenerateQuizResponse,
+    NextQuestionRequest,
+    NextQuestionResponse,
     QuizDetail,
     SingleAnswerRequest,
+    StartAttemptRequest,
     StartAttemptResponse,
     SubmitQuizRequest,
 )
@@ -79,15 +82,46 @@ async def get_quiz(
 )
 async def start_attempt(
     quiz_id: str,
+    request: StartAttemptRequest | None = None,
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> APIResponse[StartAttemptResponse]:
     service = QuizAttemptService(uow)
     await service.assert_quiz_ownership(quiz_id, user.id)
-    result = await service.start_attempt(quiz_id, user.id)
+    result = await service.start_attempt(
+        quiz_id,
+        user.id,
+        adaptive=bool(request.adaptive) if request else False,
+    )
     return APIResponse(
         data=StartAttemptResponse(**result),
         message="Quiz attempt started",
+    )
+
+
+@quiz_router.post(
+    "/{quiz_id}/attempts/{attempt_id}/next",
+    response_model=APIResponse[NextQuestionResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def next_question(
+    quiz_id: str,
+    attempt_id: str,
+    request: NextQuestionRequest | None = None,
+    user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> APIResponse[NextQuestionResponse]:
+    service = QuizAttemptService(uow)
+    answer = request.answer.model_dump() if request is not None and request.answer else None
+    result = await service.get_next_question(
+        quiz_id,
+        attempt_id,
+        user.id,
+        answer=answer,
+    )
+    return APIResponse(
+        data=NextQuestionResponse(**result),
+        message="Next question ready",
     )
 
 
@@ -146,6 +180,7 @@ async def submit_single_answer(
         text_value=request.text_value,
         matching_pairs=request.matching_pairs,
         order_values=request.order_values,
+        time_spent_seconds=request.time_spent_seconds,
     )
     return APIResponse(data=result, message="Answer saved")
 

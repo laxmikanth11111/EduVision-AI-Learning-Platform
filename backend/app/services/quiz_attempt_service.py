@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger
@@ -27,9 +27,21 @@ from app.repositories.quiz_repository import (
     ScoreSummaryRepository,
     UserAnswerRepository,
 )
+from app.services.adaptive_assessment import (
+    RATIONALE_START,
+    AdaptiveCandidate,
+    AnsweredQuestion,
+    order_candidate_questions,
+    select_next_question,
+)
 from shared.constants import QuestionAttemptStatus, ScoringRule
 
+if TYPE_CHECKING:
+    from app.schemas.educational_memory import EducationalMemory
+
 logger = get_logger(__name__)
+
+MIN_ADAPTIVE_QUESTIONS = 2
 
 
 class QuizAttemptService:
@@ -153,8 +165,17 @@ class QuizAttemptService:
         self,
         quiz_public_id: str,
         user_id: uuid.UUID,
+        *,
+        adaptive: bool = False,
     ) -> dict[str, Any]:
-        """Start a new quiz attempt (or resume existing in-progress one)."""
+        """Start a new quiz attempt (or resume existing in-progress one).
+
+        ``adaptive=True`` requests deterministic adaptive delivery: the question
+        order follows the learner's concept mastery (weak concepts first, at a
+        difficulty matched to their band) and, once answered, the remaining
+        sequence reacts to within-attempt correctness. The mode is persisted on
+        the attempt so resume and per-question ``next`` continue adaptively.
+        """
         quiz, version = await self._quiz_with_version_for_delivery(quiz_public_id)
 
         # Check max attempts
@@ -175,10 +196,38 @@ class QuizAttemptService:
             status="in_progress",
         )
         if active:
-            return await _resume_attempt(active, quiz, version, self._question_repo)
+            return await _resume_attempt(
+                active, quiz, version, self._question_repo, self._qa_repo
+            )
 
-        # Create new attempt
+        # Load the question set before creating any attempt row so malformed
+        # adaptive requests can be rejected without side effects.
+        questions = await self._question_repo.list_by_version_with_options(version.id)
+        if adaptive and len(questions) < MIN_ADAPTIVE_QUESTIONS:
+            raise ValidationError(
+                message="Adaptive assessment requires at least two questions",
+                details={
+                    "question_count": len(questions),
+                    "quiz_id": quiz_public_id,
+                },
+            )
+
+        # Deterministic adaptive ordering (no randomness) or fixed delivery order.
+        adaptive_active = bool(adaptive)
+        adaptive_rationale: str | None = None
+        delivery_order = list(questions)
+        if adaptive_active:
+            ordered_public_ids = await self._adaptive_ordered_question_ids(
+                version.id, questions, user_id
+            )
+            by_public = {q.public_id: q for q in questions}
+            delivery_order = [by_public[pid] for pid in ordered_public_ids]
+            adaptive_rationale = RATIONALE_START
+
+        # Create new attempt. The production schema (0005) declares max_score
+        # and time_spent_seconds NOT NULL, so both are populated at creation.
         attempt_number = attempt_count + 1
+        max_score_total = sum(float(q.points) for q in questions)
         attempt = await self._attempt_repo.create(
             quiz_id=quiz.id,
             quiz_version_id=version.id,
@@ -186,44 +235,24 @@ class QuizAttemptService:
             attempt_number=attempt_number,
             status="in_progress",
             is_practice=quiz.mode == "practice",
+            adaptive=adaptive_active,
+            max_score=max_score_total,
+            time_spent_seconds=0,
             started_at=datetime.now(UTC),
         )
 
-        # Create question attempts
-        questions = await self._question_repo.list_by_version_with_options(version.id)
+        # Create question attempts in delivery order; the attempt's position
+        # column mirrors that order (fixed mode: canonical question position).
         question_responses = []
-        # The production schema (0005) declares quiz_attempts.max_score and
-        # time_spent_seconds NOT NULL, so both are populated at creation rather
-        # than left for the final submit (which previously crashed PG inserts).
-        max_score_total = sum(float(q.points) for q in questions)
-        attempt.max_score = max_score_total
-        attempt.time_spent_seconds = 0
-        for q in questions:
+        for delivery_index, q in enumerate(delivery_order, start=1):
             await self._qa_repo.create(
                 attempt_id=attempt.id,
                 question_id=q.id,
-                position=q.position,
+                position=delivery_index,
                 status=QuestionAttemptStatus.UNANSWERED.value,
                 points_possible=float(q.points),
             )
-            question_responses.append({
-                "id": q.public_id,
-                "position": q.position,
-                "question_type": q.question_type,
-                "stem": q.stem,
-                "bloom_level": q.bloom_level,
-                "difficulty": q.difficulty,
-                "points": q.points,
-                "scenario_context": q.scenario_context,
-                "options": [
-                    {
-                        "id": o.public_id,
-                        "position": o.position,
-                        "text": o.text,
-                    }
-                    for o in sorted(q.options, key=lambda x: x.position)
-                ],
-            })
+            question_responses.append(_question_to_response(q))
 
         # Update quiz attempt count atomically on the database so concurrent
         # start_attempt calls cannot lose an increment (the denormalized
@@ -244,6 +273,8 @@ class QuizAttemptService:
             "status": attempt.status,
             "started_at": attempt.started_at,
             "questions": question_responses,
+            "adaptive": adaptive_active,
+            "adaptive_rationale": adaptive_rationale,
         }
 
     async def _quiz_with_version_for_delivery(
@@ -569,6 +600,152 @@ class QuizAttemptService:
             "recommendations": recommendations,
         }
 
+    # ── Next Question (adaptive delivery) ────────────────────────────────────
+
+    async def get_next_question(
+        self,
+        quiz_public_id: str,
+        attempt_public_id: str,
+        user_id: uuid.UUID,
+        *,
+        answer: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return the next question for an in-progress attempt.
+
+        In adaptive mode the selection reacts to the answers submitted so far
+        (correct answers lift the concept target, incorrect ones lower it), so
+        the delivered sequence genuinely changes within the same attempt. In
+        fixed mode the next unanswered question is returned by position.
+
+        An optional ``answer`` (for the question the learner just completed) is
+        persisted first so the selection reflects it. Everything is
+        user-scoped: only the authenticated owner's attempt and questions are
+        ever considered.
+        """
+        attempt = await self._get_active_attempt(quiz_public_id, attempt_public_id, user_id)
+        quiz = await self._quiz_repo.get_by_public_id_or_raise(quiz_public_id)
+
+        if answer:
+            await self.submit_answer(
+                quiz_public_id,
+                attempt_public_id,
+                answer["question_id"],
+                user_id,
+                option_ids=answer.get("option_ids"),
+                text_value=answer.get("text_value"),
+                matching_pairs=answer.get("matching_pairs"),
+                order_values=answer.get("order_values"),
+            )
+
+        qas = await self._qa_repo.list_by_attempt(attempt.id)
+        if not qas:
+            raise ValidationError(message="No questions found in this attempt")
+
+        questions = await self._question_repo.list_by_version_with_options(attempt.quiz_version_id)
+        questions_map = {q.id: q for q in questions}
+        questions_by_public = {q.public_id: q for q in questions}
+
+        answered_qas = [qa for qa in qas if qa.status == QuestionAttemptStatus.ANSWERED.value]
+        unanswered_qas = [qa for qa in qas if qa.status != QuestionAttemptStatus.ANSWERED.value]
+
+        concept_map = await self._concept_public_map(questions)
+        memory = await self._load_memory(user_id)
+        mastery_by_concept = memory.concept_records
+        mastery_default = 50.0
+
+        # Evaluated within-attempt history (correctness resolved server-side).
+        answered_history: list[AnsweredQuestion] = []
+        if answered_qas:
+            answer_keys = await self._answer_key_repo.get_by_question_ids(
+                [qa.question_id for qa in answered_qas]
+            )
+            answer_keys_map = {ak.question_id: ak for ak in answer_keys}
+            user_answers = await self._answer_repo.list_by_question_attempts(
+                [qa.id for qa in answered_qas]
+            )
+            user_answers_map = {ua.question_attempt_id: ua for ua in user_answers}
+            for qa in answered_qas:
+                question = questions_map.get(qa.question_id)
+                user_answer = user_answers_map.get(qa.id)
+                is_correct = False
+                if question is not None and user_answer is not None:
+                    answer_key = answer_keys_map.get(qa.question_id)
+                    is_correct, _ = _evaluate_answer(
+                        user_answer, answer_key, float(question.points)
+                    )
+                answered_history.append(
+                    AnsweredQuestion(
+                        concept_key=concept_map.get(question.concept_id)
+                        if question is not None and question.concept_id
+                        else None,
+                        is_correct=bool(is_correct),
+                    )
+                )
+
+        candidates: list[AdaptiveCandidate] = []
+        for qa in unanswered_qas:
+            question = questions_map.get(qa.question_id)
+            if question is None:
+                continue
+            concept_key = (
+                concept_map.get(question.concept_id) if question.concept_id else None
+            )
+            mastery = mastery_default
+            if concept_key:
+                record = mastery_by_concept.get(concept_key)
+                if record is not None:
+                    mastery = record.mastery_score
+            candidates.append(
+                AdaptiveCandidate(
+                    question_public_id=question.public_id,
+                    position=int(question.position),
+                    difficulty=question.difficulty,
+                    bloom_level=question.bloom_level,
+                    concept_key=concept_key,
+                    mastery_score=mastery,
+                )
+            )
+
+        answered_count = len(answered_qas)
+        remaining_count = len(unanswered_qas)
+        if remaining_count == 0:
+            return {
+                "attempt_id": attempt.public_id,
+                "quiz_id": quiz.public_id,
+                "adaptive": bool(attempt.adaptive),
+                "adaptive_rationale": None,
+                "next_question": None,
+                "answered_count": answered_count,
+                "remaining_count": 0,
+                "completed": True,
+            }
+
+        selected: Question | None = None
+        adaptive_rationale: str | None = None
+        completed = False
+        if attempt.adaptive:
+            next_candidate, adaptive_rationale = select_next_question(
+                candidates, answered_history
+            )
+            if next_candidate is not None:
+                selected = questions_by_public.get(next_candidate.question_public_id)
+        else:
+            next_qa = min(unanswered_qas, key=lambda qa: qa.position)
+            selected = questions_map.get(next_qa.question_id)
+
+        completed = True if selected is None else remaining_count == 1
+
+        return {
+            "attempt_id": attempt.public_id,
+            "quiz_id": quiz.public_id,
+            "adaptive": bool(attempt.adaptive),
+            "adaptive_rationale": adaptive_rationale,
+            "next_question": _question_to_response(selected) if selected else None,
+            "answered_count": answered_count,
+            "remaining_count": remaining_count,
+            "completed": completed,
+        }
+
     # ── Get Attempt Result ────────────────────────────────────────────────────
 
     async def get_attempt(
@@ -736,6 +913,62 @@ class QuizAttemptService:
             )
         return attempt
 
+    async def _adaptive_ordered_question_ids(
+        self,
+        quiz_version_id: uuid.UUID,
+        questions: list[Question],
+        user_id: uuid.UUID,
+    ) -> list[str]:
+        """Return question public_ids in deterministic adaptive delivery order.
+
+        Weak concepts (band 0) first at matched difficulty, then developing
+        (band 1), then mastered (band 2), with difficulty-fit, difficulty,
+        Bloom, position and finally public_id as the deterministic tie-breaks.
+        No randomness, no AI.
+        """
+        concept_map = await self._concept_public_map(questions)
+        memory = await self._load_memory(user_id)
+        candidates = []
+        for q in questions:
+            concept_key = concept_map.get(q.concept_id) if q.concept_id else None
+            mastery = 50.0
+            if concept_key:
+                record = memory.concept_records.get(concept_key)
+                if record is not None:
+                    mastery = record.mastery_score
+            candidates.append(
+                AdaptiveCandidate(
+                    question_public_id=q.public_id,
+                    position=int(q.position),
+                    difficulty=q.difficulty,
+                    bloom_level=q.bloom_level,
+                    concept_key=concept_key,
+                    mastery_score=mastery,
+                )
+            )
+        ordered = order_candidate_questions(candidates)
+        return [c.question_public_id for c in ordered]
+
+    async def _concept_public_map(self, questions: list[Question]) -> dict[uuid.UUID, str]:
+        """Map internal concept ids -> concept public ids for a question set."""
+        concept_ids = {q.concept_id for q in questions if q.concept_id}
+        if not concept_ids:
+            return {}
+        try:
+            concepts = await ConceptRepository(self._uow.session).list_by_ids(
+                sorted(concept_ids)
+            )
+        except Exception:
+            logger.warning("quiz_concept_public_map_failed")
+            return {}
+        return {c.id: str(c.public_id) for c in concepts}
+
+    async def _load_memory(self, user_id: uuid.UUID) -> EducationalMemory:
+        """Load (or create) the learner's educational memory (cache-backed)."""
+        from app.services.educational_memory_service import educational_memory_service
+
+        return await educational_memory_service.load_from_db(self._uow.session, str(user_id))
+
     async def _update_concept_mastery(
         self,
         user_id: uuid.UUID,
@@ -828,29 +1061,19 @@ async def _resume_attempt(
     quiz: Quiz,
     version: QuizVersion,
     question_repo: QuestionRepository,
+    qa_repo: QuestionAttemptRepository,
 ) -> dict[str, Any]:
-    """Return the data for an existing in-progress attempt."""
+    """Return the data for an existing in-progress attempt.
+
+    Questions are ordered by the attempt's delivery position (identical to the
+    canonical question position in fixed mode, and the adaptive order in
+    adaptive mode), so a resumed adaptive attempt keeps the same delivery
+    sequence the learner saw.
+    """
     questions = await question_repo.list_by_version_with_options(version.id)
-    question_responses = []
-    for q in questions:
-        question_responses.append({
-            "id": q.public_id,
-            "position": q.position,
-            "question_type": q.question_type,
-            "stem": q.stem,
-            "bloom_level": q.bloom_level,
-            "difficulty": q.difficulty,
-            "points": q.points,
-            "scenario_context": q.scenario_context,
-            "options": [
-                {
-                    "id": o.public_id,
-                    "position": o.position,
-                    "text": o.text,
-                }
-                for o in sorted(q.options, key=lambda x: x.position)
-            ],
-        })
+    question_attempts = await qa_repo.list_by_attempt(attempt.id)
+    delivery_by_question = {qa.question_id: qa.position for qa in question_attempts}
+    ordered = sorted(questions, key=lambda q: delivery_by_question.get(q.id, q.position))
 
     return {
         "attempt_id": attempt.public_id,
@@ -859,7 +1082,31 @@ async def _resume_attempt(
         "attempt_number": attempt.attempt_number,
         "status": attempt.status,
         "started_at": attempt.started_at,
-        "questions": question_responses,
+        "questions": [_question_to_response(q) for q in ordered],
+        "adaptive": bool(attempt.adaptive),
+        "adaptive_rationale": RATIONALE_START if attempt.adaptive else None,
+    }
+
+
+def _question_to_response(question: Question) -> dict[str, Any]:
+    """Build the delivery payload for a single question (answers never exposed)."""
+    return {
+        "id": question.public_id,
+        "position": question.position,
+        "question_type": question.question_type,
+        "stem": question.stem,
+        "bloom_level": question.bloom_level,
+        "difficulty": question.difficulty,
+        "points": question.points,
+        "scenario_context": question.scenario_context,
+        "options": [
+            {
+                "id": o.public_id,
+                "position": o.position,
+                "text": o.text,
+            }
+            for o in sorted(question.options, key=lambda x: x.position)
+        ],
     }
 
 

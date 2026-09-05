@@ -89,6 +89,14 @@ class StartAttemptResponse(BaseModel):
     status: str
     started_at: datetime
     questions: list[QuizQuestionResponse]
+    adaptive: bool = False
+    adaptive_rationale: str | None = None
+
+
+class StartAttemptRequest(BaseModel):
+    """Request body for starting an attempt."""
+
+    adaptive: bool = False
 
 
 class AnswerSubmission(BaseModel):
@@ -116,6 +124,30 @@ class SingleAnswerRequest(BaseModel):
     matching_pairs: list[dict[str, str]] | None = None
     order_values: list[str] | None = None
     time_spent_seconds: int | None = Field(None, ge=0)
+
+
+class NextQuestionRequest(BaseModel):
+    """Request body for fetching the next delivery question.
+
+    ``answer`` is optional: when the learner has just finished a question, its
+    answer is persisted through this call so within-attempt adaptation reacts
+    to it before the next question is selected.
+    """
+
+    answer: AnswerSubmission | None = None
+
+
+class NextQuestionResponse(BaseModel):
+    """The next question to present during an in-progress attempt."""
+
+    attempt_id: str
+    quiz_id: str
+    adaptive: bool = False
+    adaptive_rationale: str | None = None
+    next_question: QuizQuestionResponse | None = None
+    answered_count: int = 0
+    remaining_count: int = 0
+    completed: bool = False
 
 
 class QuestionFeedback(BaseModel):

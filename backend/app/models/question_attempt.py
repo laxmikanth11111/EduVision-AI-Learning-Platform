@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -52,4 +52,4 @@ class QuestionAttempt(Base, UUIDMixin, TimestampMixin):
     points_earned: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=0)
     points_possible: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=1)
     time_spent_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    feedback: Mapped[dict | None] = mapped_column(PortableJSONB, nullable=True)
+    feedback: Mapped[dict[str, Any] | None] = mapped_column(PortableJSONB, nullable=True)
