@@ -1804,13 +1804,22 @@ async function startQuiz(quizId) {
         '<div class="quiz-body" style="display:flex;align-items:center;justify-content:center;min-height:200px;">' +
         '<div class="visual-loading"><div class="spinner"></div><div>Loading questions&hellip;</div></div></div>';
 
-    quizState = { quizId, questions: [], answers: {}, current: 0, attemptId: null, startTime: Date.now() };
+    quizState = { quizId, questions: [], answers: {}, current: 0, attemptId: null, startTime: Date.now(), adaptive: false, rationale: null };
     try {
-        const res = await authFetch(API + '/quizzes/' + quizId + '/attempts', {
+        // Request adaptive delivery; single-question checkpoints cannot adapt,
+        // so fall back to fixed delivery for those (422 -> plain start).
+        let res = await authFetch(API + '/quizzes/' + quizId + '/attempts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
+            body: JSON.stringify({ adaptive: true }),
         });
+        if (res.status === 422) {
+            res = await authFetch(API + '/quizzes/' + quizId + '/attempts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+        }
         if (!res.ok) await apiError(res);
         const data = await res.json();
         const attempt = data.data || data;
@@ -1818,6 +1827,8 @@ async function startQuiz(quizId) {
         quizState.attemptNumber = attempt.attempt_number || 1;
         quizState.quizId = attempt.quiz_id || quizState.quizId;
         quizState.questions = attempt.questions || [];
+        quizState.adaptive = attempt.adaptive === true;
+        quizState.rationale = attempt.adaptive_rationale || null;
         if (!quizState.questions.length) {
             document.getElementById('quizCard').innerHTML =
                 '<div class="quiz-head"><div><h3>Checkpoint</h3></div><button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
@@ -1879,7 +1890,11 @@ function renderQuizQuestion() {
 
     document.getElementById('quizCard').innerHTML =
         '<div class="quiz-head"><div><h3>Checkpoint ' + Math.min(quizState.attemptNumber || 1, 999) + '</h3>' +
-        '<div class="quiz-sub">Question ' + (quizState.current + 1) + ' of ' + total + '</div></div>' +
+        '<div class="quiz-sub">Question ' + (quizState.current + 1) + ' of ' + total +
+        (quizState.adaptive
+            ? ' &middot; <span title="' + escHtml(quizState.rationale || 'Difficulty adapts to your mastery.') + '" style="color:var(--accent);font-weight:700;letter-spacing:.06em;">ADAPTIVE</span>'
+            : '') +
+        '</div></div>' +
         '<button class="quiz-close" onclick="closeQuiz()">&#10005;</button></div>' +
         '<div class="quiz-body">' +
         '<div class="quiz-progress">QUESTION ' + (quizState.current + 1) + ' / ' + total + '</div>' +
@@ -1912,9 +1927,46 @@ function wireQuizOptions(q) {
     });
 }
 
-function quizNav(dir) {
+async function quizAdaptiveNext(q) {
+    const optionIds = quizState.answers[q.id] || [];
+    const payload = optionIds.length
+        ? { answer: { question_id: q.id, option_ids: optionIds } }
+        : {};
+    try {
+        const res = await authFetch(
+            API + '/quizzes/' + quizState.quizId + '/attempts/' + quizState.attemptId + '/next',
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.data || data;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function quizNav(dir) {
+    const fromIndex = quizState.current;
     const target = quizState.current + dir;
     if (target < 0 || target >= quizState.questions.length) return;
+    if (dir > 0 && quizState.adaptive && quizState.attemptId) {
+        const finished = quizState.questions[fromIndex];
+        const next = await quizAdaptiveNext(finished);
+        if (next && next.next_question) {
+            // Server-chosen next question takes precedence over local order.
+            quizState.questions[target] = next.next_question;
+            if (!quizState.answers[next.next_question.id]) {
+                quizState.answers[next.next_question.id] = [];
+            }
+        }
+        if (next && next.adaptive_rationale) {
+            quizState.rationale = next.adaptive_rationale;
+        }
+    }
     quizState.current = target;
     renderQuizQuestion();
 }

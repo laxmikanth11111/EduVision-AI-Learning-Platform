@@ -15,6 +15,7 @@ from app.models.quiz_attempt import QuizAttempt
 from app.models.quiz_content import Question
 from app.models.quiz_version import QuizVersion
 from app.models.user_answer import UserAnswer
+from app.observability.metrics import metrics
 from app.repositories.concept_repository import ConceptRepository
 from app.repositories.quiz_repository import (
     AnswerKeyRepository,
@@ -28,6 +29,8 @@ from app.repositories.quiz_repository import (
     UserAnswerRepository,
 )
 from app.services.adaptive_assessment import (
+    RATIONALE_CORRECT,
+    RATIONALE_INCORRECT,
     RATIONALE_START,
     AdaptiveCandidate,
     AnsweredQuestion,
@@ -204,6 +207,11 @@ class QuizAttemptService:
         # adaptive requests can be rejected without side effects.
         questions = await self._question_repo.list_by_version_with_options(version.id)
         if adaptive and len(questions) < MIN_ADAPTIVE_QUESTIONS:
+            metrics.increment(
+                "p12_adaptive_rejections_total",
+                reason="min_questions",
+                question_count=str(len(questions)),
+            )
             raise ValidationError(
                 message="Adaptive assessment requires at least two questions",
                 details={
@@ -264,6 +272,12 @@ class QuizAttemptService:
             .where(Quiz.id == quiz.id)
             .values(attempt_count=Quiz.attempt_count + 1)
         )
+
+        if adaptive_active:
+            metrics.increment(
+                "p12_adaptive_starts_total",
+                question_count=str(len(questions)),
+            )
 
         return {
             "attempt_id": attempt.public_id,
@@ -734,6 +748,14 @@ class QuizAttemptService:
             selected = questions_map.get(next_qa.question_id)
 
         completed = True if selected is None else remaining_count == 1
+
+        if attempt.adaptive and selected is not None:
+            outcome = "matched"
+            if adaptive_rationale == RATIONALE_CORRECT:
+                outcome = "up"
+            elif adaptive_rationale == RATIONALE_INCORRECT:
+                outcome = "down"
+            metrics.increment("p12_adaptive_orders_total", outcome=outcome)
 
         return {
             "attempt_id": attempt.public_id,

@@ -191,6 +191,10 @@ def init_default_metrics() -> None:
     metrics.register("p11_goals_created_total", "Learning goals created, by goal type.")
     metrics.register("p11_goals_completed_total", "Learning goals completed, by outcome.")
     metrics.register("p11_path_reads_total", "Learning-path reads, by outcome.")
+    # ── P12 adaptive assessment ───────────────────────────────────────────────
+    metrics.register("p12_adaptive_starts_total", "Adaptive attempts started, by question count.")
+    metrics.register("p12_adaptive_orders_total", "Adaptive question selections returned, by outcome (matched/up/down).")
+    metrics.register("p12_adaptive_rejections_total", "Adaptive start requests rejected, by reason.")
 
 
 
