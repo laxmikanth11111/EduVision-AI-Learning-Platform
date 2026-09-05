@@ -30,8 +30,9 @@ EXPECTED_JSONB_COLUMNS: set[tuple[str, str]] = {
     ("score_summaries", "breakdown"),
     ("user_answers", "option_ids"),
     ("user_answers", "matching_pairs"),
-    ("user_answers", "order_values"),
+("user_answers", "order_values"),
     ("user_feedback", "extra_json"),
+    ("educational_memories", "memory_data"),
 }
 
 EXPECTED_TABLES: set[str] = {
@@ -49,12 +50,13 @@ EXPECTED_TABLES: set[str] = {
     "user_feedback",
     "effectiveness_assessments",
     "learning_events",
-    "learning_sessions",
+"learning_sessions",
     "concepts",
+    "educational_memories",
 }
 
 
-EXPECTED_HEAD = "0032_quiz_attempts_adaptive"
+EXPECTED_HEAD = "0033_educational_memories"
 
 
 async def test_alembic_revision_is_single_head(pg_engine: AsyncEngine):

@@ -16,11 +16,25 @@ if TYPE_CHECKING:
     pass
 
 
+PUBLIC_ID_PREFIX = "ua_"
+
+
+def generate_user_answer_public_id() -> str:
+    return f"{PUBLIC_ID_PREFIX}{uuid.uuid4().hex[:16]}"
+
+
 class UserAnswer(Base, UUIDMixin, TimestampMixin):
     """Records the actual answer submitted by a user for a single question."""
 
     __tablename__ = "user_answers"
 
+    public_id: Mapped[str] = mapped_column(
+        String(40),
+        unique=True,
+        nullable=False,
+        index=True,
+        default=generate_user_answer_public_id,
+    )
     attempt_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("quiz_attempts.id", ondelete="CASCADE"),
