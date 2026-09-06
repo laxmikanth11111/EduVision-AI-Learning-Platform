@@ -46,6 +46,8 @@ class LessonProgressItem(BaseModel):
     completion_percentage: float = 0.0
     status: str = "in_progress"
     last_activity_at: datetime | None = None
+    resume_slide: int = 0
+    resume_link: str = ""
 
 
 class RecentAttempt(BaseModel):

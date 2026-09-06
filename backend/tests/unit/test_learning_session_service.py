@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from app.database.unit_of_work import UnitOfWork
@@ -41,9 +43,7 @@ class TestFindForLesson:
         )
         assert result is None
 
-    async def test_scoped_to_user(
-        self, db_session, make_user, make_presentation
-    ) -> None:
+    async def test_scoped_to_user(self, db_session, make_user, make_presentation) -> None:
         owner_a = await make_user()
         owner_b = await make_user()
         lesson = await _make_lesson(db_session, await make_presentation())
@@ -87,9 +87,7 @@ class TestGetOrCreate:
         assert first.id == second.id
         assert first.current_block_position == 0
 
-    async def test_stores_initial_progress(
-        self, db_session, make_user, make_presentation
-    ) -> None:
+    async def test_stores_initial_progress(self, db_session, make_user, make_presentation) -> None:
         user = await make_user()
         lesson = await _make_lesson(db_session, await make_presentation())
         session = await _service(db_session).get_or_create(
@@ -147,3 +145,113 @@ class TestAdvanceSetTopic:
             total_topics=3,
         )
         assert result is None
+
+
+class TestSetSlidePosition:
+    """P15: slide-accurate resume persistence."""
+
+    async def _session(self, db_session, user, lesson, total_topics=3) -> Any:
+        return await _service(db_session).get_or_create(
+            user_id=str(user.id),
+            lesson_id=lesson.id,
+            lesson_version_id=None,
+            topic_index=0,
+            total_topics=total_topics,
+        )
+
+    async def test_persists_slide_and_derives_topic(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson)
+        svc = _service(db_session)
+        assert session.resume_version == 1
+
+        updated = await svc.set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=3,
+            total_slides=6,
+        )
+        assert updated is not None
+        # Slide 3 == topic 1, visual slide (concept slide 2 + visual slide 3).
+        assert updated.current_slide_position == 3
+        assert updated.current_block_position == 1
+        assert updated.completion_percentage == round((2 / 3) * 100.0, 1)
+        assert updated.resume_version == 2
+
+    async def test_clamps_out_of_range_slide(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson)
+        svc = _service(db_session)
+
+        updated = await svc.set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=999,
+            total_slides=6,
+        )
+        assert updated is not None
+        assert updated.current_slide_position == 5  # clamped to last slide
+        assert updated.current_block_position == 2
+        assert updated.status == LearningSessionStatus.COMPLETED.value
+
+    async def test_negative_slide_floor_is_zero(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson)
+        updated = await _service(db_session).set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=-5,
+            total_slides=6,
+        )
+        assert updated is not None
+        assert updated.current_slide_position == 0
+        assert updated.current_block_position == 0
+
+    async def test_foreign_session_returns_none(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        owner_a = await make_user()
+        owner_b = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, owner_a, lesson)
+        result = await _service(db_session).set_slide_position(
+            session_id=session.public_id,
+            user_id=str(owner_b.id),
+            slide_index=2,
+            total_slides=6,
+        )
+        assert result is None
+        # Owner A's position is untouched by B's rejected attempt.
+        row = await _service(db_session).find_by_public_id(
+            session.public_id, user_id=str(owner_a.id)
+        )
+        assert row is not None
+        assert row.current_slide_position == 0
+
+    async def test_to_player_session_carries_resume_slide(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson)
+        svc = _service(db_session)
+        await svc.set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=4,
+            total_slides=6,
+        )
+        serialized = svc.to_player_session(session, 3, total_slides=6)
+        assert serialized["slide_index"] == 4
+        assert serialized["topic_index"] == 2
+        assert serialized["completion_percentage"] == 100.0
+        assert serialized["total_topics"] == 3

@@ -16,7 +16,12 @@ from app.core.dependencies import get_current_user
 from app.database.unit_of_work import UnitOfWork, get_unit_of_work
 from app.models.user import User
 from app.schemas.common import APIResponse
-from app.schemas.player import PlayerSessionResponse, PlayerStateResponse, StartPlayerRequest
+from app.schemas.player import (
+    PlayerSessionResponse,
+    PlayerStateResponse,
+    SetPositionRequest,
+    StartPlayerRequest,
+)
 from app.services.lesson_player_service import LessonPlayerService
 
 player_router = APIRouter(prefix="/lessons/{lesson_id}/player", tags=["Lesson Player"])
@@ -101,12 +106,32 @@ async def set_topic(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> APIResponse[PlayerSessionResponse]:
     service = LessonPlayerService(uow)
-    state = await service.set_topic(
-        request.session_id, request.topic_index, owner_id=str(user.id)
-    )
+    state = await service.set_topic(request.session_id, request.topic_index, owner_id=str(user.id))
     if state is None:
         raise ValueError(f"Session {request.session_id} not found")
     return APIResponse(data=PlayerSessionResponse(**state), message="Topic set")
+
+
+@player_router.post(
+    "/position",
+    response_model=APIResponse[PlayerSessionResponse],
+)
+async def set_slide_position(
+    lesson_id: str,
+    request: SetPositionRequest,
+    user: User = Depends(get_current_user),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> APIResponse[PlayerSessionResponse]:
+    """Persist the learner's exact slide position for slide-accurate resume."""
+    state = await LessonPlayerService(uow).set_position(
+        request.session_id, request.slide_index, owner_id=str(user.id)
+    )
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found",
+        )
+    return APIResponse(data=PlayerSessionResponse(**state), message="Position saved")
 
 
 @player_router.get(
@@ -120,9 +145,7 @@ async def get_checkpoint(
 ) -> APIResponse[dict[str, Any]]:
     """Return the assessment checkpoint bound to a lesson, if any."""
     try:
-        result = await LessonPlayerService(uow).get_checkpoint(
-            lesson_id, owner_id=str(user.id)
-        )
+        result = await LessonPlayerService(uow).get_checkpoint(lesson_id, owner_id=str(user.id))
     except PermissionError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     except ValueError as e:

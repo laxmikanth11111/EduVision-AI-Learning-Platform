@@ -36,7 +36,8 @@ logger = get_logger(__name__)
 # otherwise persist their position through the ``learning_sessions`` table via
 # ``LearningSessionService``, so this cache never holds per-user progress.
 _SESSIONS: BoundedCache[str, dict[str, Any]] = BoundedCache(
-    max_size=2048, ttl=3600,
+    max_size=2048,
+    ttl=3600,
 )
 
 
@@ -85,13 +86,22 @@ class LessonPlayerService:
 
         active_session = None
         if owner_id:
-            session = await self._progress.find_for_lesson(
-                user_id=owner_id, lesson_id=lesson.id
-            )
+            session = await self._progress.find_for_lesson(user_id=owner_id, lesson_id=lesson.id)
             if session is not None:
                 active_session = self._progress.to_player_session(
-                    session, total_topics, lesson_public_id=lesson.public_id
+                    session,
+                    total_topics,
+                    lesson_public_id=lesson.public_id,
+                    total_slides=total_topics * 2,
                 )
+                resumed_slide = int(active_session.get("slide_index") or 0)
+                if resumed_slide > 0:
+                    logger.info(
+                        "lesson_resume_restored",
+                        lesson=lesson.public_id,
+                        slide_index=resumed_slide,
+                        total_slides=total_topics * 2,
+                    )
         else:
             # Anonymous path: surface an existing transient session for this lesson.
             for _sid, state in _SESSIONS.items():
@@ -140,6 +150,7 @@ class LessonPlayerService:
                 "session_id": session_id,
                 "lesson_id": lesson.public_id,
                 "topic_index": 0,
+                "slide_index": 0,
                 "total_topics": total_topics,
                 "status": "active",
                 "completion_percentage": (
@@ -159,9 +170,43 @@ class LessonPlayerService:
             "version": self._serialize_version(version, lesson.public_id) if version else None,
             "topics": topics,
             "session": self._progress.to_player_session(
-                session, total_topics, lesson_public_id=lesson.public_id
+                session,
+                total_topics,
+                lesson_public_id=lesson.public_id,
+                total_slides=total_topics * 2,
             ),
         }
+
+    async def set_position(
+        self,
+        session_id: str,
+        slide_index: int,
+        *,
+        owner_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Set the user's absolute slide position in a persistent session.
+
+        Slide-accurate resume: each topic renders as two slides (concept then
+        visual), so ``slide_index = topic_index * 2 (+0 | +1)``. The persisted
+        session therefore restores the exact slide the learner was on. Returns
+        None when the session is absent or belongs to another user.
+        """
+        if owner_id is None:
+            return None
+        lesson_id = await self._lesson_id_for_session(session_id, owner_id)
+        if lesson_id is None:
+            return None
+        total = await self._topic_count_for_lesson(lesson_id)
+        total_slides = max(0, total * 2)
+        updated = await self._progress.set_slide_position(
+            session_id=session_id,
+            user_id=owner_id,
+            slide_index=slide_index,
+            total_slides=total_slides,
+        )
+        if updated is None:
+            return None
+        return self._progress.to_player_session(updated, total, total_slides=total_slides)
 
     async def advance_topic(
         self,
@@ -181,7 +226,7 @@ class LessonPlayerService:
             )
             if updated is None:
                 raise ValueError(f"Session {session_id} not found")
-            return self._progress.to_player_session(updated, total)
+            return self._progress.to_player_session(updated, total, total_slides=total * 2)
 
         # Anonymous path: mutate in-memory transient session
         state = _SESSIONS.get(session_id)
@@ -194,9 +239,7 @@ class LessonPlayerService:
         state["completion_percentage"] = (
             round(((capped + 1) / total) * 100.0, 1) if total > 0 else 0.0
         )
-        state["status"] = (
-            "completed" if total > 0 and capped >= total - 1 else "active"
-        )
+        state["status"] = "completed" if total > 0 and capped >= total - 1 else "active"
         _SESSIONS.set(session_id, state)
         return state
 
@@ -220,7 +263,7 @@ class LessonPlayerService:
             )
             if updated is None:
                 raise ValueError(f"Session {session_id} not found")
-            return self._progress.to_player_session(updated, total)
+            return self._progress.to_player_session(updated, total, total_slides=total * 2)
 
         # Anonymous path: mutate in-memory transient session
         state = _SESSIONS.get(session_id)
@@ -232,9 +275,7 @@ class LessonPlayerService:
         state["completion_percentage"] = (
             round(((capped + 1) / total) * 100.0, 1) if total > 0 else 0.0
         )
-        state["status"] = (
-            "completed" if total > 0 and capped >= total - 1 else "active"
-        )
+        state["status"] = "completed" if total > 0 and capped >= total - 1 else "active"
         _SESSIONS.set(session_id, state)
         return state
 
@@ -326,9 +367,7 @@ class LessonPlayerService:
         from app.services.recommendation_engine import generate_recommendations
 
         user_str = str(owner_id)
-        memory = await educational_memory_service.load_from_db(
-            self._uow.session, user_str
-        )
+        memory = await educational_memory_service.load_from_db(self._uow.session, user_str)
         recommendation = generate_recommendations(user_str, memory)
 
         top_action = recommendation.actions[0] if recommendation.actions else None
@@ -357,9 +396,7 @@ class LessonPlayerService:
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
-    async def _lesson_id_for_session(
-        self, session_id: str, owner_id: str
-    ) -> uuid.UUID | None:
+    async def _lesson_id_for_session(self, session_id: str, owner_id: str) -> uuid.UUID | None:
         session = await self._progress.find_by_public_id(session_id, user_id=owner_id)
         if session is None:
             return None
@@ -384,12 +421,14 @@ class LessonPlayerService:
             return []
         topics = []
         for block in version.blocks:
-            topics.append({
-                "index": block.position,
-                "title": block.heading or f"Topic {block.position + 1}",
-                "description": block.content or "",
-                "block_id": block.public_id,
-            })
+            topics.append(
+                {
+                    "index": block.position,
+                    "title": block.heading or f"Topic {block.position + 1}",
+                    "description": block.content or "",
+                    "block_id": block.public_id,
+                }
+            )
         return topics
 
     def _serialize_lesson(self, lesson: GeneratedLesson) -> dict[str, Any]:

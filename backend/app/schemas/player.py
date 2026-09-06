@@ -48,8 +48,10 @@ class PlayerSessionResponse(BaseModel):
     session_id: str
     lesson_id: str
     topic_index: int = 0
+    slide_index: int = 0
     total_topics: int = 0
     status: str = "active"
+    completion_percentage: float = 0.0
 
 
 class PlayerStateResponse(BaseModel):
@@ -64,3 +66,10 @@ class StartPlayerRequest(BaseModel):
 
     device_id: str | None = Field(default=None, max_length=128)
     client_metadata: dict[str, Any] | None = None
+
+
+class SetPositionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str = Field(min_length=1, max_length=40)
+    slide_index: int = Field(ge=0, le=100000)

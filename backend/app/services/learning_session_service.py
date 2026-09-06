@@ -30,6 +30,7 @@ from app.models.learning_session import (
     LearningSession,
     generate_session_public_id,
 )
+from app.observability.metrics import metrics
 from shared.constants import LearningSessionStatus
 
 logger = get_logger(__name__)
@@ -170,12 +171,43 @@ class LearningSessionService:
         await self._uow.flush()
         return session
 
+    async def set_slide_position(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        slide_index: int,
+        total_slides: int,
+    ) -> LearningSession | None:
+        """Set the user's absolute slide position in a session.
+
+        The slide index is clamped to ``[0, max(0, total_slides - 1)]`` and the
+        derived topic position is kept in sync via ``_apply_position`` so the
+        ``current_block_position`` and ``completion_percentage`` remain
+        consistent with the slide the learner is actually on.
+
+        Returns None when the session is absent or belongs to another user.
+        """
+        session = await self.find_by_public_id(session_id, user_id=user_id)
+        if session is None:
+            return None
+        total_topics = max(0, total_slides // 2)
+        topic_index = min(max(0, slide_index) // 2, max(0, total_topics - 1)) if total_topics else 0
+        self._apply_position(session, topic_index, total_topics)
+        session.current_slide_position = max(0, min(slide_index, max(0, total_slides - 1)))
+        session.resume_version = (session.resume_version or 0) + 1
+        session.last_activity_at = datetime.now(UTC)
+        await self._uow.flush()
+        metrics.increment("p15_position_updates_total", outcome="applied")
+        return session
+
     def to_player_session(
         self,
         session: LearningSession,
         total_topics: int,
         *,
         lesson_public_id: str | None = None,
+        total_slides: int | None = None,
     ) -> dict[str, Any]:
         """Serialize a persistent session into the player's session payload."""
         position = session.current_block_position or 0
@@ -186,6 +218,11 @@ class LearningSessionService:
             "session_id": session.public_id,
             "lesson_id": lesson_public_id or str(session.lesson_id),
             "topic_index": position,
+            "slide_index": max(
+                0, min(int(session.current_slide_position or 0), max(0, total_slides - 1))
+            )
+            if total_slides is not None
+            else int(session.current_slide_position or 0),
             "total_topics": total_topics,
             "status": status,
             "completion_percentage": round(float(session.completion_percentage or 0.0), 1),
@@ -199,6 +236,7 @@ class LearningSessionService:
     ) -> None:
         position = max(0, min(topic_index, max(0, total_topics - 1)))
         session.current_block_position = position
+        session.current_slide_position = position * 2
         session.completion_percentage = _progress_percentage(position, total_topics)
         session.status = (
             LearningSessionStatus.COMPLETED.value

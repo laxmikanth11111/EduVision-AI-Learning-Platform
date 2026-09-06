@@ -334,10 +334,12 @@
         if (lessons.length) {
             lessons.forEach(l => {
                 const cp = Math.min(100, Math.max(0, Number(l.completion_percentage) || 0));
+                const resumeLink = l.resume_link || ('/frontend/player.html?lesson=' + encodeURIComponent(l.lesson_id));
+                const resumeLabel = (Number(l.resume_slide) > 0) ? 'Resume from slide ' + (Number(l.resume_slide) + 1) : 'Start lesson';
                 parts.push(
-                    '<div class="lesson" onclick="window.location.href=\'/frontend/player.html?lesson=' + encodeURIComponent(l.lesson_id) + '\'">' +
+                    '<div class="lesson" onclick="window.location.href=\'' + resumeLink + '\'">' +
                     '<div><div class="lesson-title">' + escHtml(l.title) + '</div>' +
-                    '<div class="lesson-meta">' + escHtml(l.status) + '</div></div>' +
+                    '<div class="lesson-meta">' + escHtml(l.status) + ' &middot; ' + resumeLabel + '</div></div>' +
                     '<div class="lesson-right"><div class="lesson-bar"><div class="lesson-bar-fill" style="width:' + cp + '%;"></div></div>' +
                     '<span class="lesson-pct">' + pct(cp) + '%</span></div></div>'
                 );

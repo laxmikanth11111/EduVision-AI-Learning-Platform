@@ -109,12 +109,20 @@ class LearnerProgressService:
 
         concept_mastery = self._concept_mastery_summaries(memory.concept_records)
         weak = [
-            {"concept_id": cid, "concept_name": _concept_name(memory, cid), "mastery_score": memory.concept_records[cid].mastery_score}
-            for cid in memory.weak_concepts[: _MAX_CONCEPTS]
+            {
+                "concept_id": cid,
+                "concept_name": _concept_name(memory, cid),
+                "mastery_score": memory.concept_records[cid].mastery_score,
+            }
+            for cid in memory.weak_concepts[:_MAX_CONCEPTS]
         ]
         strong = [
-            {"concept_id": cid, "concept_name": _concept_name(memory, cid), "mastery_score": memory.concept_records[cid].mastery_score}
-            for cid in memory.mastered_concepts[: _MAX_CONCEPTS]
+            {
+                "concept_id": cid,
+                "concept_name": _concept_name(memory, cid),
+                "mastery_score": memory.concept_records[cid].mastery_score,
+            }
+            for cid in memory.mastered_concepts[:_MAX_CONCEPTS]
         ]
 
         return LearnerProgressResponse(
@@ -153,16 +161,32 @@ class LearnerProgressService:
         for lsess, lesson in rows:
             entry = by_lesson.get(lesson.id)
             if entry is None:
+                # Rows are newest-first, so the first session seen for a lesson
+                # is the one the learner most recently stopped on: its slide
+                # position drives the resume deep-link.
+                resume_slide = int(lsess.current_slide_position or 0)
+                resume_link = (
+                    f"/frontend/player.html?lesson={lesson.public_id}&slide={resume_slide}"
+                    if lesson.public_id
+                    else ""
+                )
                 by_lesson[lesson.id] = {
                     "public_id": lesson.public_id,
                     "title": lesson.title or "Untitled lesson",
                     "completion": 0.0,
                     "status": "in_progress",
                     "last_activity_at": lsess.last_activity_at,
+                    "resume_slide": resume_slide,
+                    "resume_link": resume_link,
                 }
             entry = by_lesson[lesson.id]
-            entry["completion"] = max(entry["completion"], float(lsess.completion_percentage or 0.0))
-            if lsess.status in _COMPLETED_STATUSES or float(lsess.completion_percentage or 0.0) >= _COMPLETED_PERCENTAGE:
+            entry["completion"] = max(
+                entry["completion"], float(lsess.completion_percentage or 0.0)
+            )
+            if (
+                lsess.status in _COMPLETED_STATUSES
+                or float(lsess.completion_percentage or 0.0) >= _COMPLETED_PERCENTAGE
+            ):
                 entry["status"] = "completed"
             if entry["last_activity_at"] is None or (
                 lsess.last_activity_at and lsess.last_activity_at > entry["last_activity_at"]
@@ -186,6 +210,8 @@ class LearnerProgressService:
                         completion_percentage=round(lesson["completion"], 1),
                         status=lesson["status"],
                         last_activity_at=lesson["last_activity_at"],
+                        resume_slide=lesson["resume_slide"],
+                        resume_link=lesson["resume_link"],
                     )
                 )
         return lesson_items, completed_count, in_progress_count
@@ -199,9 +225,7 @@ class LearnerProgressService:
         """
         total = (
             await session.execute(
-                select(func.count()).select_from(QuizAttempt).where(
-                    QuizAttempt.user_id == user_id
-                )
+                select(func.count()).select_from(QuizAttempt).where(QuizAttempt.user_id == user_id)
             )
         ).scalar_one()
 
@@ -239,9 +263,7 @@ class LearnerProgressService:
             )
         return attempts, int(total)
 
-    async def _action_lesson_map(
-        self, session: Any, actions: list[Any]
-    ) -> dict[str, str | None]:
+    async def _action_lesson_map(self, session: Any, actions: list[Any]) -> dict[str, str | None]:
         """Resolve concept -> lesson public id for recommendation actions.
 
         A single set-based join (concept -> lesson) so deep-linking a dashboard
@@ -300,9 +322,7 @@ class LearnerProgressService:
         for attempt in reversed(attempts[:_MAX_TREND_POINTS]):
             points.append(
                 TrendPoint(
-                    label=attempt.completed_at.strftime("%Y-%m-%d")
-                    if attempt.completed_at
-                    else "",
+                    label=attempt.completed_at.strftime("%Y-%m-%d") if attempt.completed_at else "",
                     value=attempt.percent_score,
                     source="quiz_attempt",
                 )

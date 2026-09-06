@@ -243,6 +243,8 @@ body.presenting .present-arrow { display: block; }
     </a>
     <span class="deck-title" id="deckName"></span>
     <a class="nav-link" href="/frontend/dashboard.html">Dashboard</a>
+    <a class="nav-link" href="/frontend/upload.html">New Deck</a>
+    <a class="nav-link" href="#" onclick="signOut(); return false;">Sign Out</a>
     <button class="btn-present" id="presentBtn" onclick="enterPresent()">&#9654; Present</button>
 </header>
 
@@ -262,7 +264,10 @@ body.presenting .present-arrow { display: block; }
 <footer>
     <button class="nav-btn" id="prevBtn" onclick="prevSlide()">&#9664; Previous</button>
     <span class="counter" id="counter"><b>0</b> / 0</span>
-    <button class="nav-btn" id="nextBtn" onclick="nextSlide()">Next &#9654;</button>
+    <span style="display:flex;gap:8px;">
+        <button class="nav-btn" id="nextBtn" onclick="nextSlide()">Next &#9654;</button>
+        <button class="nav-btn" id="finishBtn" style="display:none;background:var(--amber);color:var(--ink);border-color:var(--amber);font-weight:700;" onclick="finishLesson()">Finish &mdash; Dashboard &#9654;</button>
+    </span>
 </footer>
 
 <button class="present-exit" onclick="exitPresent()">Exit Present (Esc)</button>
@@ -318,6 +323,7 @@ if (!lessonId) { window.location.href = '/frontend/upload.html'; }
 
 let topics = [];
 let sessionId = null;
+let sessionSlide = 0;   // server-persisted slide position (resume anchor)
 let slides = [];          // { kind: 'concept'|'visual', topicIdx }
 let current = 0;
 let selectedTypes = {};   // topicIdx -> type
@@ -337,6 +343,7 @@ async function init() {
         const state = startData.data;
         topics = state.topics || [];
         sessionId = state.session ? state.session.session_id : null;
+        sessionSlide = state.session ? (parseInt(state.session.slide_index, 10) || 0) : 0;
         learnerCompletion = state.session ? (state.session.completion_percentage || 0) : 0;
 
         if (!topics.length) {
@@ -368,8 +375,11 @@ async function init() {
 }
 
 function startIndexFromUrl() {
+    // Explicit ?slide= deep-link wins; otherwise resume the server-persisted
+    // position ("pick up where you left off"); otherwise start at slide 0.
     const s = parseInt(params.get('slide'), 10);
     if (!isNaN(s) && s >= 0 && s < slides.length) return s;
+    if (sessionSlide > 0 && sessionSlide < slides.length) return sessionSlide;
     return 0;
 }
 
@@ -551,7 +561,10 @@ function prevSlide() { if (current > 0) goTo(current - 1); }
 function updateChrome() {
     document.getElementById('counter').innerHTML = '<b>' + (current + 1) + '</b> / ' + slides.length;
     document.getElementById('prevBtn').disabled = current === 0;
-    document.getElementById('nextBtn').disabled = current === slides.length - 1;
+    const isLast = current === slides.length - 1;
+    document.getElementById('nextBtn').style.display = isLast ? 'none' : '';
+    document.getElementById('nextBtn').disabled = isLast;
+    document.getElementById('finishBtn').style.display = isLast ? '' : 'none';
     document.querySelectorAll('.thumb').forEach(el => el.classList.remove('active'));
     const th = document.getElementById('thumb-' + current);
     if (th) {
@@ -562,17 +575,38 @@ function updateChrome() {
 
 let syncTimer = null;
 function syncTopic() {
-    // Best-effort session tracking; never blocks navigation.
+    // Slide-accurate session tracking; never blocks navigation.
     clearTimeout(syncTimer);
     syncTimer = setTimeout(async () => {
         try {
-            await authFetch(API + '/lessons/' + lessonId + '/player/set-topic', {
+            await authFetch(API + '/lessons/' + lessonId + '/player/position', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_id: sessionId, topic_index: slides[current].topicIdx }),
+                body: JSON.stringify({ session_id: sessionId, slide_index: current }),
             });
         } catch (e) { /* non-critical */ }
     }, 400);
+}
+
+function finishLesson() {
+    // Ensure the final slide position is saved before leaving, then return to
+    // the dashboard so the completed lesson shows up in progress.
+    if (sessionId) {
+        fetch(API + '/lessons/' + lessonId + '/player/position', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+            body: JSON.stringify({ session_id: sessionId, slide_index: current }),
+        }).catch(() => {});
+    }
+    window.location.href = '/frontend/dashboard.html';
+}
+
+function signOut() {
+    fetch(API + '/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    window.location.href = '/frontend/signin.html';
 }
 
 // ── Keyboard ─────────────────────────────────────────────────────────────
