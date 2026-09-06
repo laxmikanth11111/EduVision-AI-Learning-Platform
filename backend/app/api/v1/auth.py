@@ -63,7 +63,9 @@ async def _revoke_refresh_jti(jti: str) -> None:
         )
         return
     except Exception:
-        pass
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="auth_revocation")
     _revoked_refresh_jtis.add(jti)
 
 
@@ -79,7 +81,9 @@ async def _is_refresh_jti_revoked(jti: str) -> bool:
         exists = await redis.exists(f"{_REVOKED_REFRESH_KEY_PREFIX}{jti}")
         return bool(exists)
     except Exception:
-        pass
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="auth_revocation_check")
     return jti in _revoked_refresh_jtis
 
 
@@ -98,7 +102,9 @@ async def _store_oauth_state(state: str) -> None:
         )
         return
     except Exception:
-        pass
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="oauth_state_store")
     _oauth_states[state] = time.time()
 
 
@@ -115,7 +121,9 @@ async def _consume_oauth_state(state: str) -> bool:
         if value is not None:
             return (time.time() - float(value)) < _OAUTH_STATE_TTL_SECONDS
     except Exception:
-        pass
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="oauth_state_consume")
     if state not in _oauth_states:
         return False
     created_at = _oauth_states.pop(state)

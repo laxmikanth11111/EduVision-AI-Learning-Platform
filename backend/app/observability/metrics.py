@@ -156,6 +156,8 @@ def init_default_metrics() -> None:
     metrics.register("http_requests_total", "Total HTTP requests by method, route and status.")
     metrics.register("http_requests_duration_seconds", "HTTP request duration histogram in seconds.")
     metrics.set_histogram_buckets("http_requests_duration_seconds", DEFAULT_HISTOGRAM_BUCKETS)
+    metrics.register("redis_errors_total", "Redis command/pool failures, by operation.")
+    metrics.register("database_errors_total", "Database operation failures, by operation and outcome.")
     metrics.register("task_dispatch_total", "Background task enqueue attempts by task and outcome.")
     metrics.register("task_dispatch_retries_total", "Background task enqueue retries consumed by task.")
     metrics.register("worker_tasks_succeeded_total", "Celery worker task runs that succeeded, by task.")

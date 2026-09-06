@@ -144,7 +144,8 @@ def _on_task_prerun(task_id: str = "", **kwargs: Any) -> None:
     if task is not None:
         req = getattr(task, "request", None)
         if req is not None:
-            found = getattr(req, "headers", {}).get(_CORRELATION_HEADER) or None
+            headers = getattr(req, "headers", None) or {}
+            found = headers.get(_CORRELATION_HEADER) or None
     if found:
         # Bind only the correlation key; the API-side contextvar is restored
         # by reset_contextvars(**tokens) at postrun so an eager/in-process run

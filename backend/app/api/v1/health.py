@@ -122,6 +122,9 @@ async def _check_redis(redis: Redis) -> ComponentHealth:
             details={"redis_version": info.get("redis_version", "unknown")},
         )
     except Exception as e:
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="health_redis")
         logger.error("health_check_redis_failed", error=str(e))
         return ComponentHealth(status="unhealthy", details={"error": "redis connection failed"})
 

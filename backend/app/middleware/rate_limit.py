@@ -101,6 +101,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 pass
 
         self._redis_available: bool | None = None
+        self._redis_retry_at: float = 0.0
         self._route_overrides: dict[re.Pattern[str], tuple[int, int]] = {}
         if route_overrides:
             for pattern, (limit, window) in route_overrides.items():
@@ -108,7 +109,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def _get_redis(self) -> Redis | None:
         if self._redis_available is False:
-            return None
+            now = time.time()
+            if now < self._redis_retry_at:
+                return None
+            # Cooldown elapsed — re-probe by clearing the sticky-down state.
+            self._redis = None
+            self._redis_available = None
         if self._redis is not None:
             return self._redis
         try:
@@ -120,8 +126,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return self._redis
         except Exception as exc:
             self._redis_available = False
-            logger.error("rate_limit_redis_unavailable", error=str(exc))
+            self._redis_retry_at = time.time() + settings.RATE_LIMIT_REDIS_RECONNECT_SECONDS
+            from app.observability.metrics import metrics
+
+            metrics.increment("redis_errors_total", operation="rate_limit_get")
+            logger.error(
+                "rate_limit_redis_unavailable",
+                error=str(exc),
+                retry_after_seconds=settings.RATE_LIMIT_REDIS_RECONNECT_SECONDS,
+            )
             return None
+
+    _unpatched_get_redis = _get_redis
 
     async def dispatch(
         self,
@@ -207,6 +223,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             self._redis_available = False
             self._redis = None
+            self._redis_retry_at = time.time() + settings.RATE_LIMIT_REDIS_RECONNECT_SECONDS
+            from app.observability.metrics import metrics
+
+            metrics.increment("redis_errors_total", operation="rate_limit_check")
             logger.error("rate_limit_check_failed", error=str(exc))
             return await call_next(request)
 
@@ -280,7 +300,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             key,
             window,
             limit,
-            int(now * 1000),
+            int(now),
         )
         if isinstance(result, list) and len(result) == 2:
             return int(result[0]), int(result[1])

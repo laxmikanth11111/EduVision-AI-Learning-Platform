@@ -4,11 +4,13 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.analytics import analytics_router
@@ -82,10 +84,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     try:
         if settings.AUTO_MIGRATE_ON_STARTUP:
+            from pathlib import Path
+
             from alembic import command
             from alembic.config import Config
 
-            alembic_cfg = Config("alembic.ini")
+            alembic_path = Path("alembic.ini")
+            if not alembic_path.exists():
+                alembic_path = Path(__file__).resolve().parents[2] / "alembic.ini"
+            alembic_cfg = Config(str(alembic_path))
             await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
             logger.info("alembic_migrations_applied")
     except Exception as e:
@@ -184,13 +191,82 @@ uploads_dir = settings.upload_path
 uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
-frontend_dir = os.path.join(os.getcwd(), "frontend")
-os.makedirs(frontend_dir, exist_ok=True)
+def _resolve_frontend_dir() -> Path:
+    # 1. Look relative to this file: backend/frontend
+    pkg_frontend = Path(__file__).resolve().parent.parent / "frontend"
+    if pkg_frontend.is_dir():
+        return pkg_frontend
+    # 2. Look in cwd / backend / frontend
+    cwd_backend = Path(os.getcwd()) / "backend" / "frontend"
+    if cwd_backend.is_dir():
+        return cwd_backend
+    # 3. Look in cwd / frontend
+    cwd_frontend = Path(os.getcwd()) / "frontend"
+    if cwd_frontend.is_dir():
+        return cwd_frontend
+    pkg_frontend.mkdir(parents=True, exist_ok=True)
+    return pkg_frontend
+
+
+frontend_dir = _resolve_frontend_dir()
 app.mount(
     "/frontend",
-    StaticFiles(directory=frontend_dir, html=True),
+    StaticFiles(directory=str(frontend_dir), html=True),
     name="frontend",
 )
+
+
+@app.get("/", include_in_schema=False)
+async def root_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/frontend/dashboard.html", status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/login", include_in_schema=False)
+@app.get("/signin", include_in_schema=False)
+async def signin_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/frontend/signin.html", status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/signup", include_in_schema=False)
+@app.get("/register", include_in_schema=False)
+async def signup_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/frontend/signup.html", status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/dashboard", include_in_schema=False)
+async def dashboard_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/frontend/dashboard.html", status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/player", include_in_schema=False)
+async def player_redirect(request: Request) -> RedirectResponse:
+    query = request.url.query
+    dest = "/frontend/player.html" + (f"?{query}" if query else "")
+    return RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/tutor", include_in_schema=False)
+async def tutor_redirect(request: Request) -> RedirectResponse:
+    query = request.url.query
+    dest = "/frontend/tutor.html" + (f"?{query}" if query else "")
+    return RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/videos", include_in_schema=False)
+async def videos_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/frontend/videos.html", status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/upload", include_in_schema=False)
+async def upload_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/frontend/upload.html", status_code=status.HTTP_302_FOUND)
+
+
+@app.get("/processing", include_in_schema=False)
+async def processing_redirect(request: Request) -> RedirectResponse:
+    query = request.url.query
+    dest = "/frontend/processing.html" + (f"?{query}" if query else "")
+    return RedirectResponse(url=dest, status_code=status.HTTP_302_FOUND)
 
 
 @app.get("/favicon.ico", include_in_schema=False)

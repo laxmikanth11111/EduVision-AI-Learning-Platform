@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # so the settings singleton already sees the mock/offline video runtime.
 os.environ.setdefault("VIDEO_RENDER_BACKEND", "mock")
 os.environ.setdefault("VIDEO_RENDER_EXECUTOR", "inline")
+os.environ.setdefault("AI_PROVIDER", "local")
 
 import pytest
 import pytest_asyncio
@@ -68,9 +69,11 @@ async def setup_database() -> AsyncGenerator[None]:
     original_uow_async_session_factory = uow_module.async_session_factory
 
     original_storage_provider = settings.STORAGE_PROVIDER
+    original_auto_migrate = settings.AUTO_MIGRATE_ON_STARTUP
     settings.APP_ENV = "test"
     settings.STORAGE_PROVIDER = "local"
     settings.DATABASE_URL = "sqlite+aiosqlite:///test.db"
+    settings.AUTO_MIGRATE_ON_STARTUP = False
     db_session_module.async_session_factory = TestSessionLocal
     uow_module.async_session_factory = TestSessionLocal
 
@@ -92,6 +95,7 @@ async def setup_database() -> AsyncGenerator[None]:
     settings.DATABASE_URL = original_db_url
     settings.APP_ENV = original_app_env
     settings.STORAGE_PROVIDER = original_storage_provider
+    settings.AUTO_MIGRATE_ON_STARTUP = original_auto_migrate
 
 
 @pytest_asyncio.fixture

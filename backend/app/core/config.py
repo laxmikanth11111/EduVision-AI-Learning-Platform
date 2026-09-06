@@ -385,6 +385,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_DEFAULT: int = 100
     RATE_LIMIT_WINDOW: int = 60
+    # After a Redis failure the limiter fails open but re-probes every N seconds
+    # so a transient outage does not disable throttling for the process lifetime.
+    RATE_LIMIT_REDIS_RECONNECT_SECONDS: float = 5.0
     RATE_LIMIT_TRUSTED_PROXIES: str = "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     RATE_LIMIT_WHITELIST: str = ""
     RATE_LIMIT_BLACKLIST: str = ""

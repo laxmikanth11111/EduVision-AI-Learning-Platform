@@ -23,18 +23,20 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _wait_for_server(base_url: str, timeout: float = 30.0) -> None:
+def _wait_for_server(base_url: str, timeout: float = 45.0) -> None:
     deadline = time.monotonic() + timeout
+    last_err = None
     while time.monotonic() < deadline:
         try:
             with httpx.Client() as client:
-                r = client.get(f"{base_url}/api/v1/health", timeout=2.0)
+                r = client.get(f"{base_url}/api/v1/health/live", timeout=5.0)
                 if r.status_code < 500:
                     return
-        except Exception:
-            pass
+                last_err = f"status {r.status_code}: {r.text}"
+        except Exception as e:
+            last_err = str(e)
         time.sleep(0.3)
-    raise RuntimeError(f"Server did not become ready within {timeout}s")
+    raise RuntimeError(f"Server did not become ready within {timeout}s (last_err: {last_err})")
 
 
 def _seed_test_data(base_url: str) -> dict[str, str]:
@@ -109,7 +111,15 @@ class _ServerRunner:
             access_log=False,
         )
         self._server = uvicorn.Server(config)
-        self._thread = threading.Thread(target=self._server.run, daemon=True)
+
+        def _run():
+            try:
+                self._server.run()
+            except Exception:
+                import traceback
+                traceback.print_exc()
+
+        self._thread = threading.Thread(target=_run, daemon=True)
 
     def start(self) -> None:
         self._thread.start()

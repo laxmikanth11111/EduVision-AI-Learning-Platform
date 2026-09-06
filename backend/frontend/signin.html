@@ -128,7 +128,9 @@ document.getElementById('submitBtn').addEventListener('click', async function() 
         localStorage.setItem('user', JSON.stringify(data.user));
         status.textContent = 'Signed in! Redirecting...';
         status.className = 'status-msg success';
-        setTimeout(function() { window.location.href = 'upload.html'; }, 600);
+        var params = new URLSearchParams(window.location.search);
+        var target = params.get('redirect') || 'upload.html';
+        setTimeout(function() { window.location.href = target; }, 600);
     } catch (err) {
         status.textContent = err.message;
         status.className = 'status-msg error';
