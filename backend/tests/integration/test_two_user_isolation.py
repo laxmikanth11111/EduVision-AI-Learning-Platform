@@ -62,6 +62,7 @@ async def _seed_two_users_and_use_jwt_auth(setup_database: None):
                     )
                 )
         await session.flush()
+        await session.commit()
 
     # Remove autouse _FakeUser override
     app.dependency_overrides.pop(get_current_user, None)
@@ -409,7 +410,48 @@ async def test_user_b_cannot_read_user_a_animation_metadata() -> None:
         assert resp.status_code == 404
 
 
-# ── Video Projects (in-memory cache) ──────────────────────────────────────────
+# ── Video Projects (persistent rows, P16 async runtime) ──────────────────────
+
+
+async def test_user_b_cannot_read_user_a_video_project_public_id() -> None:
+    async with await _make_client() as client:
+        resp = await client.post(
+            "/api/v1/video-projects",
+            json={"topic": "Secret Video Public", "description": "User A private video project for isolation testing"},
+            headers=_headers(_USER_A_ID),
+        )
+        assert resp.status_code == 201
+        public_id = resp.json()["data"]["public_id"]
+
+        resp = await client.get(
+            f"/api/v1/video-projects/{public_id}",
+            headers=_headers(_USER_A_ID),
+        )
+        assert resp.status_code == 200
+
+        resp = await client.get(
+            f"/api/v1/video-projects/{public_id}",
+            headers=_headers(_USER_B_ID),
+        )
+        assert resp.status_code == 404
+
+
+async def test_user_b_cannot_render_user_a_video_project_public_id() -> None:
+    async with await _make_client() as client:
+        resp = await client.post(
+            "/api/v1/video-projects",
+            json={"topic": "Secret Render B", "description": "User A private render project for isolation testing"},
+            headers=_headers(_USER_A_ID),
+        )
+        assert resp.status_code == 201
+        public_id = resp.json()["data"]["public_id"]
+
+        resp = await client.post(
+            f"/api/v1/video-projects/{public_id}/render",
+            json={"force": True},
+            headers=_headers(_USER_B_ID),
+        )
+        assert resp.status_code == 404
 
 
 async def test_user_b_cannot_read_user_a_video_project() -> None:

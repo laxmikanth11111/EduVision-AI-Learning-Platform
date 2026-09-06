@@ -58,6 +58,7 @@ from app.models.user_answer import UserAnswer
 from app.models.user_feedback import UserFeedback
 from app.models.vector_index import VectorIndex
 from app.models.vector_index_version import VectorIndexVersion
+from app.models.video_project import VideoProjectRecord
 from app.models.visual_knowledge_graph import (
     ComponentMetadata,
     LearningObjective,
@@ -136,4 +137,5 @@ __all__ = [
     "TutorSession",
     "TutorConversation",
     "TutorMessage",
+    "VideoProjectRecord",
 ]

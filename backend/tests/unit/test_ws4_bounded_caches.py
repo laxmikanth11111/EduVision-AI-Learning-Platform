@@ -1,8 +1,12 @@
-"""WS4: integration tests verifying the six scoped caches are bounded.
+"""WS4: integration tests verifying the five scoped caches are bounded.
 
 These tests confirm that the actual application caches
-(_VIDEO_PROJECT_CACHE, _BLUEPRINT_CACHE, _SESSIONS, _memories,
-_contexts, visual _cache) use BoundedCache and enforce max size / TTL.
+(_BLUEPRINT_CACHE, _SESSIONS, _memories, _contexts, visual _cache)
+use BoundedCache and enforce max size / TTL.
+
+The former ``_VIDEO_PROJECT_CACHE`` was retired in P16 when video projects
+became persistent learner-owned rows (``video_projects`` table), removing the
+in-memory fabricated-data fallback entirely.
 """
 
 from __future__ import annotations
@@ -43,31 +47,7 @@ def _assert_bounded_growth(
     )
 
 
-# ── 1. _VIDEO_PROJECT_CACHE ────────────────────────────────────────────
-
-
-class TestVideoProjectCache:
-    def test_is_bounded_cache(self) -> None:
-        from app.api.v1.video_router import _VIDEO_PROJECT_CACHE
-        _assert_bounded(_VIDEO_PROJECT_CACHE, 500, "_VIDEO_PROJECT_CACHE")
-
-    def test_has_ttl(self) -> None:
-        from app.api.v1.video_router import _VIDEO_PROJECT_CACHE
-        _assert_ttl(_VIDEO_PROJECT_CACHE, 1800, "_VIDEO_PROJECT_CACHE")
-
-    def test_max_size_enforced(self) -> None:
-        from app.api.v1.video_router import _VIDEO_PROJECT_CACHE
-        _assert_bounded_growth(_VIDEO_PROJECT_CACHE, 500, "VPC")
-
-    def test_get_set_cycle(self) -> None:
-        from app.api.v1.video_router import _VIDEO_PROJECT_CACHE
-        _VIDEO_PROJECT_CACHE.set("ws4_test_vp", {"owner_id": "u1", "data": "proj"})
-        assert _VIDEO_PROJECT_CACHE.get("ws4_test_vp") == {"owner_id": "u1", "data": "proj"}
-        _VIDEO_PROJECT_CACHE.delete("ws4_test_vp")
-        assert _VIDEO_PROJECT_CACHE.get("ws4_test_vp") is None
-
-
-# ── 2. _BLUEPRINT_CACHE ────────────────────────────────────────────────
+# ── 1. _BLUEPRINT_CACHE ────────────────────────────────────────────────
 
 
 class TestBlueprintCache:
@@ -91,7 +71,7 @@ class TestBlueprintCache:
         assert _BLUEPRINT_CACHE.get("ws4_test_bp") is None
 
 
-# ── 3. _SESSIONS ───────────────────────────────────────────────────────
+# ── 2. _SESSIONS ───────────────────────────────────────────────────────
 
 
 class TestSessionsCache:
@@ -122,7 +102,7 @@ class TestSessionsCache:
         _SESSIONS.delete("ws4_ttl_sess")
 
 
-# ── 4. _memories (EducationalMemoryService) ────────────────────────────
+# ── 3. _memories (EducationalMemoryService) ────────────────────────────
 
 
 class TestMemoriesCache:
@@ -171,7 +151,7 @@ class TestMemoriesCache:
         assert educational_memory_service._memories.get("ws4_clear_user") is None
 
 
-# ── 5. _contexts (LearningContextService) ──────────────────────────────
+# ── 4. _contexts (LearningContextService) ──────────────────────────────
 
 
 class TestContextsCache:
@@ -206,7 +186,7 @@ class TestContextsCache:
         assert learning_context_service._contexts.get("ws4_test_ctx") is None
 
 
-# ── 6. visual _cache (VisualIntelligenceService) ───────────────────────
+# ── 5. visual _cache (VisualIntelligenceService) ───────────────────────
 
 
 class TestVisualCache:

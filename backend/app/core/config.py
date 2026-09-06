@@ -238,6 +238,26 @@ class Settings(BaseSettings):
     TUTOR_INJECTION_FLAG_THRESHOLD: float = 0.6
     TUTOR_MAX_MESSAGE_QUERY_CHARS: int = 300
 
+    # ── Video rendering runtime (P16) ────────────────────────────────────────
+    # ``VIDEO_RENDER_EXECUTOR`` selects how a render job is executed:
+    #   - ``inline`` (default): renders in a background asyncio task inside the
+    #     same process so the request handler never blocks the event loop and no
+    #     separate worker is required (single-process demo/dev deployments).
+    #   - ``celery``: dispatches ``eduvision.videos.render_project`` through the
+    #     broker for scale-out; requires a running Celery worker on the
+    #     ``videos`` queue.
+    # ``VIDEO_RENDER_BACKEND`` selects the renderer: ``real`` (FFmpeg/OpenCV
+    # binary pipeline) or ``mock`` (deterministic, instant, no binaries — used
+    # by the test suites via tests/conftest.py env defaults). ``TOPIC``/schema
+    # bounds mirror the assistant's safety posture.
+    VIDEO_RENDER_EXECUTOR: str = "inline"
+    VIDEO_RENDER_BACKEND: str = "real"
+    VIDEO_RENDER_MAX_CONCURRENT_PER_USER: int = 2
+    VIDEO_RENDER_TIMEOUT_SECONDS: float = 1800.0
+    VIDEO_RENDER_MAX_TOPIC_CHARS: int = 300
+    VIDEO_RENDER_MAX_COMPONENTS: int = 50
+    VIDEO_RENDER_PROGRESS_MILESTONES: int = 5
+
     # ── RAG / Embeddings (Phase 4E.1 + 4E.2) ─────────────────────────────────
     # Provider/model for the embedding pipeline. ``EMBEDDING_PROVIDER`` accepts
     # the same values as ``AI_PROVIDER`` plus ``openrouter``/``ollama``. When

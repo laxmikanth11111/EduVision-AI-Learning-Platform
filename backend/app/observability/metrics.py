@@ -202,6 +202,12 @@ def init_default_metrics() -> None:
     metrics.register("p14_review_outcomes_total", "Review completions recorded, by reported recall outcome.")
     metrics.register("p14_retention_views_total", "Learner retention-endpoint reads, by outcome.")
     metrics.register("p14_retention_errors_total", "Learner retention-endpoint failures, by reason.")
+    # ── P16 async learner-owned video runtime ─────────────────────────────────
+    metrics.register("p16_video_render_starts_total", "Video render passes started.")
+    metrics.register("p16_video_render_completions_total", "Video render passes completed (ready).")
+    metrics.register("p16_video_render_failures_total", "Video render passes failed.")
+    metrics.register("p16_video_render_concurrency_rejects_total", "Render requests rejected by per-user concurrency cap, by reason.")
+    metrics.register("p16_video_render_duration_seconds", "Video render duration histogram in seconds, by outcome.")
 
 
 

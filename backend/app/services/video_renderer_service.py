@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import os
 import subprocess
+from collections.abc import Callable
 
 import cv2
 import imageio_ffmpeg
@@ -38,6 +39,7 @@ class VideoRendererService:
         width: int = 1280,
         height: int = 720,
         fps: int = 12,
+        progress_callback: Callable[[float], None] | None = None,
     ) -> str:
         """Renders complete binary MP4 video file with synchronized AAC audio track.
 
@@ -79,6 +81,9 @@ class VideoRendererService:
                         height=height,
                     )
                     writer.write(frame_bgr)
+
+                if progress_callback is not None and total_scenes:
+                    progress_callback((scene_idx + 1) / total_scenes * 0.9)
 
         finally:
             writer.release()
@@ -196,6 +201,9 @@ class VideoRendererService:
             has_audio_stream=has_audio_stream,
             path=output_path,
         )
+
+        if progress_callback is not None:
+            progress_callback(1.0)
 
         return f"/uploads/videos/{output_filename}"
 

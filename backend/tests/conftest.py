@@ -8,6 +8,11 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+# Test-environment defaults MUST be applied before any app module import below
+# so the settings singleton already sees the mock/offline video runtime.
+os.environ.setdefault("VIDEO_RENDER_BACKEND", "mock")
+os.environ.setdefault("VIDEO_RENDER_EXECUTOR", "inline")
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -164,6 +169,9 @@ def disable_celery_task_dispatch():
         new=MagicMock(),
     ), patch(
         "app.workers.tasks.process_source_ingestion_task.delay",
+        new=MagicMock(),
+    ), patch(
+        "app.workers.video_tasks.video_render_task.delay",
         new=MagicMock(),
     ):
         yield

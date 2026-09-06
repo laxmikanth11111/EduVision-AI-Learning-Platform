@@ -53,10 +53,11 @@ EXPECTED_TABLES: set[str] = {
 "learning_sessions",
     "concepts",
     "educational_memories",
+    "video_projects",
 }
 
 
-EXPECTED_HEAD = "0033_educational_memories"
+EXPECTED_HEAD = "0034_video_projects"
 
 
 async def test_alembic_revision_is_single_head(pg_engine: AsyncEngine):

@@ -1,8 +1,8 @@
 """P13 learner-analytics aggregation on real PostgreSQL.
 
 Runs against the Alembic-migrated scratch database (postgres:16-alpine) so the
-aggregation exercises the *production schema lineage* (head must remain
-``0033_educational_memories``; P13 adds no migration). It exercises the
+aggregation exercises the *production schema lineage* (head is ``0034_video_projects``;
+P13 itself adds no migration). It exercises the
 ``LearnerAnalyticsService`` work directly against the real engine and pins the
 correct sums/avgs over ``quiz_attempts`` / ``score_summaries`` /
 ``learning_sessions`` + the cached educational memory — guarding against future
@@ -217,11 +217,11 @@ def _build_memory_json(user_id: str, weak_id: str, strong_id: str) -> dict[str, 
 
 
 async def test_p13_no_new_migration_head_unchanged(pg_session: AsyncSession) -> None:
-    """P13 reads existing tables only — the Alembic head must stay 0033."""
+    """P13 reads existing tables only — the Alembic head is 0034 (P16 added it)."""
     head = (
         await pg_session.execute(text("SELECT version_num FROM alembic_version"))
     ).scalar_one()
-    assert head == "0033_educational_memories"
+    assert head == "0034_video_projects"
 
 
 async def test_p13_overview_aggregates_on_migrated_schema(

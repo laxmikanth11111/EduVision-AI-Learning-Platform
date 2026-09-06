@@ -32,6 +32,7 @@ from app.api.v1.review import review_router
 from app.api.v1.simulation import simulation_router
 from app.api.v1.storage import storage_router
 from app.api.v1.tutor import tutor_router
+from app.api.v1.video_projects import video_projects_router
 from app.api.v1.video_router import video_router
 from app.api.v1.video_runtime_router import video_runtime_router
 from app.api.v1.visual_canvases import visual_router
@@ -166,6 +167,7 @@ app.include_router(simulation_router, prefix="/api/v1")
 app.include_router(animation_router, prefix="/api/v1")
 app.include_router(animation_runtime_router, prefix="/api/v1")
 app.include_router(video_router, prefix="/api/v1")
+app.include_router(video_projects_router, prefix="/api/v1")
 app.include_router(video_runtime_router, prefix="/api/v1")
 app.include_router(assistant_router, prefix="/api/v1")
 app.include_router(effectiveness_router, prefix="/api/v1")

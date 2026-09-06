@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Lessons - EduVision AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0E1A2B;
+            --paper: #F4EFE4;
+            --amber: #F2A623;
+            --teal: #1D9E75;
+            --coral: #D85A30;
+            --line: rgba(244,239,228,0.14);
+            --muted: rgba(244,239,228,0.55);
+            --muted-strong: rgba(244,239,228,0.72);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--ink); color: var(--paper); font-family: 'Manrope', sans-serif; min-height: 100vh; }
+        h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+
+        nav { border-bottom: 1px solid var(--line); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+        .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+        .brand-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--amber); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink); font-family: 'Space Grotesk', sans-serif; }
+        .nav-right { display: flex; align-items: center; gap: 16px; }
+        .nav-user { font-size: .85rem; color: var(--muted-strong); }
+        .nav-links { display: flex; align-items: center; gap: 18px; }
+        .nav-links a { color: var(--muted); text-decoration: none; font-size: .86rem; font-family: 'Space Grotesk', sans-serif; transition: color .2s; }
+        .nav-links a:hover { color: var(--paper); }
+        .nav-links a.active { color: var(--paper); font-weight: 600; }
+        .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: .5rem 1rem; border-radius: 2px; cursor: pointer; font-size: .85rem; transition: border-color .2s, color .2s; }
+        .btn-ghost:hover { border-color: var(--paper); color: var(--paper); }
+        .btn-solid { background: var(--amber); color: var(--ink); border: none; padding: .5rem 1.1rem; border-radius: 2px; cursor: pointer; font-size: .86rem; font-weight: 600; font-family: 'Space Grotesk', sans-serif; transition: background .2s; }
+        .btn-solid:hover { background: var(--teal); }
+        .btn-solid:disabled { opacity: .55; cursor: default; }
+
+        .container { max-width: 960px; margin: 2.5rem auto; padding: 0 1.5rem; }
+        .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .page-head h1 { font-size: 1.7rem; }
+        .page-sub { font-size: .9rem; color: var(--muted); margin-top: .25rem; }
+
+        .card { border: 1px solid var(--line); border-radius: 3px; background: rgba(244,239,228,0.02); padding: 1.15rem 1.3rem; margin-bottom: 1.5rem; }
+        .card h2 { font-size: 1rem; color: var(--muted-strong); margin-bottom: .9rem; }
+
+        .create-row { display: flex; gap: .7rem; flex-wrap: wrap; }
+        .create-row input { flex: 1; min-width: 260px; background: rgba(244,239,228,0.05); border: 1px solid var(--line); color: var(--paper); border-radius: 2px; padding: .6rem .8rem; font-size: .9rem; font-family: 'Manrope', sans-serif; }
+        .create-row input:focus { outline: none; border-color: var(--amber); }
+        .create-hint { font-size: .76rem; color: var(--muted); margin-top: .55rem; }
+
+        .render-box { display: none; margin-bottom: 1.5rem; }
+        .render-box fieldset { border: 1px solid var(--line); border-radius: 3px; padding: 1rem 1.1rem; }
+        .render-box legend { font-family: 'Space Grotesk', sans-serif; font-size: .8rem; color: var(--muted-strong); padding: 0 .4rem; letter-spacing: .06em; text-transform: uppercase; }
+        .render-topic { font-family: 'Space Grotesk', sans-serif; font-size: 1.05rem; margin-bottom: .5rem; }
+        .progress-track { width: 100%; height: 8px; border-radius: 4px; background: rgba(244,239,228,0.12); overflow: hidden; margin: .7rem 0; }
+        .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--teal), var(--amber)); transition: width .6s ease; }
+        .render-status { font-size: .85rem; color: var(--muted); }
+        .render-status.error { color: var(--coral); }
+        .render-actions { margin-top: 1rem; display: flex; gap: .6rem; flex-wrap: wrap; }
+        .player-wrap { margin-top: .9rem; width: 100%; }
+        .player-wrap video { width: 100%; border-radius: 3px; background: #000; border: 1px solid var(--line); }
+
+        .videos { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .9rem; }
+        .vitem { border: 1px solid var(--line); border-radius: 3px; padding: .95rem 1.05rem; background: rgba(244,239,228,0.02); display: flex; flex-direction: column; gap: .6rem; }
+        .vitem .v-title { font-family: 'Space Grotesk', sans-serif; font-size: .95rem; font-weight: 600; }
+        .vitem .v-meta { font-size: .74rem; color: var(--muted); }
+        .vitem .mini-track { width: 100%; height: 5px; border-radius: 3px; background: rgba(244,239,228,0.12); overflow: hidden; }
+        .vitem .mini-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--amber)); }
+        .vitem .v-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: auto; }
+        .chip { align-self: flex-start; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 999px; font-family: 'Space Grotesk', sans-serif; border: 1px solid var(--line); }
+        .chip.queued { border-color: rgba(244,239,228,.5); color: var(--muted-strong); }
+        .chip.rendering { border-color: rgba(242,166,35,.6); color: var(--amber); background: rgba(242,166,35,.08); }
+        .chip.ready { border-color: rgba(29,158,117,.6); color: var(--teal); background: rgba(29,158,117,.1); }
+        .chip.failed { border-color: rgba(216,90,48,.6); color: var(--coral); background: rgba(216,90,48,.1); }
+        .mini-btn { font-size: .72rem; font-family: 'Space Grotesk', sans-serif; color: var(--amber); border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: .28rem .7rem; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+        .mini-btn:hover:not(:disabled) { background: var(--amber); color: var(--ink); border-color: var(--amber); }
+        .mini-btn:disabled { opacity: .5; cursor: default; }
+        .empty { color: var(--muted); font-size: .88rem; padding: 1.5rem 0; }
+        .error-text { color: var(--coral); font-size: .85rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/frontend/dashboard.html" class="nav-brand">
+            <div class="brand-mark">EV</div>
+            <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem;">EduVision AI</span>
+        </a>
+        <div class="nav-right">
+            <div class="nav-links">
+                <a href="/frontend/dashboard.html">Learner Dashboard</a>
+                <a href="/frontend/videos.html" class="active">Video Lessons</a>
+                <a href="/frontend/tutor.html">Mastery Tutor</a>
+                <a href="/frontend/upload.html">Create a Deck</a>
+            </div>
+            <span class="nav-user" id="userName"></span>
+            <button class="btn-ghost" id="logoutBtn">Sign Out</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-head">
+            <div>
+                <h1>Video Lessons</h1>
+                <p class="page-sub">Generate an animated explainer of any topic. Renders happen in the background — you can keep learning while it compiles.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Create a new video</h2>
+            <div class="create-row">
+                <input id="topicInput" type="text" maxlength="300" placeholder="e.g. How photosynthesis converts light into chemical energy" autocomplete="off">
+                <button class="btn-solid" id="createBtn">Generate</button>
+            </div>
+            <p class="create-hint" id="createHint"></p>
+        </div>
+
+        <div class="render-box" id="renderBox">
+            <fieldset>
+                <legend>Render status</legend>
+                <div class="render-topic" id="renderTopic"></div>
+                <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="render-status" id="renderStatus">Queued…</div>
+                <div class="player-wrap" id="playerWrap" style="display:none;">
+                    <video id="videoPlayer" controls preload="metadata"></video>
+                </div>
+                <div class="render-actions" id="renderActions" style="display:none;">
+                    <button class="mini-btn" id="rerenderBtn">Re-render</button>
+                </div>
+            </fieldset>
+        </div>
+
+        <div class="card">
+            <h2>My videos</h2>
+            <div class="videos" id="videoList"></div>
+            <div class="empty" id="emptyState" style="display:none;">No videos yet. Create one above to see it here.</div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api/v1';
+        const ACTIVE = new Set(['queued', 'rendering']);
+        let activePublicId = null;
+        let pollTimer = null;
+
+        (async function init() {
+            let user = JSON.parse(localStorage.getItem('user') || 'null');
+            if (!user) {
+                try {
+                    const r = await fetch(API + '/auth/refresh', { method: 'POST' });
+                    if (r.ok) {
+                        const d = await r.json();
+                        const at = d.access_token || d.data?.access_token || d.tokens?.access_token;
+                        const rt = d.refresh_token || d.data?.refresh_token || d.tokens?.refresh_token;
+                        if (at) {
+                            localStorage.setItem('access_token', at);
+                            if (rt) localStorage.setItem('refresh_token', rt);
+                            const me = await fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + at } });
+                            if (me.ok) {
+                                let u = await me.json();
+                                u = u.user || u;
+                                localStorage.setItem('user', JSON.stringify(u));
+                                user = u;
+                            }
+                        }
+                    }
+                } catch (e) { /* fall through to sign-in redirect */ }
+            }
+            if (!user) { window.location.href = '/frontend/signin.html'; return; }
+            document.getElementById('userName').textContent = user.name || user.email;
+            bindActions();
+            refreshList();
+        })();
+
+        function authHeaders() {
+            const token = localStorage.getItem('access_token');
+            return token ? { 'Authorization': 'Bearer ' + token } : {};
+        }
+
+        async function authFetch(url, opts = {}) {
+            if (!opts.headers) opts.headers = {};
+            Object.assign(opts.headers, authHeaders());
+            let res = await fetch(url, opts);
+            if (res.status === 401) {
+                try {
+                    const refreshRes = await fetch(API + '/auth/refresh', { method: 'POST' });
+                    if (refreshRes.ok) {
+                        const refreshData = await refreshRes.json();
+                        const newToken = refreshData.access_token || refreshData.data?.access_token || refreshData.tokens?.access_token;
+                        if (newToken) {
+                            localStorage.setItem('access_token', newToken);
+                            if (refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token) {
+                                localStorage.setItem('refresh_token', refreshData.refresh_token || refreshData.data?.refresh_token || refreshData.tokens?.refresh_token);
+                            }
+                            opts.headers['Authorization'] = 'Bearer ' + newToken;
+                            res = await fetch(url, opts);
+                        }
+                    }
+                } catch (e) { /* refresh failed */ }
+                if (res.status === 401) {
+                    window.location.href = '/frontend/signin.html';
+                    throw new Error('Session expired. Please sign in again.');
+                }
+            }
+            return res;
+        }
+
+        function escHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = (s == null ? '' : String(s));
+            return d.innerHTML;
+        }
+
+        function bindActions() {
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                await fetch(API + '/auth/logout', { method: 'POST', credentials: 'include' });
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                localStorage.removeItem('user');
+                window.location.href = '/frontend/signin.html';
+            });
+            document.getElementById('createBtn').addEventListener('click', createVideo);
+            document.getElementById('topicInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') createVideo();
+            });
+            document.getElementById('rerenderBtn').addEventListener('click', rerenderActive);
+        }
+
+        async function createVideo() {
+            const topic = document.getElementById('topicInput').value.trim();
+            const hint = document.getElementById('createHint');
+            const btn = document.getElementById('createBtn');
+            if (!topic) { hint.textContent = 'Enter a topic first.'; return; }
+            hint.textContent = '';
+            btn.disabled = true;
+            try {
+                const r = await authFetch(API + '/video-projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic })
+                });
+                if (r.status === 409) {
+                    const body = await r.json();
+                    hint.textContent = body.error && body.error.message ? body.error.message : 'Too many active renders — finish the current one first.';
+                    hint.className = 'create-hint error-text';
+                    return;
+                }
+                if (!r.ok) {
+                    hint.textContent = 'Failed to create video project (' + r.status + ').';
+                    hint.className = 'create-hint error-text';
+                    return;
+                }
+                const body = await r.json();
+                const data = body.data;
+                hint.textContent = '';
+                hint.className = 'create-hint';
+                showActive(data.public_id, data.topic, data.status, data.progress_percentage || 0, data.playable_url, data.error);
+                refreshList();
+            } catch (e) {
+                if (!/Session expired/.test(String(e.message))) {
+                    hint.textContent = 'Network error while creating video.';
+                    hint.className = 'create-hint error-text';
+                }
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function showActive(publicId, topic, status, progress, playableUrl, error) {
+            activePublicId = publicId;
+            stopPolling();
+            const box = document.getElementById('renderBox');
+            box.style.display = 'block';
+            document.getElementById('renderTopic').textContent = topic;
+            document.getElementById('progressFill').style.width = Math.min(100, progress || 0) + '%';
+            const playerWrap = document.getElementById('playerWrap');
+            const renderStatus = document.getElementById('renderStatus');
+            const renderActions = document.getElementById('renderActions');
+            if (status === 'ready' && playableUrl) {
+                const v = document.getElementById('videoPlayer');
+                v.src = playableUrl;
+                playerWrap.style.display = 'block';
+                renderStatus.textContent = 'Render complete.';
+                renderStatus.className = 'render-status';
+                renderActions.style.display = 'flex';
+            } else {
+                playerWrap.style.display = 'none';
+                document.getElementById('videoPlayer').removeAttribute('src');
+                renderStatus.textContent = status === 'failed'
+                    ? 'Render failed: ' + (error || 'unknown error')
+                    : 'Status: ' + status + ' · ' + Math.round(progress || 0) + '%';
+                renderStatus.className = 'render-status' + (status === 'failed' ? ' error' : '');
+                renderActions.style.display = status === 'failed' ? 'flex' : 'none';
+                if (ACTIVE.has(status)) startPolling(publicId);
+            }
+        }
+
+        function startPolling(publicId) {
+            stopPolling();
+            pollTimer = setInterval(async () => {
+                try {
+                    const r = await authFetch(API + '/video-projects/' + encodeURIComponent(publicId));
+                    if (!r.ok) return;
+                    const body = await r.json();
+                    const d = body.data;
+                    const progress = Math.min(100, Math.round((d.progress_percentage || 0) * 100) / 100);
+                    document.getElementById('progressFill').style.width = progress + '%';
+                    if (d.status === 'ready' || d.status === 'failed') {
+                        stopPolling();
+                        showActive(d.public_id, d.topic, d.status, progress, d.playable_url, d.error);
+                        refreshList();
+                    } else {
+                        document.getElementById('renderStatus').textContent = 'Status: ' + d.status + ' · ' + progress + '%';
+                    }
+                } catch (e) { /* transient — keep polling */ }
+            }, 2000);
+        }
+
+        function stopPolling() {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        }
+
+        async function rerenderActive() {
+            if (!activePublicId) return;
+            const btn = document.getElementById('rerenderBtn');
+            btn.disabled = true;
+            try {
+                const r = await authFetch(API + '/video-projects/' + encodeURIComponent(activePublicId) + '/render', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                });
+                if (r.status === 409) {
+                    const body = await r.json();
+                    alert(body.error && body.error.message ? body.error.message : 'Too many active renders — finish the current one first.');
+                } else if (r.ok) {
+                    const body = await r.json();
+                    showActive(body.data.public_id, body.data.topic, body.data.status, body.data.progress_percentage || 0, null, null);
+                    refreshList();
+                }
+            } catch (e) {
+                if (!/Session expired/.test(String(e.message))) alert('Network error while requesting re-render.');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function refreshList() {
+            try {
+                const r = await authFetch(API + '/video-projects');
+                if (!r.ok) return;
+                const body = await r.json();
+                const items = body.data || [];
+                const list = document.getElementById('videoList');
+                list.innerHTML = '';
+                document.getElementById('emptyState').style.display = items.length ? 'none' : 'block';
+                items.forEach((it) => {
+                    const div = document.createElement('div');
+                    div.className = 'vitem';
+                    const statusChip = '<span class="chip ' + escHtml(it.status) + '">' + escHtml(it.status) + '</span>';
+                    const progress = it.status === 'ready' ? 100 : Math.min(100, Math.round((it.progress_percentage || 0) * 100) / 100);
+                    const miniBar = '<div class="mini-track"><div class="mini-fill" style="width:' + progress + '%"></div></div>';
+                    let actions = '';
+                    if (it.status === 'ready') {
+                        actions += '<button class="mini-btn" data-action="play" data-id="' + escHtml(it.public_id) + '" data-topic="' + escHtml(it.topic) + '" data-url="' + escHtml(it.playable_url) + '">Play</button>';
+                        actions += '<button class="mini-btn" data-action="rerender" data-id="' + escHtml(it.public_id) + '">Re-render</button>';
+                    } else if (it.status === 'failed') {
+                        actions += '<button class="mini-btn" data-action="rerender" data-id="' + escHtml(it.public_id) + '">Retry</button>';
+                    }
+                    div.innerHTML = statusChip +
+                        '<div class="v-title">' + escHtml(it.topic) + '</div>' +
+                        miniBar +
+                        '<div class="v-meta">' + progress + '% · ' + (it.created_at ? new Date(it.created_at).toLocaleString() : '') + '</div>' +
+                        '<div class="v-actions">' + actions + '</div>';
+                    list.appendChild(div);
+                });
+                list.querySelectorAll('button[data-action]').forEach((b) => {
+                    b.addEventListener('click', () => {
+                        if (b.dataset.action === 'play') {
+                            showActive(b.dataset.id, b.dataset.topic, 'ready', 100, b.dataset.url, null);
+                            document.getElementById('renderBox').scrollIntoView({ behavior: 'smooth' });
+                        } else if (b.dataset.action === 'rerender') {
+                            requestRerender(b.dataset.id);
+                        }
+                    });
+                });
+            } catch (e) { /* transient */ }
+        }
+
+        async function requestRerender(publicId) {
+            try {
+                const r = await authFetch(API + '/video-projects/' + encodeURIComponent(publicId) + '/render', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                });
+                if (r.status === 409) {
+                    const body = await r.json();
+                    alert(body.error && body.error.message ? body.error.message : 'Too many active renders — finish the current one first.');
+                } else if (r.ok) {
+                    const body = await r.json();
+                    showActive(body.data.public_id, body.data.topic, body.data.status, body.data.progress_percentage || 0, null, null);
+                    refreshList();
+                }
+            } catch (e) {
+                if (!/Session expired/.test(String(e.message))) alert('Network error while requesting re-render.');
+            }
+        }
+    </script>
+</body>
+</html>
