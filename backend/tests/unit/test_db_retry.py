@@ -116,3 +116,84 @@ async def test_db_retry_decorator() -> None:
         res = await decorated_func(21)
         assert res == 42
         assert attempts == 2
+
+
+async def test_retry_on_db_failure_invokes_on_retry_between_attempts() -> None:
+    attempts = 0
+    retry_hooks = []
+
+    async def sample_func() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise _make_dbapi_error("40001")
+        return "success"
+
+    async def on_retry(attempt: int) -> None:
+        retry_hooks.append(attempt)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        result = await retry_on_db_failure(
+            sample_func,
+            max_retries=3,
+            base_delay=0.01,
+            max_delay=0.1,
+            jitter=0.0,
+            on_retry=on_retry,
+        )
+        assert result == "success"
+        assert attempts == 2
+        assert retry_hooks == [0]
+        mock_sleep.assert_called_once()
+
+
+async def test_retry_on_db_failure_on_retry_not_called_on_first_attempt_success() -> None:
+    retry_hooks = []
+
+    async def sample_func() -> str:
+        return "success"
+
+    async def on_retry(attempt: int) -> None:
+        retry_hooks.append(attempt)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        result = await retry_on_db_failure(
+            sample_func,
+            max_retries=3,
+            base_delay=0.01,
+            jitter=0.0,
+            on_retry=on_retry,
+        )
+        assert result == "success"
+        assert retry_hooks == []
+        mock_sleep.assert_not_called()
+
+
+async def test_retry_on_db_failure_rollback_hook_runs_before_each_retry() -> None:
+    """A PG serialization failure aborts the transaction; the retry hook must
+    roll the aborted transaction back before the next commit is attempted."""
+    commit_log = []
+    rollback_log = []
+    attempt_count = 0
+
+    async def sample_func() -> None:
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count == 1:
+            raise _make_dbapi_error("40001")
+        commit_log.append("commit")
+
+    async def on_retry(attempt: int) -> None:
+        rollback_log.append(attempt)
+
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        await retry_on_db_failure(
+            sample_func,
+            max_retries=2,
+            base_delay=0.01,
+            jitter=0.0,
+            on_retry=on_retry,
+        )
+    assert attempt_count == 2
+    assert commit_log == ["commit"]
+    assert rollback_log == [0]

@@ -37,6 +37,7 @@ async def retry_on_db_failure(
     base_delay: float = 0.1,
     max_delay: float = 2.0,
     jitter: float = 0.1,
+    on_retry: Callable[[int], Awaitable[None]] | None = None,
     **kwargs: Any,
 ) -> T:
     _max_retries = max_retries if max_retries is not None else settings.DATABASE_RETRY_ATTEMPTS
@@ -55,6 +56,11 @@ async def retry_on_db_failure(
             last_exception = exc
             if attempt < _max_retries:
                 delay = min(_base_delay * (2**attempt) + random.uniform(0, _jitter), _max_delay)
+                if on_retry is not None:
+                    # PostgreSQL aborts the in-progress transaction on any error;
+                    # re-running a failed commit without an explicit rollback
+                    # keeps failing against the same aborted transaction.
+                    await on_retry(attempt)
                 logger.warning(
                     "transaction_retry",
                     attempt=attempt + 1,

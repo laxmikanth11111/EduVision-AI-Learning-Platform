@@ -44,6 +44,12 @@ class UnitOfWork:
             self._session = None
 
     async def _commit_with_retry(self) -> None:
+        async def _rollback_before_retry(_attempt: int) -> None:
+            # A PostgreSQL serialization/deadlock failure leaves the current
+            # transaction aborted; retrying a commit against it would fail
+            # forever. Roll back so the next attempt starts a fresh transaction.
+            await self.session.rollback()
+
         async def _do_commit() -> None:
             await self.session.commit()
 
@@ -54,6 +60,7 @@ class UnitOfWork:
                 base_delay=settings.DATABASE_RETRY_BASE_DELAY,
                 max_delay=settings.DATABASE_RETRY_MAX_DELAY,
                 jitter=settings.DATABASE_RETRY_JITTER,
+                on_retry=_rollback_before_retry,
             )
         except Exception:
             raise

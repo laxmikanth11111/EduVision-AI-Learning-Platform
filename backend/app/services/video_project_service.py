@@ -172,6 +172,11 @@ class VideoProjectService:
             )
         except Exception as exc:
             duration = monotonic() - started
+            # If the RENDERING commit above failed with a transient PG error the
+            # transaction is now aborted; a FAILED write against it would fail
+            # forever. Roll back to start a fresh transaction before persisting
+            # the terminal state.
+            await self.session.rollback()
             record.status = VideoRenderStatus.FAILED
             record.error = str(exc)[:1000]
             await self.session.commit()
