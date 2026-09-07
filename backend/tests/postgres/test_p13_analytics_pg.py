@@ -1,7 +1,7 @@
 """P13 learner-analytics aggregation on real PostgreSQL.
 
 Runs against the Alembic-migrated scratch database (postgres:16-alpine) so the
-aggregation exercises the *production schema lineage* (head is ``0034_video_projects``;
+aggregation exercises the *production schema lineage* (head is ``0035_c3_topic_visual_assets``;
 P13 itself adds no migration). It exercises the
 ``LearnerAnalyticsService`` work directly against the real engine and pins the
 correct sums/avgs over ``quiz_attempts`` / ``score_summaries`` /
@@ -221,7 +221,7 @@ async def test_p13_no_new_migration_head_unchanged(pg_session: AsyncSession) -> 
     head = (
         await pg_session.execute(text("SELECT version_num FROM alembic_version"))
     ).scalar_one()
-    assert head == "0034_video_projects"
+    assert head == "0035_c3_topic_visual_assets"
 
 
 async def test_p13_overview_aggregates_on_migrated_schema(

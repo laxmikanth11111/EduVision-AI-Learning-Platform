@@ -2,7 +2,7 @@
 
 Runs against the Alembic-migrated scratch database (postgres:16-alpine) so the
 persistence layer exercises the production schema lineage: ``video_projects`` is
-created by migration ``0034_video_projects`` (single head after ``0033``), with
+created by migration ``0035_c3_topic_visual_assets`` (single head after ``0034``), with
 the ``ck_video_projects_status`` check, ``ix_video_projects_user_status`` index
 and the JSONB ``project_data`` column.
 
@@ -49,7 +49,7 @@ async def _compose_blueprint(topic: str) -> dict[str, Any]:
 
 async def test_p16_migration_head_is_0034(pg_session: AsyncSession) -> None:
     head = (await pg_session.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-    assert head == "0034_video_projects"
+    assert head == "0035_c3_topic_visual_assets"
 
 
 async def test_p16_video_projects_table_and_constraints(pg_session: AsyncSession) -> None:

@@ -42,6 +42,13 @@ class PlayerTopicResponse(BaseModel):
     title: str
     description: str = ""
     block_id: str | None = None
+    section: str | None = None
+    outline_title: str | None = None
+    subtopics: list[dict[str, Any]] = Field(default_factory=list)
+    concepts: list[dict[str, Any]] = Field(default_factory=list)
+    learning_objectives: list[str] = Field(default_factory=list)
+    source_references: list[dict[str, Any]] = Field(default_factory=list)
+    visuals: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class PlayerSessionResponse(BaseModel):
@@ -54,10 +61,21 @@ class PlayerSessionResponse(BaseModel):
     completion_percentage: float = 0.0
 
 
+class PlayerPresentationResponse(BaseModel):
+    id: str
+    title: str | None = None
+    file_name: str | None = None
+    source_type: str | None = None
+    slide_count: int = 0
+
+
 class PlayerStateResponse(BaseModel):
     lesson: PlayerLessonResponse
     version: PlayerVersionResponse | None = None
     topics: list[PlayerTopicResponse] = Field(default_factory=list)
+    source_units: list[dict[str, Any]] = Field(default_factory=list)
+    presentation: PlayerPresentationResponse | None = None
+    learning_structure: dict[str, Any] | None = None
     session: PlayerSessionResponse | None = None
 
 

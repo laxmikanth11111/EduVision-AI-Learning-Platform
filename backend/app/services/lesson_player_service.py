@@ -71,7 +71,58 @@ class LessonPlayerService:
             presentation = result.scalar_one_or_none()
             if presentation is None or str(presentation.owner_id) != owner_id:
                 raise PermissionError("You do not have access to this lesson")
+            lesson.presentation = presentation
+        else:
+            result = await self._uow.session.execute(
+                select(Presentation).where(Presentation.id == lesson.presentation_id)
+            )
+            presentation = result.scalar_one_or_none()
+            if presentation is not None:
+                lesson.presentation = presentation
         return lesson
+
+    async def _load_source_units(self, presentation_id: uuid.UUID | None) -> list[dict[str, Any]]:
+        if not presentation_id:
+            return []
+        from app.repositories.content_repository import ContentUnitRepository
+        from app.services.content_extraction_service import ContentExtractionService
+
+        repo = ContentUnitRepository(self._uow.session)
+        units = await repo.list_for_presentation(presentation_id, include_blocks=True)
+        return [ContentExtractionService._serialize_unit(u, include_blocks=True) for u in units]
+
+    async def _load_learning_structure(
+        self, presentation_id: uuid.UUID | None, presentation: Presentation | None
+    ) -> dict[str, Any] | None:
+        if not presentation_id:
+            return None
+        from app.repositories.topic_outline_repository import TopicOutlineRepository
+        from app.schemas.topic_outline import build_outline_response
+
+        repo = TopicOutlineRepository(self._uow.session)
+        outline = await repo.get_by_presentation_id(presentation_id)
+        if outline is None:
+            return None
+        pres_public_id = getattr(presentation, "public_id", "") if presentation else ""
+        return build_outline_response(
+            presentation_public_id=pres_public_id,
+            outline=outline,
+        )
+
+    def _serialize_presentation_info(
+        self, presentation: Presentation | None, slide_count: int
+    ) -> dict[str, Any] | None:
+        if presentation is None:
+            return None
+        f_name = getattr(presentation, "file_name", None) or ""
+        ext = f_name.split(".")[-1] if "." in f_name else "document"
+        return {
+            "id": presentation.public_id,
+            "title": presentation.title,
+            "file_name": getattr(presentation, "file_name", None),
+            "source_type": getattr(presentation, "source_type", None) or ext,
+            "slide_count": slide_count,
+        }
 
     async def get_state(
         self,
@@ -81,8 +132,21 @@ class LessonPlayerService:
     ) -> dict[str, Any]:
         lesson = await self._load_accessible_lesson(lesson_public_id, owner_id)
         version = await self._resolve_version(lesson)
-        topics = self._extract_topics(version)
-        total_topics = len(topics)
+        source_units = await self._load_source_units(lesson.presentation_id)
+        learning_structure = await self._load_learning_structure(
+            lesson.presentation_id, getattr(lesson, "presentation", None)
+        )
+        topic_visuals = await self._load_topic_visuals(lesson.presentation_id)
+        topics = self._extract_topics(
+            version,
+            learning_structure=learning_structure,
+            topic_visuals=topic_visuals,
+        )
+        presentation_info = self._serialize_presentation_info(
+            getattr(lesson, "presentation", None), len(source_units)
+        )
+        total_topics = len(topics) if len(topics) > 0 else len(source_units)
+        total_slides = max(len(source_units), total_topics * 2)
 
         active_session = None
         if owner_id:
@@ -92,7 +156,7 @@ class LessonPlayerService:
                     session,
                     total_topics,
                     lesson_public_id=lesson.public_id,
-                    total_slides=total_topics * 2,
+                    total_slides=total_slides,
                 )
                 resumed_slide = int(active_session.get("slide_index") or 0)
                 if resumed_slide > 0:
@@ -115,6 +179,9 @@ class LessonPlayerService:
             "lesson": self._serialize_lesson(lesson),
             "version": self._serialize_version(version, lesson.public_id) if version else None,
             "topics": topics,
+            "source_units": source_units,
+            "presentation": presentation_info,
+            "learning_structure": learning_structure,
             "session": active_session,
         }
 
@@ -128,8 +195,21 @@ class LessonPlayerService:
     ) -> dict[str, Any]:
         lesson = await self._load_accessible_lesson(lesson_public_id, owner_id)
         version = await self._resolve_version(lesson)
-        topics = self._extract_topics(version)
-        total_topics = len(topics)
+        source_units = await self._load_source_units(lesson.presentation_id)
+        learning_structure = await self._load_learning_structure(
+            lesson.presentation_id, getattr(lesson, "presentation", None)
+        )
+        topic_visuals = await self._load_topic_visuals(lesson.presentation_id)
+        topics = self._extract_topics(
+            version,
+            learning_structure=learning_structure,
+            topic_visuals=topic_visuals,
+        )
+        presentation_info = self._serialize_presentation_info(
+            getattr(lesson, "presentation", None), len(source_units)
+        )
+        total_topics = len(topics) if len(topics) > 0 else len(source_units)
+        total_slides = max(len(source_units), total_topics * 2)
 
         if owner_id:
             # Idempotent resume: same owner + lesson -> same persistent session,
@@ -162,6 +242,9 @@ class LessonPlayerService:
                 "lesson": self._serialize_lesson(lesson),
                 "version": self._serialize_version(version, lesson.public_id) if version else None,
                 "topics": topics,
+                "source_units": source_units,
+                "presentation": presentation_info,
+                "learning_structure": learning_structure,
                 "session": session_state,
             }
 
@@ -169,11 +252,14 @@ class LessonPlayerService:
             "lesson": self._serialize_lesson(lesson),
             "version": self._serialize_version(version, lesson.public_id) if version else None,
             "topics": topics,
+            "source_units": source_units,
+            "presentation": presentation_info,
+            "learning_structure": learning_structure,
             "session": self._progress.to_player_session(
                 session,
                 total_topics,
                 lesson_public_id=lesson.public_id,
-                total_slides=total_topics * 2,
+                total_slides=total_slides,
             ),
         }
 
@@ -197,7 +283,7 @@ class LessonPlayerService:
         if lesson_id is None:
             return None
         total = await self._topic_count_for_lesson(lesson_id)
-        total_slides = max(0, total * 2)
+        total_slides = max(total, total * 2)
         updated = await self._progress.set_slide_position(
             session_id=session_id,
             user_id=owner_id,
@@ -404,9 +490,15 @@ class LessonPlayerService:
 
     async def _topic_count_for_lesson(self, lesson_id: uuid.UUID) -> int:
         version = await self._version_repo.get_latest_succeeded_for_lesson(lesson_id)
-        if version is None:
-            return 0
-        return len(version.blocks)
+        if version is not None and len(version.blocks) > 0:
+            return len(version.blocks)
+        lesson = await self._lesson_repo.get(lesson_id)
+        if lesson and lesson.presentation_id:
+            from app.repositories.content_repository import ContentUnitRepository
+
+            repo = ContentUnitRepository(self._uow.session)
+            return await repo.count_for_presentation(lesson.presentation_id)
+        return 0
 
     async def _resolve_version(self, lesson: GeneratedLesson) -> GeneratedLessonVersion | None:
         version = await self._version_repo.get_latest_succeeded_for_lesson(lesson.id)
@@ -416,20 +508,118 @@ class LessonPlayerService:
             )
         return version
 
-    def _extract_topics(self, version: GeneratedLessonVersion | None) -> list[dict[str, Any]]:
-        if version is None:
-            return []
+    def _extract_topics(
+        self,
+        version: GeneratedLessonVersion | None,
+        learning_structure: dict[str, Any] | None = None,
+        topic_visuals: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> list[dict[str, Any]]:
+        outline_topics = (learning_structure.get("topics") or []) if learning_structure else []
+        outline_map = {
+            t["title"].lower(): t for t in outline_topics if isinstance(t, dict) and "title" in t
+        }
+        topic_visuals = topic_visuals or {}
+
         topics = []
-        for block in version.blocks:
-            topics.append(
-                {
+        if version and version.blocks:
+            for idx, block in enumerate(version.blocks):
+                heading = block.heading or f"Topic {block.position + 1}"
+                outline_match = outline_map.get(heading.lower()) or (
+                    outline_topics[idx] if idx < len(outline_topics) else None
+                )
+                topic_dict = {
                     "index": block.position,
-                    "title": block.heading or f"Topic {block.position + 1}",
+                    "title": heading,
                     "description": block.content or "",
                     "block_id": block.public_id,
                 }
-            )
+                if outline_match and isinstance(outline_match, dict):
+                    topic_dict["section"] = outline_match.get("section")
+                    topic_dict["subtopics"] = outline_match.get("subtopics") or []
+                    topic_dict["concepts"] = outline_match.get("concepts") or []
+                    topic_dict["learning_objectives"] = (
+                        outline_match.get("learning_objectives") or []
+                    )
+                    topic_dict["source_references"] = outline_match.get("source_references") or []
+                outline_title = (
+                    str(outline_match.get("title") or "")
+                    if outline_match and isinstance(outline_match, dict)
+                    else ""
+                )
+                topic_dict["outline_title"] = outline_title or heading
+                topic_dict["visuals"] = topic_visuals.get(
+                    (outline_title or heading).lower(), []
+                )
+                topics.append(topic_dict)
+        elif outline_topics:
+            for idx, ot in enumerate(outline_topics):
+                if isinstance(ot, dict):
+                    topics.append(
+                        {
+                            "index": idx,
+                            "title": ot.get("title", f"Topic {idx + 1}"),
+                            "description": ", ".join(
+                                c.get("name", "") for c in (ot.get("concepts") or [])[:3]
+                            ),
+                            "block_id": None,
+                            "section": ot.get("section"),
+                            "subtopics": ot.get("subtopics") or [],
+                            "concepts": ot.get("concepts") or [],
+                            "learning_objectives": ot.get("learning_objectives") or [],
+                            "source_references": ot.get("source_references") or [],
+                            "visuals": topic_visuals.get(
+                                str(ot.get("title", "")).lower(), []
+                            ),
+                        }
+                    )
         return topics
+
+    async def _load_topic_visuals(
+        self, presentation_id: uuid.UUID | None
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Map ready C3 visuals to player topics by topic title (case-insensitive)."""
+        if not presentation_id:
+            return {}
+        from app.repositories.topic_visual_asset_repository import (
+            TopicVisualAssetRepository,
+        )
+
+        repo = TopicVisualAssetRepository(self._uow.session)
+        assets = await repo.get_ready_assets_for_presentation(presentation_id)
+
+        by_topic: dict[str, list[dict[str, Any]]] = {}
+        for asset in assets:
+            key = str(asset.topic_title or "").lower()
+            by_topic.setdefault(key, []).append(self._serialize_visual_for_player(asset))
+        for values in by_topic.values():
+            values.sort(key=lambda v: str(v.get("title") or ""))
+        return by_topic
+
+    @staticmethod
+    def _serialize_visual_for_player(asset: Any) -> dict[str, Any]:
+        concept_ids = asset.concept_ids or []
+        prefix = f"{asset.topic_id or ''}:"
+        concepts = [
+            cid[len(prefix):] if cid.startswith(prefix) else cid for cid in concept_ids
+        ]
+        return {
+            "visual_id": str(asset.id),
+            "public_id": asset.public_id,
+            "visual_type": asset.visual_type,
+            "title": asset.title,
+            "purpose": asset.purpose or "",
+            "learning_objective": asset.learning_objective or "",
+            "asset_format": asset.asset_format,
+            "topic_id": asset.topic_id,
+            "topic_title": asset.topic_title,
+            "subtopic_id": asset.subtopic_id,
+            "subtopic_title": asset.subtopic_title,
+            "provenance": asset.provenance,
+            "concepts": concepts,
+            "concept_ids": concept_ids,
+            "explanation": asset.explanation or {},
+            "svg_content": asset.asset_content,
+        }
 
     def _serialize_lesson(self, lesson: GeneratedLesson) -> dict[str, Any]:
         pres_public_id = None

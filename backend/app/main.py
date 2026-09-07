@@ -18,6 +18,7 @@ from app.api.v1.animation_router import animation_router
 from app.api.v1.animation_runtime_router import animation_runtime_router
 from app.api.v1.assistant import assistant_router
 from app.api.v1.auth import auth_router
+from app.api.v1.c3_visual_router import c3_visual_router
 from app.api.v1.effectiveness import effectiveness_router
 from app.api.v1.exports import exports_router
 from app.api.v1.goals import goals_router
@@ -170,6 +171,7 @@ app.include_router(folders_router, prefix="/api/v1")
 app.include_router(player_router, prefix="/api/v1")
 app.include_router(quiz_router, prefix="/api/v1")
 app.include_router(visual_router, prefix="/api/v1")
+app.include_router(c3_visual_router, prefix="/api/v1")
 app.include_router(simulation_router, prefix="/api/v1")
 app.include_router(animation_router, prefix="/api/v1")
 app.include_router(animation_runtime_router, prefix="/api/v1")

@@ -24,7 +24,7 @@ celery_app = Celery(
     "eduvision",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.workers.tasks", "app.workers.rag_tasks", "app.workers.video_tasks"],
+    include=["app.workers.tasks", "app.workers.rag_tasks", "app.workers.video_tasks", "app.workers.c3_visual_tasks"],
 )
 
 celery_app.conf.update(
@@ -62,6 +62,8 @@ celery_app.conf.update(
         "eduvision.embedding.statistics": {"queue": "analytics"},
         # Video render runtime (P16)
         "eduvision.videos.*": {"queue": "videos"},
+        # C3 topic visual generation (consumed by the default queue worker)
+        "eduvision.c3.*": {"queue": "default"},
         # Dead-letter inspection stream.
         "eduvision.dlq.record": {"queue": "dead_letter"},
     },

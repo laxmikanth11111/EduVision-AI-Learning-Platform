@@ -50,6 +50,7 @@ from app.models.review_schedule import ReviewSchedule
 from app.models.score_summary import ScoreSummary
 from app.models.study_plan import StudyPlan
 from app.models.topic_outline import TopicOutline
+from app.models.topic_visual_asset import TopicVisualAsset
 from app.models.tutor_conversation import TutorConversation
 from app.models.tutor_message import TutorMessage
 from app.models.tutor_session import TutorSession
@@ -137,5 +138,6 @@ __all__ = [
     "TutorSession",
     "TutorConversation",
     "TutorMessage",
+    "TopicVisualAsset",
     "VideoProjectRecord",
 ]

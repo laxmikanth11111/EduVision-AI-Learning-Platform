@@ -196,7 +196,9 @@ async def test_path_auto_creates_and_orders_weak_first(db_session: AsyncSession)
     assert view.progress_percent == 0.0
 
     # Persisted sequence holds the lesson public id.
-    row = (await db_session.execute(select(LearningPath))).scalars().first()
+    row = (await db_session.execute(
+        select(LearningPath).where(LearningPath.user_id == uid)
+    )).scalars().first()
     assert list(row.sequence) == [view.sequence[0].lesson_id]
 
 
@@ -342,7 +344,9 @@ async def test_today_plan_empty_for_fresh_learner(db_session: AsyncSession) -> N
     plan = await service.get_today(uid)
     assert plan.date == datetime.now(UTC).date()
     assert isinstance(plan.items, list)
-    row = (await db_session.execute(select(StudyPlan))).scalars().first()
+    row = (await db_session.execute(
+        select(StudyPlan).where(StudyPlan.user_id == uid)
+    )).scalars().first()
     assert row.user_id == uid
     assert row.total_items == len(plan.items)
 

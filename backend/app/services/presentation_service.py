@@ -747,6 +747,16 @@ class PresentationService:
                 error=str(e),
             )
 
+        # C3: Trigger visual generation after C2 outline is ready
+        try:
+            await self._trigger_c3_visual_generation(public_id)
+        except Exception as e:
+            logger.warning(
+                "c3_visual_generation_dispatch_failed",
+                presentation_id=public_id,
+                error=str(e),
+            )
+
         if settings.RAG_INDEXING_ENABLED:
             from app.workers.rag_tasks import rag_indexing_task
             from app.workers.tasks import safe_dispatch
@@ -758,6 +768,51 @@ class PresentationService:
                 entity_id=public_id,
             )
         return presentation_id
+
+    async def _trigger_c3_visual_generation(self, public_id: str) -> None:
+        """Dispatch C3 visual generation after C2 outline completes."""
+        presentation = await self._get_presentation(public_id)
+
+        if not presentation.owner_id:
+            logger.warning("c3_skipped_no_owner", presentation_id=public_id)
+            return
+
+        # Check if C2 outline exists
+        from app.repositories.topic_outline_repository import TopicOutlineRepository
+        outline_repo = TopicOutlineRepository(self._uow.session)
+        outline = await outline_repo.get_by_presentation_id(presentation.id)
+        if not outline or outline.status != "succeeded":
+            logger.info("c3_skipped_no_outline", presentation_id=public_id)
+            return
+
+        # Dispatch async C3 visual generation
+        if settings.CELERY_TASK_ALWAYS_EAGER:
+            _spawn_background(self._run_c3_visual_eager(public_id, str(presentation.owner_id)))
+        else:
+            from app.workers.c3_visual_tasks import c3_generate_visuals_task
+            from app.workers.tasks import safe_dispatch
+
+            safe_dispatch(
+                c3_generate_visuals_task,
+                public_id,
+                str(presentation.owner_id),
+            )
+            logger.info("c3_visual_generation_dispatched", presentation_id=public_id)
+
+    async def _run_c3_visual_eager(self, presentation_id: str, user_id: str) -> None:
+        """Eager-mode stand-in for C3 visual generation."""
+        import uuid as _uuid
+
+        from app.workers.c3_visual_tasks import _generate_visuals_async
+
+        try:
+            result = await _generate_visuals_async(
+                presentation_id=presentation_id,
+                user_id=_uuid.UUID(user_id),
+            )
+            logger.info("c3_eager_visual_generation_completed", result=result)
+        except Exception as exc:
+            logger.error("c3_eager_visual_generation_failed", error=str(exc))
 
     async def get_extraction_status(
         self,
@@ -799,7 +854,26 @@ class PresentationService:
         from app.services.topic_outline_service import TopicOutlineService
 
         presentation = await self._get_presentation(public_id)
-        return await TopicOutlineService(self._uow).regenerate(presentation)
+        result = await TopicOutlineService(self._uow).regenerate(
+            presentation, fallback_on_error=True
+        )
+
+        # Commit before dispatch: a worker session must never read a transaction
+        # the request hasn't committed yet, or it races the commit and observes
+        # a missing outline (same ordering guarantee as upload_source above).
+        await self._uow.commit()
+
+        # C3: Re-generate visuals after topic regeneration
+        try:
+            await self._trigger_c3_visual_generation(public_id)
+        except Exception as e:
+            logger.warning(
+                "c3_visual_regeneration_failed_after_topic_regenerate",
+                presentation_id=public_id,
+                error=str(e),
+            )
+
+        return result
 
     # ── AI lesson generation ──────────────────────────────────────────────────
 

@@ -176,7 +176,7 @@ async def test_0032_schema_contract(pg_session: AsyncSession) -> None:
     heads = (await pg_session.execute(
         text("SELECT version_num FROM alembic_version")
     )).scalar_one()
-    assert heads == "0034_video_projects"
+    assert heads == "0035_c3_topic_visual_assets"
 
     adaptive_col = await pg_session.execute(
         text(

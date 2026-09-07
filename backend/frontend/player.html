@@ -232,6 +232,94 @@ body.presenting .present-arrow { display: block; }
 .quiz-result-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .quiz-result-row { display: flex; justify-content: space-between; font-size: .84rem; color: var(--muted-strong); padding: .4rem 0; border-bottom: 1px solid var(--line); }
 .quiz-result-row b { color: var(--paper); }
+
+/* ── View Mode Bar ────────────────────────────── */
+.view-mode-bar { display: inline-flex; align-items: center; gap: 4px; background: rgba(244,239,228,0.06); padding: 3px; border-radius: 4px; border: 1px solid var(--line); margin: 0 1rem; }
+.mode-tab-btn { background: transparent; border: none; color: var(--muted); font-size: .8rem; font-weight: 600; padding: .35rem .75rem; border-radius: 3px; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 5px; font-family: 'Space Grotesk', sans-serif; }
+.mode-tab-btn:hover { color: var(--paper); }
+.mode-tab-btn.active { background: var(--amber); color: var(--ink); font-weight: 700; }
+.mode-tab-btn.active .mode-icon { filter: brightness(0.2); }
+
+/* ── Source Mode Elements ─────────────────────── */
+.source-provenance-banner { display: flex; align-items: center; justify-content: space-between; padding: .45rem .85rem; border-radius: 4px; background: rgba(29,158,117,0.1); border: 1px solid rgba(29,158,117,0.3); margin-bottom: 1.2rem; }
+.prov-tag { font-family: 'Space Grotesk', sans-serif; font-size: .75rem; font-weight: 700; color: var(--teal); letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+.prov-meta { font-size: .75rem; color: var(--muted-strong); }
+
+.learning-provenance-badge { display: inline-flex; align-items: center; gap: 6px; font-family: 'Space Grotesk', sans-serif; font-size: .75rem; color: var(--amber); letter-spacing: .1em; text-transform: uppercase; margin-bottom: .6rem; }
+.badge-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); display: inline-block; }
+
+.source-title { font-size: 1.75rem; margin-bottom: 1.2rem; color: var(--paper); border-bottom: 1px solid var(--line); padding-bottom: .6rem; }
+.source-body { display: flex; flex-direction: column; gap: 1rem; }
+.source-paragraph { font-size: 1rem; line-height: 1.75; color: var(--muted-strong); }
+.source-heading { font-size: 1.2rem; margin-top: .6rem; color: var(--paper); }
+
+.source-bullet-list { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: .55rem; }
+.source-bullet-item { position: relative; padding-left: 1.5rem; font-size: .98rem; line-height: 1.6; color: var(--muted-strong); }
+.source-bullet-item::before { content: '▪'; position: absolute; left: 0; color: var(--teal); font-size: 1rem; line-height: 1.5; }
+
+.source-table-wrap { overflow-x: auto; margin: .8rem 0; border: 1px solid var(--line); border-radius: 4px; background: rgba(244,239,228,0.02); }
+.source-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .88rem; }
+.source-table th { background: rgba(244,239,228,0.08); color: var(--paper); font-weight: 600; padding: .65rem .85rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); font-family: 'Space Grotesk', sans-serif; }
+.source-table td { padding: .6rem .85rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); color: var(--muted-strong); line-height: 1.5; }
+.source-table tr:last-child td { border-bottom: none; }
+.source-table th:last-child, .source-table td:last-child { border-right: none; }
+.source-table tr:nth-child(even) { background: rgba(244,239,228,0.015); }
+
+.source-image-card { border: 1px dashed var(--line); border-radius: 4px; padding: 1.2rem; display: flex; align-items: center; gap: 12px; background: rgba(244,239,228,0.02); color: var(--muted); font-size: .88rem; }
+.source-img-icon { font-size: 1.6rem; color: var(--amber); }
+
+.source-notes-card { border-left: 3px solid var(--amber); background: rgba(242,166,35,0.05); padding: .8rem 1rem; border-radius: 2px; font-size: .85rem; color: var(--muted-strong); line-height: 1.6; margin-top: .6rem; }
+.source-notes-hdr { font-family: 'Space Grotesk', sans-serif; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--amber); font-weight: 700; margin-bottom: .25rem; }
+.source-raw-text { font-size: 1rem; line-height: 1.8; color: var(--muted-strong); white-space: pre-wrap; word-wrap: break-word; }
+.source-empty-note { color: var(--muted); font-style: italic; font-size: .9rem; padding: 1rem 0; }
+
+/* ── C3 Visual Mode Styles ────────────────────── */
+.c3-visual-container { display: flex; flex-direction: column; gap: 1.2rem; margin-top: 1rem; }
+.c3-visual-header { display: flex; align-items: center; justify-content: space-between; padding: .55rem .85rem; border-radius: 4px; background: rgba(242,166,35,0.08); border: 1px solid rgba(242,166,35,0.3); }
+.c3-visual-badge { font-family: 'Space Grotesk', sans-serif; font-size: .75rem; font-weight: 700; color: var(--amber); letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+.c3-visual-type-tag { font-size: .65rem; padding: .15rem .45rem; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; background: rgba(244,239,228,0.04); }
+.c3-visual-svg-wrap { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #0B1626; min-height: 300px; display: flex; align-items: center; justify-content: center; }
+.c3-visual-svg-wrap svg { width: 100%; height: auto; display: block; }
+.c3-visual-explanation { border: 1px solid var(--line); border-radius: 6px; padding: .9rem 1.1rem; background: rgba(244,239,228,0.025); }
+.c3-expl-title { font-family: 'Space Grotesk', sans-serif; font-size: .82rem; font-weight: 700; color: var(--paper); margin-bottom: .5rem; display: flex; align-items: center; gap: 6px; }
+.c3-expl-row { margin-bottom: .4rem; }
+.c3-expl-label { font-size: .72rem; color: var(--amber); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; font-family: 'Space Grotesk', sans-serif; }
+.c3-expl-text { font-size: .85rem; color: var(--muted-strong); line-height: 1.5; }
+.c3-concept-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .5rem; }
+.c3-concept-chip { background: rgba(29,158,117,0.1); border: 1px solid rgba(29,158,117,0.3); border-radius: 4px; padding: .2rem .5rem; font-size: .75rem; color: var(--teal); font-family: 'Space Grotesk', sans-serif; }
+.c3-source-ref { display: flex; align-items: center; gap: 8px; padding: .45rem .85rem; background: rgba(29,158,117,0.06); border: 1px solid rgba(29,158,117,0.2); border-radius: 4px; font-size: .8rem; color: var(--teal); cursor: pointer; transition: all .15s; }
+.c3-source-ref:hover { background: rgba(29,158,117,0.12); border-color: var(--teal); }
+.c3-visual-loading { text-align: center; padding: 2.5rem; color: var(--amber); font-size: .9rem; }
+.c3-visual-empty { text-align: center; padding: 2rem; color: var(--muted); font-size: .85rem; }
+.c3-visual-error { text-align: center; padding: 2rem; color: var(--coral); font-size: .85rem; border: 1px solid rgba(216,90,48,0.3); border-radius: 6px; background: rgba(216,90,48,0.05); }
+.c3-download-btn { display: inline-flex; align-items: center; gap: 6px; padding: .35rem .75rem; border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--muted-strong); font-size: .78rem; cursor: pointer; transition: all .15s; font-family: 'Space Grotesk', sans-serif; }
+.c3-download-btn:hover { border-color: var(--amber); color: var(--amber); }
+.c3-why-visual { font-size: .78rem; color: var(--muted); font-style: italic; padding: .35rem .6rem; border-left: 2px solid var(--teal); margin-top: .4rem; }
+
+/* ── C2 Educational Hierarchy Styles ──────────── */
+.c2-structure-badge { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; color: var(--teal); border: 1px solid rgba(29,158,117,0.4); background: rgba(29,158,117,0.08); padding: .2rem .55rem; border-radius: 4px; margin-bottom: .6rem; text-transform: uppercase; font-family: 'Space Grotesk', sans-serif; font-weight: 600; }
+.c2-section-name { font-size: .8rem; color: var(--amber); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; margin-bottom: .25rem; font-family: 'Space Grotesk', sans-serif; }
+.c2-hierarchy-container { display: flex; flex-direction: column; gap: 1rem; margin-top: 1.25rem; border-top: 1px solid var(--line); padding-top: 1.1rem; }
+.c2-card { border: 1px solid var(--line); border-radius: 6px; background: rgba(244,239,228,0.025); padding: .9rem 1.1rem; }
+.c2-card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: .65rem; }
+.c2-card-title { font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--paper); font-family: 'Space Grotesk', sans-serif; display: flex; align-items: center; gap: 6px; }
+.c2-subtopic-block { border-left: 2px solid var(--teal); padding-left: .85rem; margin-bottom: .85rem; }
+.c2-subtopic-block:last-child { margin-bottom: 0; }
+.c2-subtopic-title { font-size: .95rem; font-weight: 600; color: var(--paper); display: flex; align-items: center; justify-content: space-between; }
+.c2-subtopic-desc { font-size: .82rem; color: var(--muted-strong); margin-top: .15rem; line-height: 1.5; }
+.c2-concepts-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .5rem; }
+.c2-concept-chip { background: rgba(244,239,228,0.06); border: 1px solid var(--line); border-radius: 4px; padding: .25rem .55rem; font-size: .78rem; color: var(--paper); display: inline-flex; align-items: center; gap: 4px; }
+.c2-concept-chip.key { border-color: rgba(242,166,35,0.45); background: rgba(242,166,35,0.08); color: var(--amber); }
+.c2-obj-list { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: .35rem; }
+.c2-obj-item { font-size: .85rem; color: var(--muted-strong); line-height: 1.5; display: flex; align-items: flex-start; gap: 8px; }
+.c2-obj-bullet { color: var(--amber); font-weight: 700; flex-shrink: 0; }
+.c2-source-jump-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: .8rem; padding: .55rem .85rem; background: rgba(29,158,117,0.06); border: 1px solid rgba(29,158,117,0.25); border-radius: 4px; }
+.c2-source-jump-label { font-size: .75rem; color: var(--teal); font-weight: 600; font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; letter-spacing: .05em; }
+.c2-jump-btn { background: transparent; border: 1px solid rgba(244,239,228,0.2); color: var(--paper); font-size: .75rem; padding: .25rem .6rem; border-radius: 3px; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 4px; font-family: 'Space Grotesk', sans-serif; }
+.c2-jump-btn:hover { border-color: var(--amber); color: var(--amber); background: rgba(242,166,35,0.08); }
+.c2-misc-box { border-left: 3px solid var(--coral); background: rgba(216,90,48,0.06); padding: .65rem .85rem; border-radius: 3px; font-size: .8rem; color: var(--muted-strong); margin-top: .5rem; line-height: 1.5; }
+.c2-misc-label { font-size: .7rem; text-transform: uppercase; font-weight: 700; color: var(--coral); letter-spacing: .06em; margin-bottom: .2rem; }
+.c2-provenance-tag { font-size: .65rem; padding: .15rem .4rem; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -242,6 +330,17 @@ body.presenting .present-arrow { display: block; }
         <span class="brand-name">EduVision Player</span>
     </a>
     <span class="deck-title" id="deckName"></span>
+    <div class="view-mode-bar" id="viewModeBar">
+        <button id="btnModeSource" class="mode-tab-btn active" onclick="setPlayerMode('source')">
+            <span class="mode-icon">&#128196;</span> Source Mode
+        </button>
+        <button id="btnModeLearning" class="mode-tab-btn" onclick="setPlayerMode('learning')">
+            <span class="mode-icon">&#10022;</span> AI Learning Mode
+        </button>
+        <button id="btnModeVisual" class="mode-tab-btn" onclick="setPlayerMode('visual')">
+            <span class="mode-icon">&#128444;</span> Visual Mode
+        </button>
+    </div>
     <a class="nav-link" href="/frontend/dashboard.html">Dashboard</a>
     <a class="nav-link" href="/frontend/upload.html">New Deck</a>
     <a class="nav-link" href="#" onclick="signOut(); return false;">Sign Out</a>
@@ -329,6 +428,17 @@ let current = 0;
 let selectedTypes = {};   // topicIdx -> type
 let generated = {};       // visual slide key -> true (already rendered)
 
+let playerMode = 'source'; // 'source' | 'learning'
+let sourceUnits = [];      // Extracted Content Units from PPTX/document
+let presentationInfo = null;
+let learningStructure = null; // C2 Educational hierarchy
+let currentSourceSlide = 0;
+let currentLearningSlide = 0;
+
+// ── C3 Visual Mode state ─────────────────────────────────────────────────
+let c3VisualsByTopic = {};   // topicIdx -> asset (generated + actively_recommended)
+let c3VisualsLoading = false;
+
 // ── Init ─────────────────────────────────────────────────────────────────
 async function init() {
     showState('<div class="state-icon">&#9698;</div><p class="state-msg">Loading presentation&hellip;</p>');
@@ -342,28 +452,61 @@ async function init() {
         const startData = await startRes.json();
         const state = startData.data;
         topics = state.topics || [];
+        sourceUnits = state.source_units || [];
+        presentationInfo = state.presentation || null;
         sessionId = state.session ? state.session.session_id : null;
         sessionSlide = state.session ? (parseInt(state.session.slide_index, 10) || 0) : 0;
-        learnerCompletion = state.session ? (state.session.completion_percentage || 0) : 0;
+        learningStructure = state.learning_structure || null;
 
-        if (!topics.length) {
+        // Fallback: If source_units is empty but presentation_id is present, load via GET /api/v1/presentations/{id}/content
+        const presId = (state.lesson && state.lesson.presentation_id) || (presentationInfo && presentationInfo.id);
+        if ((!sourceUnits || sourceUnits.length === 0) && presId) {
+            try {
+                const cRes = await authFetch(API + '/presentations/' + presId + '/content');
+                if (cRes.ok) {
+                    const cData = await cRes.json();
+                    const cList = cData.data ? (cData.data.units || []) : [];
+                    if (cList.length > 0) {
+                        sourceUnits = cList;
+                    }
+                }
+            } catch (err) {
+                console.warn('[EduVision] Source content fallback fetch failed:', err);
+            }
+        }
+
+        if (sourceUnits && sourceUnits.length > 0) {
+            sourceUnits.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        }
+
+        if (!topics.length && (!sourceUnits || !sourceUnits.length)) {
             showState('<div class="state-icon">&#128196;</div>' +
                 '<p class="state-msg">This presentation has no slides yet.</p>' +
                 '<button class="btn-present" style="margin:0 auto;" onclick="window.location.href=\'/frontend/upload.html\'">Create a Deck</button>');
             return;
         }
 
-        // Build dynamic slide list: concept + visual pair per topic
+        // Build dynamic AI learning slide list: concept + visual pair per topic
         slides = [];
         topics.forEach((t, i) => {
             slides.push({ kind: 'concept', topicIdx: i });
             slides.push({ kind: 'visual', topicIdx: i });
         });
 
-        document.getElementById('deckName').textContent =
+        // Default to 'source' if source units are present, else 'learning'
+        if (sourceUnits && sourceUnits.length > 0) {
+            playerMode = 'source';
+        } else {
+            playerMode = 'learning';
+        }
+        updateModeToggleUI();
+
+        const titleText = (presentationInfo && presentationInfo.title) ||
             (state.lesson && state.lesson.title) || 'Lesson';
+        document.getElementById('deckName').textContent = titleText;
         document.getElementById('frame').style.display = 'flex';
         document.getElementById('stateWrap').style.display = 'none';
+
         buildThumbnails();
         loadLearnerJourney();
         goTo(startIndexFromUrl(), false);
@@ -374,12 +517,95 @@ async function init() {
     }
 }
 
+function setPlayerMode(mode) {
+    if (mode === 'source' && (!sourceUnits || sourceUnits.length === 0)) {
+        alert('No uploaded source document is associated with this lesson.');
+        return;
+    }
+    if (playerMode === mode) return;
+
+    if (playerMode === 'source') {
+        currentSourceSlide = current;
+    } else {
+        currentLearningSlide = current;
+    }
+
+    playerMode = mode;
+    current = (playerMode === 'source') ? currentSourceSlide : currentLearningSlide;
+
+    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    if (current >= maxLen) current = Math.max(0, maxLen - 1);
+
+    updateModeToggleUI();
+    buildThumbnails();
+    renderSlide();
+    updateChrome();
+
+    // C3: Fetch visual assets when entering visual mode
+    if (mode === 'visual') {
+        fetchC3Visuals();
+    }
+}
+
+function jumpToSourceSlide(slideNum) {
+    if (!sourceUnits || sourceUnits.length === 0) {
+        alert('No uploaded source document available to jump to.');
+        return;
+    }
+    setPlayerMode('source');
+    let targetIdx = -1;
+    for (let i = 0; i < sourceUnits.length; i++) {
+        if (sourceUnits[i].position === slideNum || (i + 1) === slideNum) {
+            targetIdx = i;
+            break;
+        }
+    }
+    if (targetIdx !== -1) {
+        goTo(targetIdx);
+    } else if (slideNum >= 1 && slideNum <= sourceUnits.length) {
+        goTo(slideNum - 1);
+    }
+}
+
+function updateModeToggleUI() {
+    const btnSource = document.getElementById('btnModeSource');
+    const btnLearning = document.getElementById('btnModeLearning');
+    const btnVisual = document.getElementById('btnModeVisual');
+    if (btnSource && btnLearning) {
+        btnSource.classList.toggle('active', playerMode === 'source');
+        btnLearning.classList.toggle('active', playerMode === 'learning');
+        if (!sourceUnits || sourceUnits.length === 0) {
+            btnSource.disabled = true;
+            btnSource.title = 'No uploaded source material available for this lesson';
+            btnSource.style.opacity = '0.4';
+        } else {
+            btnSource.disabled = false;
+            btnSource.title = '';
+            btnSource.style.opacity = '1';
+        }
+    }
+    if (btnVisual) {
+        btnVisual.classList.toggle('active', playerMode === 'visual');
+        const hasC2 = Array.isArray(slides) && slides.length > 0;
+        if (!hasC2) {
+            btnVisual.disabled = true;
+            btnVisual.title = 'No C2 topic hierarchy available for visual generation';
+            btnVisual.style.opacity = '0.4';
+        } else {
+            btnVisual.disabled = false;
+            btnVisual.title = '';
+            btnVisual.style.opacity = '1';
+        }
+    }
+}
+
 function startIndexFromUrl() {
     // Explicit ?slide= deep-link wins; otherwise resume the server-persisted
     // position ("pick up where you left off"); otherwise start at slide 0.
     const s = parseInt(params.get('slide'), 10);
-    if (!isNaN(s) && s >= 0 && s < slides.length) return s;
-    if (sessionSlide > 0 && sessionSlide < slides.length) return sessionSlide;
+    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    if (!isNaN(s) && s >= 0 && s < maxLen) return s;
+    if (sessionSlide > 0 && sessionSlide < maxLen) return sessionSlide;
     return 0;
 }
 
@@ -396,18 +622,42 @@ function buildThumbnails() {
     const lj = document.getElementById('ljPanel');
     sb.innerHTML = '';
     const frag = document.createDocumentFragment();
-    slides.forEach((s, i) => {
-        const t = topics[s.topicIdx];
-        const el = document.createElement('div');
-        el.className = 'thumb';
-        el.id = 'thumb-' + i;
-        el.onclick = () => goTo(i);
-        el.innerHTML =
-            '<span class="thumb-num">' + String(i + 1).padStart(2, '0') + '</span>' +
-            '<span class="thumb-kind">' + (s.kind === 'concept' ? 'Concept' : 'Visual') + '</span>' +
-            '<div class="thumb-title">' + escHtml(t.title || 'Untitled') + '</div>';
-        frag.appendChild(el);
-    });
+
+    if (playerMode === 'source') {
+        sourceUnits.forEach((u, i) => {
+            const el = document.createElement('div');
+            el.className = 'thumb' + (i === current ? ' active' : '');
+            el.id = 'thumb-' + i;
+            el.onclick = () => goTo(i);
+            const title = (u.title && u.title.trim()) ? u.title.trim() : ('Slide ' + (i + 1));
+            const blocks = u.blocks || [];
+            const hasTable = blocks.some(b => b.block_type === 'table');
+            const hasBullets = blocks.some(b => b.block_type === 'bullet' || b.block_type === 'list_item');
+            let badge = 'Slide';
+            if (hasTable) badge = 'Table';
+            else if (hasBullets) badge = 'Bullets';
+
+            el.innerHTML =
+                '<span class="thumb-num">' + String(i + 1).padStart(2, '0') + '</span>' +
+                '<span class="thumb-kind">' + badge + '</span>' +
+                '<div class="thumb-title">' + escHtml(title) + '</div>';
+            frag.appendChild(el);
+        });
+    } else {
+        slides.forEach((s, i) => {
+            const t = topics[s.topicIdx];
+            const el = document.createElement('div');
+            el.className = 'thumb' + (i === current ? ' active' : '');
+            el.id = 'thumb-' + i;
+            el.onclick = () => goTo(i);
+            el.innerHTML =
+                '<span class="thumb-num">' + String(i + 1).padStart(2, '0') + '</span>' +
+                '<span class="thumb-kind">' + (s.kind === 'concept' ? 'Concept' : 'Visual') + '</span>' +
+                '<div class="thumb-title">' + escHtml(t.title || 'Untitled') + '</div>';
+            frag.appendChild(el);
+        });
+    }
+
     if (lj) sb.appendChild(lj);
     sb.appendChild(frag);
 }
@@ -477,46 +727,418 @@ function renderLearnerJourney(panel) {
     panel.innerHTML = html;
 }
 
-// ── Rendering (active slide only — scales to any deck size) ─────────────
-function renderSlide() {
+// ── Source Mode Rendering ────────────────────────────────────────────────
+function renderTableBlock(b) {
+    const meta = b.metadata || {};
+    let rows = meta.table_data;
+    if (!Array.isArray(rows) || rows.length === 0) {
+        // Fallback: parse markdown / pipe or tab delimited content
+        const lines = (b.content || '').trim().split('\n').filter(l => l.trim().length > 0);
+        rows = lines.map(line => {
+            if (line.includes('|')) {
+                return line.split('|').map(c => c.trim()).filter((c, idx, arr) => !(idx === 0 && c === '') && !(idx === arr.length - 1 && c === ''));
+            }
+            if (line.includes('\t')) {
+                return line.split('\t').map(c => c.trim());
+            }
+            return [line.trim()];
+        }).filter(r => r.length > 0 && !r.every(cell => /^[-:]+$/.test(cell)));
+    }
+    if (!rows || rows.length === 0) {
+        return '<p class="source-paragraph">' + escHtml(b.content || '') + '</p>';
+    }
+
+    let html = '<div class="source-table-wrap"><table class="source-table">';
+    const headerRow = rows[0];
+    html += '<thead><tr>' + headerRow.map(cell => '<th>' + escHtml(String(cell || '')) + '</th>').join('') + '</tr></thead>';
+    if (rows.length > 1) {
+        html += '<tbody>';
+        for (let r = 1; r < rows.length; r++) {
+            html += '<tr>' + rows[r].map(cell => '<td>' + escHtml(String(cell || '')) + '</td>').join('') + '</tr>';
+        }
+        html += '</tbody>';
+    }
+    html += '</table></div>';
+    return html;
+}
+
+function renderSourceSlide(idx) {
     const vp = document.getElementById('viewport');
-    const s = slides[current];
+    if (!vp) return;
+    const unit = sourceUnits[idx];
+    if (!unit) {
+        vp.innerHTML = '<div class="source-empty-note">Source slide not found.</div>';
+        return;
+    }
+
+    const presTitle = (presentationInfo && presentationInfo.title) ||
+        (presentationInfo && presentationInfo.file_name) || 'Uploaded Presentation';
+    const slideNum = (unit.position != null ? unit.position : idx + 1);
+
+    let html =
+        '<div class="source-provenance-banner">' +
+        '  <div class="prov-tag">' +
+        '    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+        '    From Your Uploaded Material' +
+        '  </div>' +
+        '  <div class="prov-meta">' +
+        '    Slide ' + slideNum + ' of ' + sourceUnits.length + ' &middot; ' + escHtml(presTitle) +
+        '  </div>' +
+        '</div>';
+
+    const slideTitle = (unit.title && unit.title.trim()) ? unit.title.trim() : ('Slide ' + slideNum);
+    html += '<h2 class="source-title">' + escHtml(slideTitle) + '</h2>';
+    html += '<div class="source-body">';
+
+    const blocks = unit.blocks || [];
+    if (blocks.length > 0) {
+        let currentBullets = [];
+        function flushBullets() {
+            if (currentBullets.length === 0) return '';
+            let bHtml = '<ul class="source-bullet-list">';
+            currentBullets.forEach(b => {
+                const lvl = (b.metadata && b.metadata.level != null) ? parseInt(b.metadata.level, 10) : 0;
+                const indent = Math.min(Math.max(0, lvl) * 24, 120);
+                bHtml += '<li class="source-bullet-item" style="margin-left:' + indent + 'px;">' +
+                    escHtml(b.content || '') + '</li>';
+            });
+            bHtml += '</ul>';
+            currentBullets = [];
+            return bHtml;
+        }
+
+        blocks.forEach(b => {
+            const bType = (b.block_type || '').toLowerCase();
+            if (bType === 'bullet' || bType === 'list_item') {
+                currentBullets.push(b);
+            } else {
+                html += flushBullets();
+                if (bType === 'heading') {
+                    html += '<h3 class="source-heading">' + escHtml(b.content || '') + '</h3>';
+                } else if (bType === 'table') {
+                    html += renderTableBlock(b);
+                } else if (bType === 'picture' || bType === 'image') {
+                    html += '<div class="source-image-card">' +
+                        '<span class="source-img-icon">&#128444;</span>' +
+                        '<div><strong>Extracted Slide Visual</strong><br>' +
+                        '<span style="color:var(--muted);font-size:.82rem;">' + escHtml(b.content || 'Embedded slide image / diagram') + '</span></div>' +
+                        '</div>';
+                } else if (bType === 'note' || bType === 'notes') {
+                    html += '<div class="source-notes-card"><div class="source-notes-hdr">Speaker Notes</div><div>' +
+                        escHtml(b.content || '') + '</div></div>';
+                } else {
+                    html += '<p class="source-paragraph">' + escHtml(b.content || '') + '</p>';
+                }
+            }
+        });
+        html += flushBullets();
+    } else if (unit.raw_text && unit.raw_text.trim()) {
+        html += '<div class="source-raw-text">' + escHtml(unit.raw_text.trim()) + '</div>';
+    } else {
+        html += '<div class="source-empty-note">No text content extracted for this slide.</div>';
+    }
+
+    html += '</div>';
+    vp.innerHTML = html;
+}
+
+function renderLearningSlide(idx) {
+    const vp = document.getElementById('viewport');
+    if (!vp) return;
+    const s = slides[idx];
+    if (!s) {
+        vp.innerHTML = '<div class="source-empty-note">Slide not found.</div>';
+        return;
+    }
     const t = topics[s.topicIdx];
-    const idx = s.topicIdx;
+    const tIdx = s.topicIdx;
 
     if (s.kind === 'concept') {
-        vp.innerHTML =
-            '<p class="count-label">Topic ' + (idx + 1) + ' &middot; Concept</p>' +
-            '<h2 class="slide-title">' + escHtml(t.title || '') + '</h2>' +
-            '<p class="slide-text">' + escHtml(t.description || 'No description available.') + '</p>';
+        let html = '<div class="learning-provenance-badge"><span class="badge-dot"></span>AI Explanation &middot; Topic ' + (tIdx + 1) + '</div>';
+        if (t.section) {
+            html += '<div class="c2-section-name">Section &middot; ' + escHtml(t.section) + '</div>';
+        }
+        html += '<h2 class="slide-title">' + escHtml(t.title || '') + '</h2>';
+        html += '<p class="slide-text">' + escHtml(t.description || 'No description available.') + '</p>';
+
+        // Source provenance / grounding buttons
+        const slideNums = [];
+        if (Array.isArray(t.slide_ranges)) {
+            t.slide_ranges.forEach(num => { if (num > 0 && !slideNums.includes(num)) slideNums.push(num); });
+        }
+        if (Array.isArray(t.source_references)) {
+            t.source_references.forEach(ref => {
+                const num = ref.slide_number;
+                if (num > 0 && !slideNums.includes(num)) slideNums.push(num);
+            });
+        }
+        if (slideNums.length > 0) {
+            html += '<div class="c2-source-jump-row">';
+            html += '<span class="c2-source-jump-label">&#128196; Source Grounding:</span>';
+            slideNums.forEach(num => {
+                html += '<button class="c2-jump-btn" onclick="jumpToSourceSlide(' + num + ')">&#8594; View Slide ' + num + '</button>';
+            });
+            html += '</div>';
+        }
+
+        // C2 Educational Hierarchy container
+        html += '<div class="c2-hierarchy-container">';
+
+        // Learning objectives
+        const objs = t.learning_objectives || [];
+        if (Array.isArray(objs) && objs.length > 0) {
+            html += '<div class="c2-card">' +
+                '<div class="c2-card-hdr"><div class="c2-card-title">&#127919; Learning Objectives</div></div>' +
+                '<ul class="c2-obj-list">' +
+                objs.map(obj => '<li class="c2-obj-item"><span class="c2-obj-bullet">&#10003;</span> ' + escHtml(obj) + '</li>').join('') +
+                '</ul></div>';
+        }
+
+        // Subtopics & Concepts
+        const subtopics = t.subtopics || [];
+        if (Array.isArray(subtopics) && subtopics.length > 0) {
+            html += '<div class="c2-card">' +
+                '<div class="c2-card-hdr"><div class="c2-card-title">&#128214; Subtopics &amp; Structured Concepts</div></div>';
+            subtopics.forEach(st => {
+                html += '<div class="c2-subtopic-block">' +
+                    '<div class="c2-subtopic-title"><span>' + escHtml(st.title || '') + '</span></div>';
+                if (st.description) {
+                    html += '<div class="c2-subtopic-desc">' + escHtml(st.description) + '</div>';
+                }
+                if (Array.isArray(st.concepts) && st.concepts.length > 0) {
+                    html += '<div class="c2-concepts-row">';
+                    st.concepts.forEach(c => {
+                        const isKey = c.is_key_concept;
+                        const cName = c.name || c;
+                        html += '<span class="c2-concept-chip' + (isKey ? ' key' : '') + '" title="' + escHtml(c.explanation || '') + '">' +
+                            (isKey ? '&#9733; ' : '') + escHtml(cName) + '</span>';
+                    });
+                    html += '</div>';
+                }
+                if (Array.isArray(st.misconceptions) && st.misconceptions.length > 0) {
+                    st.misconceptions.forEach(m => {
+                        const mText = m.misconception || m;
+                        const corr = m.correction || '';
+                        html += '<div class="c2-misc-box">' +
+                            '<div class="c2-misc-label">&#9888; Common Misconception <span class="c2-provenance-tag">AI Guidance</span></div>' +
+                            '<div><strong>Mistake:</strong> ' + escHtml(mText) + '</div>' +
+                            (corr ? '<div style="color:var(--paper);margin-top:2px;"><strong>Correction:</strong> ' + escHtml(corr) + '</div>' : '') +
+                            '</div>';
+                    });
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+        } else if (Array.isArray(t.concepts) && t.concepts.length > 0) {
+            html += '<div class="c2-card">' +
+                '<div class="c2-card-hdr"><div class="c2-card-title">&#128161; Core Concepts</div></div>' +
+                '<div class="c2-concepts-row">';
+            t.concepts.forEach(c => {
+                const isKey = c.is_key_concept;
+                const cName = c.name || c;
+                html += '<span class="c2-concept-chip' + (isKey ? ' key' : '') + '" title="' + escHtml(c.explanation || '') + '">' +
+                    (isKey ? '&#9733; ' : '') + escHtml(cName) + '</span>';
+            });
+            html += '</div></div>';
+        }
+
+        html += '</div>';
+        vp.innerHTML = html;
     } else {
-        const chosen = selectedTypes[idx] || 'auto';
+        const chosen = selectedTypes[tIdx] || 'auto';
         const reco = recommendVisualType(t);
         const effective = chosen === 'auto' ? reco : chosen;
         const types = ['auto', 'image', 'animation', 'video', 'simulation'];
         let html =
-            '<p class="count-label">Topic ' + (idx + 1) + ' &middot; Visual</p>' +
+            '<div class="learning-provenance-badge"><span class="badge-dot" style="background:var(--teal);"></span>EduVision Visual &middot; Topic ' + (tIdx + 1) + '</div>' +
             '<h2 class="slide-title">' + escHtml(t.title || '') + '</h2>' +
-            '<div class="type-selector" id="types-' + idx + '">' +
+            '<div class="type-selector" id="types-' + tIdx + '">' +
             types.map(tp =>
-                '<button class="type-btn' + (tp === chosen ? ' selected' : '') + '" data-type="' + tp + '" onclick="selectType(' + idx + ',\'' + tp + '\')">' +
+                '<button class="type-btn' + (tp === chosen ? ' selected' : '') + '" data-type="' + tp + '" onclick="selectType(' + tIdx + ',\'' + tp + '\')">' +
                 (tp === 'auto' ? '&#10022; Auto' : tp.charAt(0).toUpperCase() + tp.slice(1)) + '</button>').join('') +
-            '<span class="reco-chip" id="reco-' + idx + '"></span>' +
+            '<span class="reco-chip" id="reco-' + tIdx + '"></span>' +
             '</div>' +
-            '<div class="visual-area" id="va-' + idx + '" style="border:none;background:transparent;">' +
+            '<div class="visual-area" id="va-' + tIdx + '" style="border:none;background:transparent;">' +
             '<div class="visual-loading"><div>Pick a visual type above, then Generate.</div></div></div>' +
-            '<div class="controls" id="ctrl-' + idx + '" style="display:none;"></div>' +
-            '<div class="controls"><button class="icon-btn" onclick="generateVisual(' + idx + ')">Generate Visual</button></div>';
+            '<div class="controls" id="ctrl-' + tIdx + '" style="display:none;"></div>' +
+            '<div class="controls"><button class="icon-btn" onclick="generateVisual(' + tIdx + ')">Generate Visual</button></div>';
         vp.innerHTML = html;
-        updateRecoChip(idx, t, chosen, reco, effective);
+        updateRecoChip(tIdx, t, chosen, reco, effective);
 
         // Restore already-generated visual for this topic (cached render)
-        const cached = window['_vis_' + idx];
+        const cached = window['_vis_' + tIdx];
         if (cached !== undefined && cached.type === effective) {
-            document.getElementById('va-' + idx).innerHTML = cached.html;
+            document.getElementById('va-' + tIdx).innerHTML = cached.html;
             if (typeof cached.after === 'function') cached.after();
         }
     }
+}
+
+// ── Rendering dispatcher ─────────────────────────────────────────────────
+function renderSlide() {
+    if (playerMode === 'source') {
+        renderSourceSlide(current);
+    } else if (playerMode === 'visual') {
+        renderVisualSlide(current);
+    } else {
+        renderLearningSlide(current);
+    }
+}
+
+// ── C3 Visual Mode ───────────────────────────────────────────────────────
+const C3_TYPE_LABELS = {
+    'flowchart': 'Flowchart', 'process': 'Process', 'comparison': 'Comparison',
+    'hierarchy': 'Hierarchy', 'timeline': 'Timeline', 'cycle': 'Cycle',
+    'concept_map': 'Concept Map', 'network': 'Network', 'sequence': 'Sequence',
+    'step_by_step': 'Step-by-Step', 'table': 'Table', 'architecture': 'Architecture',
+    'state_machine': 'State', 'formula': 'Formula', 'relationship_graph': 'Relationships'
+};
+
+function fetchC3Visuals() {
+    const presId = (presentationInfo && presentationInfo.id) || (learningStructure && learningStructure.presentation_id);
+    if (!presId || c3VisualsLoading) return;
+    c3VisualsLoading = true;
+    authFetch(API + '/c3/visuals/presentation/' + presId + '/ready').then(function (res) {
+        if (!res.ok) return res.text().then(function (t) { throw new Error(t); });
+        return res.json();
+    }).then(function (data) {
+        c3VisualsLoading = false;
+        const list = (data && data.data) || data.items || [];
+        const byTopic = {};
+        list.forEach(function (a) {
+            if (!a.topic_title) return;
+            byTopic[a.topic_title] = a;
+            const n = a.topic_title.trim().toLowerCase();
+            if (!byTopic[n]) byTopic[n] = a;
+        });
+        c3VisualsByTopic = byTopic;
+        if (playerMode === 'visual') renderVisualSlide(current);
+    }).catch(function (e) {
+        c3VisualsLoading = false;
+        c3VisualsByTopic = {};
+        if (playerMode === 'visual') renderVisualSlide(current);
+    });
+}
+
+function renderVisualSlide(idx) {
+    const vp = document.getElementById('viewport');
+    const t = topics[idx];
+    if (!t) {
+        vp.innerHTML = '<div class="source-empty-note">Topic not found.</div>';
+        return;
+    }
+    const asset = c3VisualsByTopic[t.title] ||
+        (t.outline_title && c3VisualsByTopic[t.outline_title]) ||
+        (t.visuals && t.visuals[0]) ||
+        null;
+
+    let html =
+        '<div class="learning-provenance-badge"><span class="badge-dot" style="background:var(--amber);"></span>EduVision Visual &middot; Topic ' + (idx + 1) + '</div>' +
+        '<h2 class="slide-title">' + escHtml(t.title || '') + '</h2>' +
+        (t.section ? '<div style="margin:-.6rem 0 .8rem;"><div class="c2-section-name">Section &middot; ' + escHtml(t.section) + '</div></div>' : '');
+
+    html += '<div class="c3-visual-container">';
+
+    if (c3VisualsLoading) {
+        html += '<div class="c3-visual-loading">&#9654; Loading generated educational visuals&hellip;</div>';
+    } else if (!asset) {
+        html += '<div class="c3-visual-empty">Returning to this topic after processing usually shows the auto-generated visual here.' +
+            '<br/>No visual has been generated for this topic yet.</div>';
+    } else if (asset.status && asset.status !== 'ready' && asset.status !== 'active') {
+        html += '<div class="c3-visual-error">Visual status: ' + escHtml(asset.status) + '. Generation may still be in progress.</div>';
+    } else {
+        const typeLabel = C3_TYPE_LABELS[asset.visual_type] || asset.visual_type || 'Visual';
+        html += '<div class="c3-visual-header">' +
+            '<div class="c3-visual-badge">&#128444; ' + escHtml(typeLabel) + '</div>' +
+            '<span class="c3-visual-type-tag">' + escHtml(asset.id || asset.asset_id || '') + '</span>' +
+            '</div>';
+
+        if (asset.svg_content) {
+            html += '<div class="c3-visual-svg-wrap">' + asset.svg_content + '</div>';
+        } else {
+            html += '<div class="c3-visual-empty">The generated visual content is not available for display.</div>';
+        }
+
+        // Explanation panel
+        const spec = asset.specification || {};
+        const expl = asset.explanation || {};
+        const specType = spec.visual_type || asset.visual_type;
+        html += '<div class="c3-visual-explanation">';
+        html += '<div class="c3-expl-title">&#128173; Why this visual</div>';
+        if (specType) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Visual type: </span>' +
+                '<span class="c3-expl-text"> ' + escHtml(C3_TYPE_LABELS[specType] || specType) + '</span></div>';
+        }
+        const why = expl.what_you_see || expl.pedagogical_rationale || expl.reason || asset.visual_need_decision && asset.visual_need_decision.reasoning;
+        if (why) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Overview: </span>' +
+                '<span class="c3-expl-text"> ' + escHtml(why) + '</span></div>';
+        }
+        if (expl.how_to_read) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">How to read: </span>' +
+                '<span class="c3-expl-text"> ' + escHtml(expl.how_to_read) + '</span></div>';
+        }
+        if (expl.key_takeaway) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Key takeaway: </span>' +
+                '<span class="c3-expl-text"> ' + escHtml(expl.key_takeaway) + '</span></div>';
+        }
+        const concepts = spec.concepts || asset.concepts || [];
+        if (Array.isArray(concepts) && concepts.length > 0) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Concepts: </span>' +
+                '<div class="c3-concept-chips">' +
+                concepts.map(function (c) {
+                    const nm = c.name || c;
+                    return '<span class="c3-concept-chip">' + escHtml(nm) + '</span>';
+                }).join('') +
+                '</div></div>';
+        }
+        // Source references / grounding
+        const refs = spec.source_references || asset.source_references || [];
+        if (Array.isArray(refs) && refs.length > 0) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Source grounding: </span>';
+            const nums = [];
+            refs.forEach(function (r) {
+                const n = (r && (r.slide_number || r.section)) ? ((r.slide_number || r.section)) : (typeof r === 'number' ? r : null);
+                if (n && nums.indexOf(n) === -1) nums.push(n);
+            });
+            nums.forEach(function (n) {
+                html += '<span class="c3-source-ref" onclick="jumpToSourceSlide(' + n + ')">&#128196; Slide ' + n + '</span>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+
+        // Download actions
+        const aid = asset.id || asset.asset_id;
+        if (aid) {
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                '<button class="c3-download-btn" onclick="c3DownloadSVG(\'' + aid + '\',\'' + escHtml(t.title) + '.svg\')">&#11015; Download SVG</button>' +
+                '</div>';
+        }
+    }
+
+    html += '</div>';
+    vp.innerHTML = html;
+}
+
+function c3DownloadSVG(assetId, filename) {
+    if (!assetId) return;
+    authFetch(API + '/c3/visuals/' + assetId + '/svg').then(function (res) {
+        if (!res.ok) throw new Error('download failed');
+        return res.text();
+    }).then(function (svgText) {
+        const blob = new Blob([svgText], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'visual.svg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }).catch(function (e) {
+        alert('Could not download the SVG: ' + e.message);
+    });
 }
 
 function recommendVisualType(topic) {
@@ -548,20 +1170,33 @@ function updateRecoChip(idx, topic, chosen, reco, effective) {
 
 // ── Navigation ───────────────────────────────────────────────────────────
 function goTo(i, syncSession = true) {
-    if (i < 0 || i >= slides.length) return;
+    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    if (i < 0 || i >= maxLen) return;
     current = i;
+    if (playerMode === 'source') {
+        currentSourceSlide = i;
+    } else {
+        currentLearningSlide = i;
+    }
     renderSlide();
     updateChrome();
     if (syncSession && sessionId) syncTopic();
 }
 
-function nextSlide() { if (current < slides.length - 1) goTo(current + 1); }
-function prevSlide() { if (current > 0) goTo(current - 1); }
+function nextSlide() {
+    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    if (current < maxLen - 1) goTo(current + 1);
+}
+
+function prevSlide() {
+    if (current > 0) goTo(current - 1);
+}
 
 function updateChrome() {
-    document.getElementById('counter').innerHTML = '<b>' + (current + 1) + '</b> / ' + slides.length;
+    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    document.getElementById('counter').innerHTML = '<b>' + (current + 1) + '</b> / ' + maxLen;
     document.getElementById('prevBtn').disabled = current === 0;
-    const isLast = current === slides.length - 1;
+    const isLast = current === maxLen - 1;
     document.getElementById('nextBtn').style.display = isLast ? 'none' : '';
     document.getElementById('nextBtn').disabled = isLast;
     document.getElementById('finishBtn').style.display = isLast ? '' : 'none';
@@ -617,7 +1252,7 @@ document.addEventListener('keydown', (e) => {
         case 'ArrowRight': case 'PageDown': case ' ': nextSlide(); e.preventDefault(); break;
         case 'ArrowLeft': case 'PageUp': prevSlide(); e.preventDefault(); break;
         case 'Home': goTo(0); e.preventDefault(); break;
-        case 'End': goTo(slides.length - 1); e.preventDefault(); break;
+        case 'End': goTo(((playerMode === 'source' ? sourceUnits.length : slides.length) || 1) - 1); e.preventDefault(); break;
         case 'Escape': if (document.body.classList.contains('presenting')) exitPresent(); break;
         case 'f': case 'F': if (!document.body.classList.contains('presenting')) enterPresent(); break;
     }

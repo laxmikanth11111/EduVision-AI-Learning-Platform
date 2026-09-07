@@ -1,7 +1,7 @@
 """P14 review-outcome retention on real PostgreSQL.
 
 Runs against the Alembic-migrated scratch database (postgres:16-alpine) so the
-retention path exercises the *production schema lineage* (head is ``0034_video_projects``;
+retention path exercises the *production schema lineage* (head is ``0035_c3_topic_visual_assets``;
 P14 itself adds no migration). It drives the
 ``ReviewScheduleService`` / ``LearnerAnalyticsService`` work directly against the
 real engine: JSONB ``review_metadata`` round-trips (v2 history + counts + step),
@@ -165,7 +165,7 @@ async def review_seed(pg_session: AsyncSession) -> dict[str, Any]:
 async def test_p14_no_new_migration_head_unchanged(pg_session: AsyncSession) -> None:
     """P14 reads existing tables only — the Alembic head is 0034 (P16 added it)."""
     head = (await pg_session.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-    assert head == "0034_video_projects"
+    assert head == "0035_c3_topic_visual_assets"
 
 
 async def test_p14_complete_good_persists_jsonb_on_migrated_schema(
