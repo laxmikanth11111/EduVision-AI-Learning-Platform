@@ -28,6 +28,7 @@ from app.repositories.generated_lesson_repository import (
 from app.repositories.quiz_repository import QuizAttemptRepository, QuizRepository
 from app.services.learning_session_service import LearningSessionService
 from app.utils.bounded_cache import BoundedCache
+from shared.constants import PlayerMode
 
 logger = get_logger(__name__)
 
@@ -148,17 +149,20 @@ class LessonPlayerService:
             getattr(lesson, "presentation", None), len(source_units)
         )
         total_topics = len(topics) if len(topics) > 0 else len(source_units)
-        total_slides = max(len(source_units), total_topics * 2)
 
         active_session = None
         if owner_id:
             session = await self._progress.find_for_lesson(user_id=owner_id, lesson_id=lesson.id)
             if session is not None:
+                mode = session.player_mode or PlayerMode.LEARNING.value
+                session_total_slides = self._session_total_slides(
+                    mode, len(source_units), total_topics
+                )
                 active_session = self._progress.to_player_session(
                     session,
                     total_topics,
                     lesson_public_id=lesson.public_id,
-                    total_slides=total_slides,
+                    total_slides=session_total_slides,
                 )
                 resumed_slide = int(active_session.get("slide_index") or 0)
                 if resumed_slide > 0:
@@ -166,7 +170,8 @@ class LessonPlayerService:
                         "lesson_resume_restored",
                         lesson=lesson.public_id,
                         slide_index=resumed_slide,
-                        total_slides=total_topics * 2,
+                        total_slides=session_total_slides,
+                        player_mode=mode,
                     )
         else:
             # Anonymous path: surface an existing transient session for this lesson.
@@ -194,6 +199,7 @@ class LessonPlayerService:
         owner_id: str | None = None,
         device_id: str | None = None,
         client_metadata: dict[str, Any] | None = None,
+        player_mode: str = PlayerMode.LEARNING.value,
     ) -> dict[str, Any]:
         lesson = await self._load_accessible_lesson(lesson_public_id, owner_id)
         version = await self._resolve_version(lesson)
@@ -213,7 +219,6 @@ class LessonPlayerService:
             getattr(lesson, "presentation", None), len(source_units)
         )
         total_topics = len(topics) if len(topics) > 0 else len(source_units)
-        total_slides = max(len(source_units), total_topics * 2)
 
         if owner_id:
             # Idempotent resume: same owner + lesson -> same persistent session,
@@ -226,6 +231,7 @@ class LessonPlayerService:
                 total_topics=total_topics,
                 device_id=device_id,
                 client_metadata=client_metadata,
+                player_mode=player_mode,
             )
         else:
             # Anonymous/tooling path: a short-lived, bound in-memory session.
@@ -237,6 +243,7 @@ class LessonPlayerService:
                 "slide_index": 0,
                 "total_topics": total_topics,
                 "status": "active",
+                "player_mode": player_mode,
                 "completion_percentage": (
                     round(((0 + 1) / total_topics) * 100.0, 1) if total_topics > 0 else 0.0
                 ),
@@ -252,6 +259,9 @@ class LessonPlayerService:
                 "session": session_state,
             }
 
+        session_total_slides = self._session_total_slides(
+            session.player_mode or PlayerMode.LEARNING.value, len(source_units), total_topics
+        )
         return {
             "lesson": self._serialize_lesson(lesson),
             "version": self._serialize_version(version, lesson.public_id) if version else None,
@@ -263,7 +273,7 @@ class LessonPlayerService:
                 session,
                 total_topics,
                 lesson_public_id=lesson.public_id,
-                total_slides=total_slides,
+                total_slides=session_total_slides,
             ),
         }
 
@@ -273,13 +283,17 @@ class LessonPlayerService:
         slide_index: int,
         *,
         owner_id: str | None = None,
+        player_mode: str = PlayerMode.LEARNING.value,
     ) -> dict[str, Any] | None:
         """Set the user's absolute slide position in a persistent session.
 
-        Slide-accurate resume: each topic renders as two slides (concept then
-        visual), so ``slide_index = topic_index * 2 (+0 | +1)``. The persisted
-        session therefore restores the exact slide the learner was on. Returns
-        None when the session is absent or belongs to another user.
+        Mode-aware slide-accurate resume:
+        - ``learning``: slide_index = topic_index * 2 (+0 | +1)
+        - ``source``: slide_index counts against the uploaded source deck and
+          is mapped onto topics via the topic outline so the final source slide
+          reaches 100%.
+
+        Returns None when the session is absent or belongs to another user.
         """
         if owner_id is None:
             return None
@@ -287,12 +301,31 @@ class LessonPlayerService:
         if lesson_id is None:
             return None
         total = await self._topic_count_for_lesson(lesson_id)
-        total_slides = max(total, total * 2)
+        mode = player_mode or PlayerMode.LEARNING.value
+        source_units = []
+        source_topic_map: list[int] | None = None
+        learning_structure = None
+        if mode == PlayerMode.SOURCE.value:
+            lesson = await self._lesson_repo.get(lesson_id)
+            if lesson and lesson.presentation_id:
+                source_units = await self._load_source_units(lesson.presentation_id)
+                # The outline is (re)loaded by presentation id; the presentation
+                # row itself is not needed for the source topic mapping (avoiding
+                # a lazy relationship load on the async session).
+                learning_structure = await self._load_learning_structure(
+                    lesson.presentation_id, None
+                )
+                source_topic_map = self._build_source_topic_map(
+                    source_units, learning_structure, total
+                )
+        total_slides = self._session_total_slides(mode, len(source_units), total)
         updated = await self._progress.set_slide_position(
             session_id=session_id,
             user_id=owner_id,
             slide_index=slide_index,
             total_slides=total_slides,
+            player_mode=mode,
+            source_topic_map=source_topic_map,
         )
         if updated is None:
             return None
@@ -485,6 +518,65 @@ class LessonPlayerService:
         }
 
     # ── Internals ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _session_total_slides(
+        player_mode: str, source_count: int, total_topics: int
+    ) -> int:
+        """Slide count of the deck a mode-relative position is indexed against."""
+        if (player_mode or PlayerMode.LEARNING.value) == PlayerMode.SOURCE.value:
+            return max(source_count, 1)
+        return max(source_count, total_topics * 2)
+
+    def _build_source_topic_map(
+        self,
+        source_units: list[dict[str, Any]],
+        learning_structure: dict[str, Any] | None,
+        total_topics: int,
+    ) -> list[int]:
+        """Map each source slide (in deck order) onto a topic index.
+
+        Uses the topic outline's 1-based ``slide_ranges`` matched against each
+        source unit's ``position`` where available, so a contiguous multi-slide
+        topic keeps its slides until the topic's last slide; otherwise falls
+        back to an even split. Either way the FINAL source slide is pinned to
+        the last topic so source-mode completion reaches 100%.
+        """
+        if not source_units or total_topics <= 0:
+            return []
+        ranges: list[tuple[int, int]] = []
+        outline_topics = (learning_structure.get("topics") or []) if learning_structure else []
+        for topic in outline_topics:
+            if not isinstance(topic, dict):
+                continue
+            sr = topic.get("slide_ranges")
+            if isinstance(sr, (list, tuple)) and len(sr) >= 2:
+                try:
+                    ranges.append((int(sr[0]), int(sr[1])))
+                except (TypeError, ValueError):
+                    continue
+
+        mapping: list[int] = []
+        for idx, unit in enumerate(source_units):
+            raw_pos = unit.get("position")
+            try:
+                pos = int(raw_pos)
+            except (TypeError, ValueError):
+                pos = idx + 1
+            topic_index = next(
+                (ti for ti, (start, end) in enumerate(ranges) if start <= pos <= end),
+                None,
+            )
+            if topic_index is None:
+                break
+            mapping.append(topic_index)
+
+        if len(mapping) != len(source_units):
+            size = len(source_units)
+            mapping = [min(int(i * total_topics / size), total_topics - 1) for i in range(size)]
+        if mapping:
+            mapping[-1] = total_topics - 1
+        return mapping
 
     async def _lesson_id_for_session(self, session_id: str, owner_id: str) -> uuid.UUID | None:
         session = await self._progress.find_by_public_id(session_id, user_id=owner_id)

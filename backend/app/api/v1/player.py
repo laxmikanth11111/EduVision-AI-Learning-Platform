@@ -61,6 +61,7 @@ async def start_player_session(
             owner_id=str(user.id),
             device_id=request.device_id,
             client_metadata=request.client_metadata,
+            player_mode=request.player_mode,
         )
     except PermissionError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
@@ -124,7 +125,10 @@ async def set_slide_position(
 ) -> APIResponse[PlayerSessionResponse]:
     """Persist the learner's exact slide position for slide-accurate resume."""
     state = await LessonPlayerService(uow).set_position(
-        request.session_id, request.slide_index, owner_id=str(user.id)
+        request.session_id,
+        request.slide_index,
+        owner_id=str(user.id),
+        player_mode=request.mode,
     )
     if state is None:
         raise HTTPException(

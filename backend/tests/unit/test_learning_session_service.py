@@ -255,3 +255,106 @@ class TestSetSlidePosition:
         assert serialized["topic_index"] == 2
         assert serialized["completion_percentage"] == 100.0
         assert serialized["total_topics"] == 3
+
+
+class TestModeAwareSlidePosition:
+    """Mode-aware completion: learning keeps the pair mapping, source maps
+    source slides onto topics (final slide pinned so completion reaches 100%)."""
+
+    async def _session(self, db_session, user, lesson, total_topics=4) -> Any:
+        return await _service(db_session).get_or_create(
+            user_id=str(user.id),
+            lesson_id=lesson.id,
+            lesson_version_id=None,
+            topic_index=0,
+            total_topics=total_topics,
+        )
+
+    async def test_learning_mode_keeps_concept_visual_pair_mapping(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson)
+        updated = await _service(db_session).set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=5,
+            total_slides=8,
+            player_mode="learning",
+        )
+        assert updated is not None
+        assert updated.player_mode == "learning"
+        # Slide 5 == topic 2 visual slide (pair mapping preserved).
+        assert updated.current_slide_position == 5
+        assert updated.current_block_position == 2
+        assert updated.completion_percentage == 75.0
+
+    async def test_source_mode_uses_topic_map_and_final_slide_is_full(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson)
+        svc = _service(db_session)
+        mapping = [0, 1, 1, 2, 3, 3]
+
+        mid = await svc.set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=2,
+            total_slides=6,
+            player_mode="source",
+            source_topic_map=mapping,
+        )
+        assert mid is not None
+        assert mid.player_mode == "source"
+        assert mid.current_slide_position == 2
+        assert mid.current_block_position == 1
+        assert mid.status == LearningSessionStatus.ACTIVE.value
+
+        final = await svc.set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=5,
+            total_slides=6,
+            player_mode="source",
+            source_topic_map=mapping,
+        )
+        assert final is not None
+        assert final.current_slide_position == 5
+        assert final.current_block_position == 3
+        assert final.completion_percentage == 100.0
+        assert final.status == LearningSessionStatus.COMPLETED.value
+
+    async def test_source_mode_proportional_fallback_reaches_full(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson, total_topics=2)
+        updated = await _service(db_session).set_slide_position(
+            session_id=session.public_id,
+            user_id=str(user.id),
+            slide_index=3,
+            total_slides=4,
+            player_mode="source",
+            source_topic_map=None,
+        )
+        assert updated is not None
+        assert updated.completion_percentage == 100.0
+
+    async def test_invalid_player_mode_is_rejected(
+        self, db_session, make_user, make_presentation
+    ) -> None:
+        user = await make_user()
+        lesson = await _make_lesson(db_session, await make_presentation())
+        session = await self._session(db_session, user, lesson)
+        with pytest.raises(ValueError, match="is not a valid PlayerMode"):
+            await _service(db_session).set_slide_position(
+                session_id=session.public_id,
+                user_id=str(user.id),
+                slide_index=1,
+                total_slides=6,
+                player_mode="visual",
+            )

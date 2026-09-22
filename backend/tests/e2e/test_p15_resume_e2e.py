@@ -146,8 +146,15 @@ def _sign_in(page, base_url: str, email: str, password: str) -> None:
     page.wait_for_load_state("domcontentloaded")
 
 
-def _open_player_and_wait(page, base_url: str, lesson_id: str) -> None:
-    page.goto(f"{base_url}/frontend/player.html?lesson={lesson_id}")
+def _open_player_and_wait(page, base_url: str, lesson_id: str, query: str = "") -> None:
+    # The P15 deck is a learning deck (2 topics -> 4 AI slides); pin ?mode=learning
+    # so the deck deterministically renders the 4-slide learning view.
+    if not query:
+        query = "mode=learning"
+    # The base URL already carries ?lesson=...; any extra parameter needs a
+    # separating & (callers may pass a query already prefixed with &).
+    sep = "" if query.startswith("&") else "&"
+    page.goto(f"{base_url}/frontend/player.html?lesson={lesson_id}{sep}{query}")
     page.wait_for_load_state("domcontentloaded")
     counter = page.locator("#counter")
     counter.wait_for(state="visible", timeout=20_000)
@@ -294,7 +301,9 @@ def test_p15_dashboard_resume_deep_link(server_env, page):
     item = items[0]
     assert item["lesson_id"] == owner["lesson_id"]
     assert item["resume_slide"] == 2
-    assert item["resume_link"].endswith(f"lesson={owner['lesson_id']}&slide=2"), item["resume_link"]
+    assert item["resume_link"].endswith(
+        f"lesson={owner['lesson_id']}&slide=2&mode=learning"
+    ), item["resume_link"]
 
     # Cold-load deep-link: open the dashboard resume URL and land on slide 3/4.
     _open_player_and_wait(page, base, owner["lesson_id"])
@@ -311,7 +320,7 @@ def test_p15_dashboard_resume_deep_link(server_env, page):
 
     # An explicit ?slide= override still beats the server position.
     _open_player_and_wait(page, base, owner["lesson_id"])
-    page.goto(f"{base}/frontend/player.html?lesson={owner['lesson_id']}&slide=0")
+    page.goto(f"{base}/frontend/player.html?lesson={owner['lesson_id']}&slide=0&mode=learning")
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_function(
         """() => {

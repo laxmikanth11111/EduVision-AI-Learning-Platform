@@ -36,6 +36,7 @@ from app.models.learning_path import LearningPath
 from app.models.learning_session import LearningSession
 from app.models.presentation import Presentation
 from app.models.presentation_analytics import PresentationAnalytics
+from app.models.presentation_annotation import PresentationAnnotation
 from app.models.presentation_audit_log import PresentationAuditLog
 from app.models.presentation_folder import PresentationFolder
 from app.models.presentation_tag import PresentationTag
@@ -142,4 +143,5 @@ __all__ = [
     "TopicVisualAsset",
     "TopicAnimationAsset",
     "VideoProjectRecord",
+    "PresentationAnnotation",
 ]

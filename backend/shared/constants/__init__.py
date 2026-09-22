@@ -293,6 +293,43 @@ class LearningSessionStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class PlayerMode(str, Enum):
+    """Slide-deck representation used for progress/completion tracking.
+
+    ``source`` counts against the uploaded source slide deck; ``learning``
+    counts against the AI teacher's concept/visual slide pair per topic. The
+    visual and animation views render INTO the learning deck, so only these two
+    values are accepted as completion modes (the client normalizes
+    ``visual``/``animation`` to ``learning`` before saving a position).
+    """
+
+    SOURCE = "source"
+    LEARNING = "learning"
+
+    @classmethod
+    def as_set(cls) -> frozenset[str]:
+        return frozenset(item.value for item in cls)
+
+
+class AnnotationLayerMode(str, Enum):
+    """Per-slide annotation-layer identities (isolation across views).
+
+    Each mode keeps its own annotation layers so strokes made in source mode
+    never leak into the AI slides and vice-versa. ``visual`` and ``animation``
+    annotate over the same underlying learning render but are still stored
+    under their own layer ids so layers stay isolated per view.
+    """
+
+    SOURCE = "source"
+    LEARNING = "learning"
+    VISUAL = "visual"
+    ANIMATION = "animation"
+
+    @classmethod
+    def as_set(cls) -> frozenset[str]:
+        return frozenset(item.value for item in cls)
+
+
 class LearningEventType(str, Enum):
     """Structured learning-session event names (append-only event stream)."""
 

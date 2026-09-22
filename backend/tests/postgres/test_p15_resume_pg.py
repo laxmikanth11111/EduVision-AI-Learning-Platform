@@ -223,5 +223,5 @@ async def test_p15_progress_resume_fields_on_pg(
     assert item.lesson_id == resume_seed["lesson_public_id"]
     assert item.resume_slide == 2
     assert item.resume_link == (
-        f"/frontend/player.html?lesson={resume_seed['lesson_public_id']}&slide=2"
+        f"/frontend/player.html?lesson={resume_seed['lesson_public_id']}&slide=2&mode=learning"
     )

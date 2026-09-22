@@ -59,6 +59,8 @@ class PlayerSessionResponse(BaseModel):
     total_topics: int = 0
     status: str = "active"
     completion_percentage: float = 0.0
+    # Deck representation this position belongs to: 'source' | 'learning'.
+    player_mode: str = "learning"
 
 
 class PlayerPresentationResponse(BaseModel):
@@ -84,6 +86,8 @@ class StartPlayerRequest(BaseModel):
 
     device_id: str | None = Field(default=None, max_length=128)
     client_metadata: dict[str, Any] | None = None
+    # Optional deck representation to seed the session position against.
+    player_mode: str = Field(default="learning", pattern="^(source|learning)$")
 
 
 class SetPositionRequest(BaseModel):
@@ -91,3 +95,7 @@ class SetPositionRequest(BaseModel):
 
     session_id: str = Field(min_length=1, max_length=40)
     slide_index: int = Field(ge=0, le=100000)
+    # Deck representation this slide index is relative to (defaults to the
+    # session's current representation). Only 'source' and 'learning' are valid
+    # completion modes; visual/animation clients normalize to 'learning'.
+    mode: str = Field(default="learning", pattern="^(source|learning)$")

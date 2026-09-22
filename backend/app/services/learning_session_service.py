@@ -31,7 +31,7 @@ from app.models.learning_session import (
     generate_session_public_id,
 )
 from app.observability.metrics import metrics
-from shared.constants import LearningSessionStatus
+from shared.constants import LearningSessionStatus, PlayerMode
 
 logger = get_logger(__name__)
 
@@ -41,6 +41,11 @@ def _as_uuid(value: str) -> uuid.UUID | None:
         return uuid.UUID(value)
     except (ValueError, TypeError):
         return None
+
+
+def _validate_player_mode(value: str | None) -> str:
+    """Coerce a completion mode string, raising on anything else."""
+    return PlayerMode(value or PlayerMode.LEARNING.value).value
 
 
 class LearningSessionService:
@@ -102,12 +107,16 @@ class LearningSessionService:
         total_topics: int,
         device_id: str | None = None,
         client_metadata: dict[str, Any] | None = None,
+        player_mode: str = PlayerMode.LEARNING.value,
     ) -> LearningSession:
         """Return the existing session for ``user_id`` + ``lesson_id`` or create one.
 
         This makes start/resume idempotent: repeated calls for the same owner
         and lesson return the same persistent session (resuming its saved
         position) instead of stacking duplicate sessions.
+
+        ``player_mode`` only applies to a freshly-created session; resuming
+        keeps the representation the learner was last in.
         """
         user_uuid = _as_uuid(user_id)
         if user_uuid is None:
@@ -129,6 +138,7 @@ class LearningSessionService:
             started_at=now,
             last_activity_at=now,
             current_block_position=max(0, topic_index),
+            player_mode=_validate_player_mode(player_mode),
             completion_percentage=_progress_percentage(topic_index, total_topics),
             total_time_seconds=0,
             resume_version=1,
@@ -178,23 +188,34 @@ class LearningSessionService:
         user_id: str,
         slide_index: int,
         total_slides: int,
+        player_mode: str = PlayerMode.LEARNING.value,
+        source_topic_map: list[int] | None = None,
     ) -> LearningSession | None:
         """Set the user's absolute slide position in a session.
 
-        The slide index is clamped to ``[0, max(0, total_slides - 1)]`` and the
-        derived topic position is kept in sync via ``_apply_position`` so the
-        ``current_block_position`` and ``completion_percentage`` remain
-        consistent with the slide the learner is actually on.
+        The slide index is clamped to ``[0, max(0, total_slides - 1)]``.
+
+        The derived topic position and completion depend on ``player_mode``:
+        - ``learning`` (default): each topic is a concept + visual pair, so the
+          existing ``slide_index // 2`` mapping is preserved and a full deck of
+          ``total_topics * 2`` slides completes at the last visual slide.
+        - ``source``: slide indices count against the uploaded source deck; the
+          caller supplies ``source_topic_map`` (one topic index per source
+          slide, guaranteed to end at the last topic) so the FINAL source slide
+          reaches 100% instead of capping at ~50%. A proportional fallback maps
+          slides evenly when no outline is available.
 
         Returns None when the session is absent or belongs to another user.
         """
         session = await self.find_by_public_id(session_id, user_id=user_id)
         if session is None:
             return None
-        total_topics = max(0, total_slides // 2)
-        topic_index = min(max(0, slide_index) // 2, max(0, total_topics - 1)) if total_topics else 0
-        self._apply_position(session, topic_index, total_topics)
-        session.current_slide_position = max(0, min(slide_index, max(0, total_slides - 1)))
+        session.player_mode = _validate_player_mode(player_mode)
+        clamped = max(0, min(slide_index, max(0, total_slides - 1)))
+        if session.player_mode == PlayerMode.SOURCE.value:
+            self._apply_source_slide_position(session, clamped, total_slides, source_topic_map)
+        else:
+            self._apply_learning_slide_position(session, clamped, total_slides)
         session.resume_version = (session.resume_version or 0) + 1
         session.last_activity_at = datetime.now(UTC)
         await self._uow.flush()
@@ -226,7 +247,61 @@ class LearningSessionService:
             "total_topics": total_topics,
             "status": status,
             "completion_percentage": round(float(session.completion_percentage or 0.0), 1),
+            "player_mode": session.player_mode or PlayerMode.LEARNING.value,
         }
+
+    @staticmethod
+    def _apply_learning_slide_position(
+        session: LearningSession,
+        clamped: int,
+        total_slides: int,
+    ) -> None:
+        total_topics = max(0, total_slides // 2)
+        topic_index = (
+            min(clamped // 2, max(0, total_topics - 1)) if total_topics else 0
+        )
+        session.current_slide_position = clamped
+        session.current_block_position = topic_index
+        session.completion_percentage = _progress_percentage(topic_index, total_topics)
+        session.status = (
+            LearningSessionStatus.COMPLETED.value
+            if total_topics > 0 and topic_index >= total_topics - 1
+            else LearningSessionStatus.ACTIVE.value
+        )
+        session.last_activity_at = datetime.now(UTC)
+
+    @staticmethod
+    def _apply_source_slide_position(
+        session: LearningSession,
+        clamped: int,
+        total_slides: int,
+        source_topic_map: list[int] | None,
+    ) -> None:
+        n = max(0, total_slides)
+        if n <= 0:
+            session.current_slide_position = 0
+            session.current_block_position = 0
+            session.completion_percentage = 0.0
+            session.status = LearningSessionStatus.ACTIVE.value
+            session.last_activity_at = datetime.now(UTC)
+            return
+        mapping = list(source_topic_map or [])
+        if len(mapping) != n:
+            # No (full) outline mapping available: even a proportionate split so
+            # the deck completes at its final slide.
+            total_topics = max(1, (max(mapping) + 1) if mapping else n)
+            mapping = [min(int(i * total_topics / n), total_topics - 1) for i in range(n)]
+        total_topics = max(1, max(mapping) + 1)
+        topic_index = min(mapping[clamped], total_topics - 1)
+        session.current_slide_position = clamped
+        session.current_block_position = topic_index
+        session.completion_percentage = _progress_percentage(topic_index, total_topics)
+        session.status = (
+            LearningSessionStatus.COMPLETED.value
+            if topic_index >= total_topics - 1
+            else LearningSessionStatus.ACTIVE.value
+        )
+        session.last_activity_at = datetime.now(UTC)
 
     @staticmethod
     def _apply_position(

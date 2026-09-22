@@ -26,6 +26,7 @@ import pytest_asyncio
 from fastapi import HTTPException, Request
 from fastapi import status as http_status
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from app.core.dependencies import get_current_user
 from app.core.security import create_access_token, decode_access_token
@@ -221,13 +222,76 @@ async def _start_session(client: AsyncClient, lookups: dict[str, str]) -> str:
 
 
 async def _position(
-    client: AsyncClient, lookups: dict[str, str], session_id: str, slide_index: int
+    client: AsyncClient, lookups: dict[str, str], session_id: str, slide_index: int,
+    mode: str = "learning",
 ) -> Any:
     return await client.post(
         f"/api/v1/lessons/{lookups['lesson_id']}/player/position",
-        json={"session_id": session_id, "slide_index": slide_index},
+        json={"session_id": session_id, "slide_index": slide_index, "mode": mode},
         headers=_headers(uuid.UUID(lookups["user_id"])),
     )
+
+
+async def _seed_source_material(lookups: dict[str, str]) -> None:
+    """Attach 4 source units + a 4-topic outline to the seeded lesson's deck.
+
+    The lesson is padded to 4 lesson blocks so ``_topic_count_for_lesson``
+    reports 4 topics (matching the 4 source slides the deck maps onto).
+    Unit ``position`` is 1-based, matching the outline's 1-based
+    ``slide_ranges`` so the source topic map resolves through outline ranges.
+    """
+    from app.models.content_unit import ContentUnit
+    from app.models.generated_block import GeneratedBlock
+    from app.models.generated_lesson import GeneratedLesson
+    from app.models.generated_lesson_version import GeneratedLessonVersion
+    from app.models.topic_outline import TopicOutline
+    from tests.conftest import TestSessionLocal
+
+    async with TestSessionLocal() as session:
+        lesson = (
+            await session.execute(
+                select(GeneratedLesson).where(GeneratedLesson.public_id == lookups["lesson_id"])
+            )
+        ).scalar_one()
+        for pos in range(1, 5):
+            session.add(
+                ContentUnit(
+                    presentation_id=lesson.presentation_id,
+                    unit_type="slide",
+                    position=pos,
+                    title=f"Source Unit {pos}",
+                    raw_text=f"Raw text for source unit {pos}.",
+                )
+            )
+        lesson_version = (
+            await session.execute(
+                select(GeneratedLessonVersion)
+                .where(GeneratedLessonVersion.lesson_id == lesson.id)
+                .order_by(GeneratedLessonVersion.version.desc())
+            )
+        ).scalars().first()
+        for pos in (2, 3):
+            session.add(
+                GeneratedBlock(
+                    lesson_version_id=lesson_version.id,
+                    block_type="paragraph",
+                    position=pos,
+                    heading=f"Resume: Source Topic {pos + 1}",
+                    content=f"Body for source topic {pos + 1}.",
+                )
+            )
+        session.add(
+            TopicOutline(
+                presentation_id=lesson.presentation_id,
+                title="P15 Resume Deck",
+                topics=[
+                    {"title": f"Topic {pos}", "slide_ranges": [pos, pos]}
+                    for pos in range(1, 5)
+                ],
+                status="succeeded",
+            )
+        )
+        await session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +389,7 @@ async def test_progress_endpoint_advertises_resume() -> None:
         assert item["lesson_id"] == lookups["lesson_id"]
         assert item["resume_slide"] == 3
         assert item["resume_link"] == (
-            f"/frontend/player.html?lesson={lookups['lesson_id']}&slide=3"
+            f"/frontend/player.html?lesson={lookups['lesson_id']}&slide=3&mode=learning"
         )
         assert item["status"] == "completed"
 
@@ -361,3 +425,63 @@ async def test_cross_user_position_is_404_with_no_write() -> None:
             headers=_headers(uid_b),
         )
         assert b_view.status_code == 403
+
+
+async def test_source_mode_final_slide_reaches_full_completion() -> None:
+    lookups = await _seed_resume_learner()
+    await _seed_source_material(lookups)
+    async with await _make_client() as client:
+        session_id = await _start_session(client, lookups)
+
+        # A mid-deck source slide must not report the deck finished.
+        resp = await _position(client, lookups, session_id, 1, mode="source")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["slide_index"] == 1
+        assert data["completion_percentage"] < 100.0
+
+        # The FINAL source slide is pinned to the last topic on the mapping, so
+        # completion reaches 100% (previously capped at the ~50% ceiling).
+        resp = await _position(client, lookups, session_id, 3, mode="source")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["slide_index"] == 3
+        assert data["topic_index"] == 3
+        assert data["completion_percentage"] == 100.0
+
+        # The session carries the mode its position belongs to.
+        state_resp = await client.get(
+            f"/api/v1/lessons/{lookups['lesson_id']}/player",
+            headers=_headers(uuid.UUID(lookups["user_id"])),
+        )
+        assert state_resp.status_code == 200
+        session = state_resp.json()["data"]["session"]
+        assert session["player_mode"] == "source"
+        assert session["slide_index"] == 3
+        assert session["completion_percentage"] == 100.0
+
+
+async def test_position_mode_switches_session_representation() -> None:
+    lookups = await _seed_resume_learner()
+    await _seed_source_material(lookups)
+    async with await _make_client() as client:
+        session_id = await _start_session(client, lookups)
+
+        # Learning-mode position first (concept+visual pairs over 4 slides).
+        resp = await _position(client, lookups, session_id, 2, mode="learning")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["slide_index"] == 2
+        assert data["topic_index"] == 1
+        assert data["player_mode"] == "learning"
+
+        # Switching to source-mode position rewrites the representation.
+        resp = await _position(client, lookups, session_id, 1, mode="source")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["slide_index"] == 1
+        assert data["player_mode"] == "source"
+
+        # Source slide 1 maps onto topic 1 of the 4-source-slide mapping.
+        assert data["topic_index"] == 1
+        assert data["completion_percentage"] < 100.0

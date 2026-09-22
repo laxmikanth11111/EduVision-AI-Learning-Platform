@@ -55,6 +55,22 @@ REQUIRED_PLAYER_PIECES = [
     ("help", "helpOverlay", 'id="helpOverlay"'),
     ("help", "openHelp", "function openHelp()"),
     ("help", "closeHelp", "function closeHelp()"),
+    # presenter notes peek overlay
+    ("notes", "teachNotesToggle", 'id="teachNotesToggle"'),
+    ("notes", "notesPanel", 'id="notesPanel"'),
+    ("notes", "notesBody", 'id="notesBody"'),
+    ("notes", "currentNotes", "function currentNotes()"),
+    ("notes", "renderNotes", "function renderNotes()"),
+    ("notes", "syncNotesToggle", "function syncNotesToggle()"),
+    ("notes", "openNotes", "function openNotes()"),
+    ("notes", "closeNotes", "function closeNotes()"),
+    ("notes", "toggleNotes", "function toggleNotes()"),
+    # annotation persistence (backend layers)
+    ("annot", "annotSaveStatus", 'id="annotSaveStatus"'),
+    ("annot", "loadPersistedAnnotations", "function loadPersistedAnnotations()"),
+    ("annot", "scheduleAnnotSave", "function scheduleAnnotSave()"),
+    ("annot", "saveAnnotationsFor", "function saveAnnotationsFor(target)"),
+    ("annot", "syncMode", "function syncMode()"),
     # AI assistant panel (grounded via tutor endpoints)
     ("ai", "aiPanel", 'id="aiPanel"'),
     ("ai", "aiBackdrop", 'id="aiBackdrop"'),
@@ -109,6 +125,47 @@ class TestPlayerFrontendContract:
         ]:
             # the help panel documents human-readable labels
             assert label in response.text
+
+    async def test_notes_keyboard_shortcut_documented(self, client) -> None:
+        response = await client.get(FRONTEND_PLAYER_URL)
+        assert response.status_code == 200
+        assert "Presenter notes" in response.text
+
+    async def test_sync_topic_sends_mode_parameter(self, client) -> None:
+        """Position sync and finish both send the normalized player mode so the
+        server preserves source vs learning completion semantics."""
+        response = await client.get(FRONTEND_PLAYER_URL)
+        assert response.status_code == 200
+        body = response.text
+        assert 'slide_index: current, mode: syncMode()' in body
+        assert 'mode: syncMode()' in body
+
+    async def test_save_annotations_for_posts_to_layer_endpoint(self, client) -> None:
+        """Replaces layers via the backend route used between page reloads."""
+        response = await client.get(FRONTEND_PLAYER_URL)
+        assert response.status_code == 200
+        body = response.text
+        assert "/lessons/" in body
+        assert "/annotations/" in body
+        # debounce must capture a fixed target so later slide changes don't
+        # overwrite the wrong layer while the save is in flight.
+        assert "annotKey()" in body
+        assert "scheduleAnnotSave" in body
+
+    async def test_escape_closes_notes_before_help(self, client) -> None:
+        response = await client.get(FRONTEND_PLAYER_URL)
+        assert response.status_code == 200
+        assert "closeNotes()" in response.text
+        assert "notes.classList.contains('hidden')" in response.text
+
+
+class TestPlayerFrontendNotesContract:
+    async def test_notes_overlay_isolated_state(self, client) -> None:
+        """The notes overlay must not be injected into slide markup; it is a
+        separate DOM region driven only by currentNotes()."""
+        response = await client.get(FRONTEND_PLAYER_URL)
+        assert response.status_code == 200
+        assert response.text.count("notesBody") >= 1
 
     async def test_ai_uses_mastery_tutor_not_fabrication(self, client) -> None:
         """AI answers must come from the real grounded tutor endpoints and

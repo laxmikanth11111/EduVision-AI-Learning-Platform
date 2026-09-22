@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 from app.database.base import Base, TimestampMixin, UUIDMixin
-from shared.constants import LearningSessionStatus
+from shared.constants import LearningSessionStatus, PlayerMode
 
 if TYPE_CHECKING:
     from app.models.generated_lesson import GeneratedLesson
@@ -110,6 +111,16 @@ class LearningSession(Base, UUIDMixin, TimestampMixin):
     completion_percentage: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     total_time_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     resume_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Slide-deck representation the saved position belongs to: 'source' counts
+    # against the uploaded deck, 'learning' against the AI concept/visual pair
+    # deck. slide_index / current_slide_position are relative to this mode, so
+    # resuming restores exactly the slide (and view) the learner was on.
+    player_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=PlayerMode.LEARNING.value,
+        server_default=PlayerMode.LEARNING.value,
+    )
     client_metadata: Mapped[dict[str, object] | None] = mapped_column(
         JSON().with_variant(JSONB(), "postgresql"),
         nullable=True,
@@ -135,6 +146,10 @@ class LearningSession(Base, UUIDMixin, TimestampMixin):
             "user_id",
             "idempotency_key",
             name="uq_learning_sessions_user_idempotency",
+        ),
+        CheckConstraint(
+            "player_mode IN ('source', 'learning')",
+            name="ck_learning_sessions_player_mode",
         ),
         Index("ix_learning_sessions_user_status", "user_id", "status"),
         Index("ix_learning_sessions_lesson_status", "lesson_id", "status"),

@@ -271,7 +271,7 @@ def test_annotation_visibility_toggle_hides_and_shows_layer(server_env, page):
 
 @pytest.mark.e2e
 def test_learner_progress_completion_reflects_slide_position(server_env, page):
-    # Four topics so source-mode slide indices map onto both topics and the
+    # Four topics so source-mode slide indices map onto all four topics and the
     # backend completion can progress from the first slide to the last.
     _open_player(page, server_env["base_url"], topics=["Alpha", "Beta", "Gamma", "Delta"])
 
@@ -285,9 +285,10 @@ def test_learner_progress_completion_reflects_slide_position(server_env, page):
     # A fresh session starts on topic 0 of a 4-topic deck -> 25% (never 0%).
     assert initial == 25.0, f"initial completion must be the backend value, got {initial!r}"
 
-    # Jump to the final slide via the End key. The backend maps source slide
-    # index // 2 onto a topic, so the last of 4 source slides sits on topic 1
-    # of 4 -> completion rises to 50% (the known source-mode ceiling).
+    # Jump to the final slide via the End key. The backend maps the source
+    # slide index onto a topic via the mode-aware position mapping (with the
+    # final source slide pinned to the last topic), so the last of 4 source
+    # slides reports 100% — not the old source-mode ceiling of 50%.
     page.keyboard.press("End")
     page.wait_for_timeout(1600)  # goTo + 400ms position debounce + panel re-render
 
@@ -297,4 +298,108 @@ def test_learner_progress_completion_reflects_slide_position(server_env, page):
     except ValueError:
         final = 0.0
     assert final > initial, f"completion must advance with the slide position ({initial}% -> {final}%)"
-    assert final == 50.0, f"final source slide must report the backend value, got {final_text!r}"
+    assert final == 100.0, f"final source slide must reach the backend value, got {final_text!r}"
+
+
+@pytest.mark.e2e
+def test_presenter_notes_overlay_toggles_with_buttons_and_keys(server_env, page):
+    _open_player(page, server_env["base_url"])
+
+    panel = page.locator("#notesPanel")
+    toggle = page.locator("#teachNotesToggle")
+    assert "hidden" in (panel.get_attribute("class") or ""), "notes panel must start hidden"
+    assert toggle.get_attribute("aria-expanded") == "false"
+
+    # N opens it (the key binding works whenever no modal is visible) and the
+    # toggle button reflects the expanded state.
+    page.keyboard.press("n")
+    panel.wait_for(state="visible", timeout=5_000)
+    assert toggle.get_attribute("aria-expanded") == "true"
+    body = page.locator("#notesBody").inner_text()
+    # Either real presenter notes or the explicit empty-state message render.
+    assert body.strip() != ""
+
+    # Escape closes the notes overlay (it is modal-like: only Escape while open).
+    page.keyboard.press("Escape")
+    assert "hidden" in (panel.get_attribute("class") or "")
+    assert toggle.get_attribute("aria-expanded") == "false"
+
+    # The toggle button closes and reopens it (both directions).
+    toggle.click()
+    panel.wait_for(state="visible", timeout=5_000)
+    assert toggle.get_attribute("aria-expanded") == "true"
+    toggle.click()
+    assert "hidden" in (panel.get_attribute("class") or "")
+    assert toggle.get_attribute("aria-expanded") == "false"
+
+    # Shift+N reopens it from the closed state.
+    page.keyboard.press("N")
+    panel.wait_for(state="visible", timeout=5_000)
+    page.keyboard.press("Escape")
+
+    # Navigate to another slide while closed, then reopen: the notes content
+    # is (re)rendered for the current slide each time it opens.
+    page.locator("#thumb-1").click()
+    page.wait_for_timeout(600)
+    page.keyboard.press("n")
+    panel.wait_for(state="visible", timeout=5_000)
+    assert page.locator("#notesBody").inner_text().strip() != ""
+    assert toggle.get_attribute("aria-expanded") == "true"
+    page.keyboard.press("Escape")
+
+
+@pytest.mark.e2e
+def test_annotations_persist_across_player_reload(server_env, page):
+    ctx = _open_player(page, server_env["base_url"])
+
+    page.locator('[data-tool="pen"]').click()
+    canvas = page.locator("#annotCanvas")
+    canvas.wait_for(state="attached", timeout=10_000)
+    page.wait_for_function(
+        """() => {
+            const c = document.getElementById('annotCanvas');
+            return c && c.clientWidth > 0 && c.clientHeight > 0;
+        }""",
+        timeout=10_000,
+    )
+    box = canvas.bounding_box()
+    assert box is not None
+    page.mouse.move(box["x"] + 200, box["y"] + 200)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 300, box["y"] + 260, steps=8)
+    page.mouse.up()
+
+    drawn = page.evaluate(
+        "Object.values(annotBySlide).reduce((n,s)=>n+s.items.length,0)"
+    )
+    assert drawn >= 1
+
+    # Wait for the 700ms debounce + PUT round trip, then verify the backend row.
+    page.wait_for_timeout(1800)
+    persisted = page.evaluate(
+        """async (payload) => {
+            const token = localStorage.getItem('access_token');
+            const res = await fetch(
+                payload.base + '/api/v1/lessons/' + payload.lessonId + '/annotations',
+                { headers: { 'Authorization': 'Bearer ' + token } },
+            );
+            return await res.json();
+        }""",
+        {"base": server_env["base_url"], "lessonId": ctx["lessonId"]},
+    )
+    layers = persisted["data"]["layers"]
+    assert layers, "drawn annotation layer must be persisted to the backend"
+
+    # A fresh load must restore the stroke from the persisted layer.
+    page.reload()
+    page.wait_for_load_state("domcontentloaded")
+    page.locator(".thumb-title").first.wait_for(state="visible", timeout=25_000)
+    # Hydration is async after render, so poll until the merged layer lands.
+    page.wait_for_function(
+        "() => Object.values(annotBySlide).reduce((n,s)=>n+s.items.length,0) >= 1",
+        timeout=10_000,
+    )
+    restored = page.evaluate(
+        "Object.values(annotBySlide).reduce((n,s)=>n+s.items.length,0)"
+    )
+    assert restored >= 1, "persisted annotations must be restored after reload"

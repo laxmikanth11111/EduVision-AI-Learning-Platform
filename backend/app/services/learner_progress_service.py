@@ -163,10 +163,13 @@ class LearnerProgressService:
             if entry is None:
                 # Rows are newest-first, so the first session seen for a lesson
                 # is the one the learner most recently stopped on: its slide
-                # position drives the resume deep-link.
+                # position drives the resume deep-link. The mode (source vs
+                # learning deck) is the representation that position belongs to.
                 resume_slide = int(lsess.current_slide_position or 0)
+                mode = lsess.player_mode or "learning"
                 resume_link = (
-                    f"/frontend/player.html?lesson={lesson.public_id}&slide={resume_slide}"
+                    f"/frontend/player.html?lesson={lesson.public_id}"
+                    f"&slide={resume_slide}&mode={mode}"
                     if lesson.public_id
                     else ""
                 )
