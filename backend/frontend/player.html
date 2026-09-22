@@ -168,7 +168,7 @@ body.presenting .sidebar,
 body.presenting footer { display: none; }
 body.presenting .stage { padding: 0; }
 body.presenting .frame { max-width: none; border: none; }
-body.presenting .slide-viewport { padding: 3rem 4rem; display: flex; flex-direction: column; justify-content: center; }
+body.presenting .slide-viewport { padding: 1.5rem 2rem; display: flex; flex-direction: row; align-items: center; justify-content: center; overflow: hidden; }
 body.presenting .slide-title { font-size: 2.3rem; }
 body.presenting .slide-text { font-size: 1.2rem; }
 .present-exit { position: fixed; top: 14px; right: 14px; z-index: 50; background: rgba(14,26,43,0.7); border: 1px solid var(--line); color: var(--muted-strong); border-radius: 2px; padding: .4rem .9rem; font-size: .78rem; cursor: pointer; display: none; }
@@ -330,6 +330,124 @@ body.presenting .present-arrow { display: block; }
 .c4-hud-step { margin-left: auto; font-size: .75rem; color: var(--muted); font-family: 'Space Grotesk', sans-serif; letter-spacing: .04em; }
 .c4-anim-caption { min-height: 34px; padding: .5rem .8rem; font-size: .83rem; color: var(--muted-strong); border-top: 1px solid var(--line); line-height: 1.45; }
 .c4-anim-selfcheck { padding: .6rem .8rem; font-size: .82rem; color: var(--teal); border-top: 1px solid rgba(29,158,117,0.25); background: rgba(29,158,117,0.05); }
+
+/* ── Slide shell + annotation layer ─────────────────────── */
+.slide-shell { flex: 1; min-height: 0; position: relative; display: flex; }
+.slide-viewport { min-width: 0; position: relative; }
+.annot-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; touch-action: none; }
+body.tool-active .annot-canvas { pointer-events: auto; }
+.annot-text-editor { position: absolute; z-index: 30; background: rgba(14,26,43,0.95); color: var(--paper); border: 1px solid var(--amber); border-radius: 3px; padding: .3rem .45rem; font-family: 'Manrope', sans-serif; font-size: 1rem; line-height: 1.4; outline: none; resize: none; min-width: 160px; min-height: 30px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.annot-text-editor:focus { box-shadow: 0 8px 24px rgba(0,0,0,.5), 0 0 0 2px rgba(242,166,35,.4); }
+
+.eraser-ring { position: absolute; z-index: 26; width: 40px; height: 40px; border-radius: 50%; border: 2px dashed rgba(216,90,48,.9); background: rgba(216,90,48,.08); pointer-events: none; transform: translate(-50%,-50%); }
+
+/* ── Laser pointer ─────────────────────────────────────── */
+.laser-dot { position: absolute; z-index: 24; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle, #ff4d4d 0%, rgba(255,77,77,.25) 55%, transparent 75%); box-shadow: 0 0 12px 4px rgba(255,77,77,.55), 0 0 30px 10px rgba(255,77,77,.22); transform: translate(-50%,-50%); pointer-events: none; opacity: 0; transition: opacity .25s ease; }
+.laser-dot.glow { opacity: 1; }
+.laser-dot::after { content: ''; position: absolute; top: 50%; left: 50%; width: 1px; height: 42vh; max-height: 320px; background: linear-gradient(to top, rgba(255,77,77,.6), transparent 75%); transform-origin: bottom center; transform: translate(-50%,-100%) rotate(var(--laser-angle, -12deg)); }
+
+/* Cursor shapes per tool */
+body.tool-pen .annot-canvas { cursor: crosshair; }
+body.tool-highlighter .annot-canvas { cursor: cell; }
+body.tool-eraser .annot-canvas { cursor: none; }
+body.tool-laser .annot-canvas { cursor: none; }
+body.tool-text .annot-canvas { cursor: text; }
+body.tool-rect .annot-canvas, body.tool-ellipse .annot-canvas, body.tool-arrow .annot-canvas, body.tool-line .annot-canvas { cursor: crosshair; }
+
+/* ── Teaching toolbar ───────────────────────────────────── */
+.teach-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 74px; z-index: 60; display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; max-width: 96vw; background: rgba(11,22,38,.92); border: 1px solid var(--line); border-radius: 10px; padding: .4rem .55rem; box-shadow: 0 12px 34px rgba(0,0,0,.5); backdrop-filter: blur(6px); user-select: none; }
+.teach-group { display: flex; align-items: center; gap: 3px; }
+.teach-divider { width: 1px; height: 24px; background: var(--line); flex-shrink: 0; }
+.teach-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 34px; height: 34px; padding: 0 .5rem; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted-strong); font-family: 'Space Grotesk', sans-serif; font-size: .82rem; cursor: pointer; transition: background .12s, color .12s, border-color .12s, transform .08s; white-space: nowrap; }
+.teach-btn:hover { border-color: var(--line); color: var(--paper); background: rgba(244,239,228,0.05); }
+.teach-btn:active { transform: scale(.96); }
+.teach-btn.active { background: var(--amber); color: var(--ink); font-weight: 700; }
+.teach-btn.active:hover { color: var(--ink); }
+.teach-btn .t-glyph { font-size: 1rem; line-height: 1; }
+.teach-btn .t-key { font-size: .6rem; opacity: .65; font-family: 'Manrope', sans-serif; margin-left: 2px; }
+.teach-btn:disabled { opacity: .3; cursor: default; transform: none; }
+body.presenting .teach-bar { bottom: 30px; }
+body.controls-hidden .teach-bar { opacity: 0; pointer-events: none; }
+.teach-sizes { display: flex; align-items: center; gap: 6px; }
+.teach-sizes span { font-size: .66rem; color: var(--muted); font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; letter-spacing: .05em; }
+.teach-sizes input[type="range"] { width: 92px; accent-color: var(--amber); cursor: pointer; }
+.teach-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(244,239,228,.25); cursor: pointer; padding: 0; transition: border-color .12s, transform .1s; flex-shrink: 0; }
+.teach-swatch:hover { transform: scale(1.12); }
+.teach-swatch.active { border-color: var(--paper); box-shadow: 0 0 0 2px var(--amber); }
+.teach-tool-label { font-size: .68rem; color: var(--amber); font-family: 'Space Grotesk', sans-serif; letter-spacing: .05em; min-width: 86px; text-align: center; border-right: 1px solid var(--line); padding-right: 8px; }
+
+/* Toolbar on small screens: allow horizontal scroll rather than wrap off-screen */
+@media (max-width: 900px) {
+    .teach-bar { overflow-x: auto; scrollbar-width: thin; }
+    .teach-sizes { display: none; }
+    .teach-tool-label { min-width: auto; }
+}
+
+/* ── Present mode chrome ───────────────────────────────── */
+.pres-counter { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 48; background: rgba(11,22,38,.72); border: 1px solid var(--line); border-radius: 999px; padding: .3rem .9rem; font-family: 'Space Grotesk', sans-serif; font-size: .78rem; color: var(--muted-strong); letter-spacing: .06em; display: none; pointer-events: none; }
+body.presenting .pres-counter { display: block; }
+body.presenting .present-exit, body.presenting .present-arrow { transition: opacity .3s; }
+body.controls-hidden .present-exit, body.controls-hidden .present-arrow { opacity: 0; pointer-events: none; }
+body.presenting .slide-viewport { overflow: hidden; }
+.pres-track { display: flex; flex-direction: column; width: 100%; position: relative; transform-origin: center; }
+
+/* ── Shortcut help overlay ─────────────────────────────── */
+.help-overlay { position: fixed; inset: 0; z-index: 110; background: rgba(8,16,28,0.85); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 1.25rem; }
+.help-overlay.hidden { display: none; }
+.help-card { background: var(--ink); border: 1px solid var(--line); border-radius: 10px; width: 100%; max-width: 680px; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+.help-head { padding: 1rem 1.4rem; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+.help-head h3 { font-family: 'Space Grotesk', sans-serif; font-size: 1.05rem; color: var(--paper); }
+.help-close { background: none; border: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; line-height: 1; }
+.help-close:hover { color: var(--coral); }
+.help-body { padding: 1.1rem 1.4rem; }
+.help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .4rem 1.2rem; }
+.help-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: .4rem 0; border-bottom: 1px solid var(--line); font-size: .84rem; color: var(--muted-strong); }
+.help-row b { color: var(--paper); font-weight: 600; }
+.kbd { font-family: 'Space Grotesk', sans-serif; font-size: .72rem; color: var(--amber); border: 1px solid rgba(242,166,35,.45); border-radius: 4px; padding: .1rem .45rem; background: rgba(242,166,35,.08); white-space: nowrap; }
+
+/* ── Thumbnail previews + compact mode ─────────────────── */
+.thumb-prev { font-size: .68rem; color: var(--muted); margin-top: .25rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.thumb.active .thumb-prev { color: var(--muted-strong); }
+.sidebar.compact .thumb-prev, .sidebar.compact .thumb-title, .sidebar.compact .thumb-kind { display: none; }
+.sidebar.compact .thumb { padding: .35rem .5rem; }
+.sidebar-tools { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 0 .5rem; border-bottom: 1px solid var(--line); margin-bottom: .5rem; }
+.sidebar-tools span { font-family: 'Space Grotesk', sans-serif; font-size: .72rem; color: var(--amber); letter-spacing: .1em; text-transform: uppercase; }
+.icon-btn.mini { padding: .2rem .5rem; font-size: .8rem; }
+
+/* ── AI Assistant panel ────────────────────────────────── */
+.ai-backdrop { position: fixed; inset: 0; z-index: 88; background: rgba(8,16,28,.45); display: none; }
+.ai-backdrop.open { display: block; }
+.ai-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 380px; max-width: 92vw; z-index: 89; background: var(--ink); border-left: 1px solid var(--line); box-shadow: -18px 0 50px rgba(0,0,0,.55); transform: translateX(105%); transition: transform .4s cubic-bezier(.2,1.2,.3,1); display: flex; flex-direction: column; }
+.ai-panel.open { transform: translateX(0); }
+.ai-head { padding: .9rem 1.1rem; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.ai-head h3 { font-family: 'Space Grotesk', sans-serif; font-size: 1rem; color: var(--paper); }
+.ai-sub { font-size: .7rem; color: var(--muted); margin-top: .2rem; }
+.ai-body { flex: 1; overflow-y: auto; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: .8rem; }
+.ai-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-action { border: 1px solid var(--line); background: transparent; color: var(--muted-strong); border-radius: 999px; padding: .3rem .75rem; font-size: .76rem; font-family: 'Space Grotesk', sans-serif; cursor: pointer; transition: all .12s; }
+.ai-action:hover { border-color: var(--teal); color: var(--teal); }
+.ai-action:disabled { opacity: .35; cursor: default; }
+.ai-input-row { display: flex; gap: 6px; }
+.ai-input-row textarea { flex: 1; background: rgba(244,239,228,.04); border: 1px solid var(--line); border-radius: 4px; color: var(--paper); padding: .5rem .6rem; font-size: .84rem; font-family: 'Manrope', sans-serif; resize: vertical; min-height: 44px; }
+.ai-input-row textarea:focus { outline: none; border-color: var(--teal); }
+.ai-send { border: 1px solid rgba(29,158,117,.5); background: rgba(29,158,117,.15); color: var(--teal); border-radius: 4px; padding: 0 .85rem; font-weight: 700; font-family: 'Space Grotesk', sans-serif; cursor: pointer; }
+.ai-send:hover { background: rgba(29,158,117,.25); }
+.ai-send:disabled { opacity: .35; cursor: default; }
+.ai-thread { display: flex; flex-direction: column; gap: .6rem; }
+.ai-msg { border-radius: 8px; padding: .6rem .75rem; font-size: .84rem; line-height: 1.6; }
+.ai-msg.user { align-self: flex-end; background: rgba(242,166,35,.12); border: 1px solid rgba(242,166,35,.3); color: var(--paper); max-width: 92%; }
+.ai-msg.assistant { align-self: flex-start; background: rgba(244,239,228,.05); border: 1px solid var(--line); color: var(--muted-strong); max-width: 100%; }
+.ai-msg.assistant pre, .ai-msg.assistant p { margin: 0 0 .4rem; white-space: pre-wrap; word-wrap: break-word; }
+.ai-msg .ai-meta { font-size: .66rem; color: var(--muted); margin-top: .35rem; display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: .35rem; }
+.ai-msg.error { border-color: rgba(216,90,48,.5); color: var(--coral); }
+.ai-loading { color: var(--amber); font-size: .8rem; }
+.ai-foot { padding: .8rem 1.1rem; border-top: 1px solid var(--line); font-size: .68rem; color: var(--muted); flex-shrink: 0; }
+
+.ai-hint-cec { font-size: .72rem; color: var(--muted); border: 1px dashed var(--line); border-radius: 6px; padding: .5rem .6rem; line-height: 1.5; }
+.ai-hint-cec b { color: var(--teal); }
+
+/* Focus visibility for keyboard users */
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -357,6 +475,7 @@ body.presenting .present-arrow { display: block; }
     <a class="nav-link" href="/frontend/dashboard.html">Dashboard</a>
     <a class="nav-link" href="/frontend/upload.html">New Deck</a>
     <a class="nav-link" href="#" onclick="signOut(); return false;">Sign Out</a>
+    <button class="btn-present" id="aiToggleBtn" onclick="toggleAiPanel()" style="background:transparent;border:1px solid rgba(29,158,117,.5);color:var(--teal);" title="AI Assistant (A)">&#10022; AI Assistant</button>
     <button class="btn-present" id="presentBtn" onclick="enterPresent()">&#9654; Present</button>
 </header>
 
@@ -367,11 +486,57 @@ body.presenting .present-arrow { display: block; }
     <section class="stage">
         <div class="frame" id="frame" style="display:none;">
             <div class="corner corner-tl"></div><div class="corner corner-br"></div>
-            <div class="slide-viewport" id="viewport"></div>
+            <div class="slide-shell">
+                <div class="slide-viewport" id="viewport"></div>
+                <div class="laser-dot" id="laserDot" aria-hidden="true"></div>
+                <div class="eraser-ring" id="eraserRing" style="display:none;" aria-hidden="true"></div>
+            </div>
         </div>
         <div class="state-wrap" id="stateWrap"></div>
     </section>
 </div>
+
+<div class="teach-bar" id="teachBar" role="toolbar" aria-label="Teaching tools">
+    <span class="teach-tool-label" id="teachToolLabel">Pointer</span>
+    <div class="teach-group" role="group" aria-label="Pointer tools">
+        <button class="teach-btn active" data-tool="pointer" onclick="setTool('pointer')" title="Pointer  (V) — normal interaction" aria-label="Pointer tool">&#128236;</button>
+        <button class="teach-btn" data-tool="laser" onclick="setTool('laser')" title="Laser pointer (L) — temporary pointer during presentation" aria-label="Laser pointer tool">&#9679;</button>
+    </div>
+    <span class="teach-divider" aria-hidden="true"></span>
+    <div class="teach-group" role="group" aria-label="Drawing tools">
+        <button class="teach-btn" data-tool="pen" onclick="setTool('pen')" title="Pen  (P) — freehand drawing" aria-label="Pen tool">&#9998;</button>
+        <button class="teach-btn" data-tool="highlighter" onclick="setTool('highlighter')" title="Highlighter  (H) — translucent marks" aria-label="Highlighter tool">&#128397;</button>
+        <button class="teach-btn" data-tool="eraser" onclick="setTool('eraser')" title="Eraser  (E) — remove annotations" aria-label="Eraser tool">&#10007;</button>
+    </div>
+    <span class="teach-divider" aria-hidden="true"></span>
+    <div class="teach-group" role="group" aria-label="Annotation objects">
+        <button class="teach-btn" data-tool="text" onclick="setTool('text')" title="Text  (T) — click to annotate text" aria-label="Text annotation tool">T</button>
+        <button class="teach-btn" data-tool="rect" onclick="setTool('rect')" title="Rectangle — drag to draw" aria-label="Rectangle shape tool">&#9633;</button>
+        <button class="teach-btn" data-tool="ellipse" onclick="setTool('ellipse')" title="Ellipse — drag to draw" aria-label="Ellipse shape tool">&#9711;</button>
+        <button class="teach-btn" data-tool="arrow" onclick="setTool('arrow')" title="Arrow — drag to draw" aria-label="Arrow shape tool">&#10132;</button>
+        <button class="teach-btn" data-tool="line" onclick="setTool('line')" title="Line — drag to draw" aria-label="Line shape tool">&#8251;</button>
+    </div>
+    <span class="teach-divider" aria-hidden="true"></span>
+    <div class="teach-group teach-sizes" role="group" aria-label="Color and size">
+        <span id="teachColorLabel" style="display:none;">Color</span>
+        <span id="teachSwatches" style="display:none;gap:4px;"></span>
+        <span class="teach-sizes">
+            <span id="teachSizeLabel" style="display:none;">Size</span>
+            <input type="range" id="toolSize" min="1" max="48" value="4" oninput="onToolSize(this)" aria-label="Annotation size">
+        </span>
+    </div>
+    <span class="teach-divider" aria-hidden="true"></span>
+    <div class="teach-group" role="group" aria-label="History">
+        <button class="teach-btn" id="teachUndo" onclick="annotUndo()" title="Undo  (Ctrl+Z)" aria-label="Undo annotation">&#8592;</button>
+        <button class="teach-btn" id="teachRedo" onclick="annotRedo()" title="Redo  (Ctrl+Y)" aria-label="Redo annotation">&#8594;</button>
+        <button class="teach-btn" onclick="annotClearSlide()" title="Clear annotations on this slide" aria-label="Clear current slide annotations">&#128465;</button>
+        <button class="teach-btn" onclick="annotClearAll()" title="Clear all annotation layers for this presentation" aria-label="Clear all presentation annotations">&#128465; all</button>
+    </div>
+    <span class="teach-divider" aria-hidden="true"></span>
+    <button class="teach-btn" onclick="openHelp()" title="Keyboard shortcuts (?) " aria-label="Keyboard shortcuts help">?</button>
+</div>
+
+<div class="pres-counter" id="presCounter" aria-hidden="true"></div>
 
 <footer>
     <button class="nav-btn" id="prevBtn" onclick="prevSlide()">&#9664; Previous</button>
@@ -389,6 +554,66 @@ body.presenting .present-arrow { display: block; }
 <div class="quiz-overlay hidden" id="quizOverlay">
     <div class="quiz-card" id="quizCard"></div>
 </div>
+
+<div class="help-overlay hidden" id="helpOverlay">
+    <div class="help-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+        <div class="help-head">
+            <h3>Keyboard Shortcuts</h3>
+            <button class="help-close" onclick="closeHelp()" aria-label="Close shortcuts">&#10005;</button>
+        </div>
+        <div class="help-body">
+            <div class="help-grid">
+                <div class="help-row"><b>Previous slide</b><span><span class="kbd">&#8592;</span> <span class="kbd">&#8670;</span></span></div>
+                <div class="help-row"><b>Next slide</b><span><span class="kbd">&#8594;</span> <span class="kbd">&#8671;</span> <span class="kbd">Space</span></span></div>
+                <div class="help-row"><b>First slide</b><span><span class="kbd">Home</span></span></div>
+                <div class="help-row"><b>Last slide</b><span><span class="kbd">End</span></span></div>
+                <div class="help-row"><b>Fullscreen present</b><span><span class="kbd">F</span></span></div>
+                <div class="help-row"><b>Exit fullscreen</b><span><span class="kbd">Esc</span></span></div>
+                <div class="help-row"><b>Pointer</b><span><span class="kbd">V</span></span></div>
+                <div class="help-row"><b>Pen</b><span><span class="kbd">P</span></span></div>
+                <div class="help-row"><b>Highlighter</b><span><span class="kbd">H</span></span></div>
+                <div class="help-row"><b>Eraser</b><span><span class="kbd">E</span></span></div>
+                <div class="help-row"><b>Laser pointer</b><span><span class="kbd">L</span></span></div>
+                <div class="help-row"><b>Text annotation</b><span><span class="kbd">T</span></span></div>
+                <div class="help-row"><b>Undo</b><span><span class="kbd">Ctrl</span> + <span class="kbd">Z</span></span></div>
+                <div class="help-row"><b>Redo</b><span><span class="kbd">Ctrl</span> + <span class="kbd">Y</span></span></div>
+                <div class="help-row"><b>AI Assistant</b><span><span class="kbd">A</span></span></div>
+                <div class="help-row"><b>Show this panel</b><span><span class="kbd">?</span></span></div>
+            </div>
+            <p style="font-size:.72rem;color:var(--muted);margin-top:.9rem;line-height:1.6;">
+                Shortcuts are ignored while typing in an input or text field. Annotation strokes stay on a
+                separate overlay layer and never modify the underlying slide.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="ai-backdrop" id="aiBackdrop" onclick="toggleAiPanel(false)"></div>
+<aside class="ai-panel" id="aiPanel" role="complementary" aria-label="AI Assistant">
+    <div class="ai-head">
+        <div>
+            <h3>&#10022; AI Assistant</h3>
+            <div class="ai-sub">Context: current slide &amp; topic</div>
+        </div>
+        <button class="quiz-close" onclick="toggleAiPanel(false)" aria-label="Close AI assistant">&#10005;</button>
+    </div>
+    <div class="ai-body" id="aiBody">
+        <div class="ai-hint-cec">Explanations are grounded in your own uploaded material via the mastery tutor engine. Answers may be deterministic when no AI is available &mdash; never fabricated.</div>
+        <div class="ai-actions" id="aiActions" role="toolbar" aria-label="AI learning interactions">
+            <button class="ai-action" onclick="aiAsk('explain')" title="Explain the current topic">&#128161; Explain</button>
+            <button class="ai-action" onclick="aiAsk('simplify')" title="Explain the current topic at a simpler level">&#128161; Simplify</button>
+            <button class="ai-action" onclick="aiAsk('example')" title="Show an example for the current topic">&#9632; Example</button>
+            <button class="ai-action" onclick="aiAsk('hint')" title="Provide a contextual hint">&#8258; Hint</button>
+            <button class="ai-action" onclick="aiAsk('deeper')" title="Provide a deeper explanation">&#10133; Deepen</button>
+        </div>
+        <div class="ai-input-row">
+            <textarea id="aiInput" placeholder="Ask a question about this slide…" rows="2" aria-label="Ask the AI a question"></textarea>
+            <button class="ai-send" onclick="aiAsk('custom')" aria-label="Ask the AI">Ask</button>
+        </div>
+        <div class="ai-thread" id="aiThread" aria-live="polite"></div>
+    </div>
+    <div class="ai-foot">Grounded in your material &middot; attribution shown per answer</div>
+</aside>
 
 <script>
 const API = '/api/v1';
@@ -455,6 +680,21 @@ let c3VisualsLoading = false;
 // ── C4 Animation Mode state ──────────────────────────────────────────────
 let c4AnimationsByTopic = {};   // topicIdx -> animation asset
 let c4AnimationsLoading = false;
+
+// ── Teaching tools & annotation state ────────────────────────────────────
+let activeTool = 'pointer';        // pointer | laser | pen | highlighter | eraser | text | rect | ellipse | arrow | line
+let annotColor = '#F2A623';
+let annotSize = 4;
+const PEN_PALETTE = ['#F4EFE4', '#F2A623', '#1D9E75', '#D85A30', '#4DA3FF', '#E040FB'];
+const HIGHLIGHT_PALETTE = ['#F2A623', '#1D9E75', '#4DA3FF', '#E040FB', '#FF6D91'];
+let annotBySlide = {};            // "mode:index" -> { items, undo, redo }
+let annotDraw = null;             // in-progress interaction state
+let annotEditing = null;          // { kind:'text', el, textItem }
+let annotSelection = null;        // item currently selected (text/object)
+let laserTimer = null;
+let presentIdleTimer = null;
+let tutorSessionId = null;
+let _annotRafPending = false;
 
 // ── Init ─────────────────────────────────────────────────────────────────
 async function init() {
@@ -525,6 +765,11 @@ async function init() {
         document.getElementById('stateWrap').style.display = 'none';
 
         buildThumbnails();
+        wireAnnotationLayer();
+        setTool('pointer');
+        updateSwatchUI();
+        updateToolbarState();
+        rebindAnnotLayer();
         loadLearnerJourney();
         goTo(startIndexFromUrl(), false);
     } catch (e) {
@@ -653,11 +898,24 @@ function showState(html) {
 }
 
 // ── Thumbnails ───────────────────────────────────────────────────────────
+function thumbSnippet(blocks) {
+    if (!Array.isArray(blocks) || !blocks.length) return '';
+    const b = blocks[0];
+    const txt = (b.content || '').replace(/\s+/g, ' ').trim();
+    return txt.length > 110 ? txt.substring(0, 110) + '…' : txt;
+}
+
 function buildThumbnails() {
     const sb = document.getElementById('sidebar');
     const lj = document.getElementById('ljPanel');
     sb.innerHTML = '';
     const frag = document.createDocumentFragment();
+
+    const head = document.createElement('div');
+    head.className = 'sidebar-tools';
+    head.innerHTML = '<span>Slides</span>' +
+        '<button class="icon-btn mini" id="thumbCompactBtn" onclick="toggleThumbCompact()" title="Toggle compact thumbnails" aria-label="Toggle compact thumbnails">&#9776;</button>';
+    frag.appendChild(head);
 
     if (playerMode === 'source') {
         sourceUnits.forEach((u, i) => {
@@ -672,11 +930,13 @@ function buildThumbnails() {
             let badge = 'Slide';
             if (hasTable) badge = 'Table';
             else if (hasBullets) badge = 'Bullets';
+            const prev = thumbSnippet(blocks) || (u.raw_text || '').replace(/\s+/g, ' ').trim();
 
             el.innerHTML =
                 '<span class="thumb-num">' + String(i + 1).padStart(2, '0') + '</span>' +
                 '<span class="thumb-kind">' + badge + '</span>' +
-                '<div class="thumb-title">' + escHtml(title) + '</div>';
+                '<div class="thumb-title">' + escHtml(title) + '</div>' +
+                (prev ? '<div class="thumb-prev">' + escHtml(prev.length > 110 ? prev.substring(0, 110) + '…' : prev) + '</div>' : '');
             frag.appendChild(el);
         });
     } else {
@@ -686,16 +946,25 @@ function buildThumbnails() {
             el.className = 'thumb' + (i === current ? ' active' : '');
             el.id = 'thumb-' + i;
             el.onclick = () => goTo(i);
+            const prev = (t.description || '').replace(/\s+/g, ' ').trim();
             el.innerHTML =
                 '<span class="thumb-num">' + String(i + 1).padStart(2, '0') + '</span>' +
                 '<span class="thumb-kind">' + (s.kind === 'concept' ? 'Concept' : 'Visual') + '</span>' +
-                '<div class="thumb-title">' + escHtml(t.title || 'Untitled') + '</div>';
+                '<div class="thumb-title">' + escHtml(t.title || 'Untitled') + '</div>' +
+                (prev ? '<div class="thumb-prev">' + escHtml(prev.length > 110 ? prev.substring(0, 110) + '…' : prev) + '</div>' : '');
             frag.appendChild(el);
         });
     }
 
     if (lj) sb.appendChild(lj);
     sb.appendChild(frag);
+}
+
+function toggleThumbCompact() {
+    const sb = document.getElementById('sidebar');
+    sb.classList.toggle('compact');
+    const btn = document.getElementById('thumbCompactBtn');
+    if (btn) btn.textContent = sb.classList.contains('compact') ? '\u2630' : '\u2630';
 }
 
 let learnerState = { completion: 0, checkpoint: null, mastery: null };
@@ -1020,6 +1289,18 @@ function renderSlide() {
         renderAnimationSlide(current);
     } else {
         renderLearningSlide(current);
+    }
+    afterRender();
+}
+
+// Runs after every slide render: rebind the annotation layer (a slide render
+// replaces viewport innerHTML, so the canvas must be re-sized/re-painted) and
+// keep the presented slide fitted when in presentation mode.
+function afterRender() {
+    rebindAnnotLayer();
+    if (document.body.classList.contains('presenting')) {
+        wrapForPresent();
+        fitPresentedSlide();
     }
 }
 
@@ -1421,6 +1702,8 @@ function prevSlide() {
 function updateChrome() {
     const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
     document.getElementById('counter').innerHTML = '<b>' + (current + 1) + '</b> / ' + maxLen;
+    const pc = document.getElementById('presCounter');
+    if (pc) pc.textContent = (current + 1) + ' / ' + maxLen;
     document.getElementById('prevBtn').disabled = current === 0;
     const isLast = current === maxLen - 1;
     document.getElementById('nextBtn').style.display = isLast ? 'none' : '';
@@ -1432,6 +1715,7 @@ function updateChrome() {
         th.classList.add('active');
         th.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
+    updateToolbarState();
 }
 
 let syncTimer = null;
@@ -1471,31 +1755,156 @@ function signOut() {
 }
 
 // ── Keyboard ─────────────────────────────────────────────────────────────
+function isTypingField(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable) return true;
+    return false;
+}
+
+function modalOpen() {
+    const quiz = document.getElementById('quizOverlay');
+    if (quiz && !quiz.classList.contains('hidden')) return true;
+    const help = document.getElementById('helpOverlay');
+    if (help && !help.classList.contains('hidden')) return true;
+    return false;
+}
+
 document.addEventListener('keydown', (e) => {
-    const tag = (document.activeElement && document.activeElement.tagName) || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const active = document.activeElement;
+    if (isTypingField(active)) return;
+
+    // Undo / redo (never while typing; safe against browser context menu).
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const k = e.key.toLowerCase();
+        if (k === 'z' && !e.shiftKey) { annotUndo(); e.preventDefault(); return; }
+        if (k === 'z' && e.shiftKey) { annotRedo(); e.preventDefault(); return; }
+        if (k === 'y') { annotRedo(); e.preventDefault(); return; }
+        // Ctrl+Z on the whole page should still work when it is not an annotation action.
+        if (k === 'v' && document.getElementById('annotCanvas') && !document.body.classList.contains('tool-active')) return;
+    }
+
+    // ??? opens the shortcut help panel.
+    if (e.key === '?' || (e.shiftKey && e.key === '/')) { openHelp(); e.preventDefault(); return; }
+
+    // Modal overlays (quiz / help): only Escape is honoured while one is open.
+    if (modalOpen()) {
+        if (e.key === 'Escape') {
+            const help = document.getElementById('helpOverlay');
+            if (!help.classList.contains('hidden')) { closeHelp(); e.preventDefault(); return; }
+            const quiz = document.getElementById('quizOverlay');
+            if (!quiz.classList.contains('hidden')) { closeQuiz(); e.preventDefault(); return; }
+        }
+        return;
+    }
+
     switch (e.key) {
         case 'ArrowRight': case 'PageDown': case ' ': nextSlide(); e.preventDefault(); break;
         case 'ArrowLeft': case 'PageUp': prevSlide(); e.preventDefault(); break;
         case 'Home': goTo(0); e.preventDefault(); break;
         case 'End': goTo(((playerMode === 'source' ? sourceUnits.length : slides.length) || 1) - 1); e.preventDefault(); break;
-        case 'Escape': if (document.body.classList.contains('presenting')) exitPresent(); break;
+        case 'Escape':
+            if (document.body.classList.contains('presenting')) { exitPresent(); }
+            else if (document.getElementById('aiPanel').classList.contains('open')) {
+                toggleAiPanel(false);
+            }
+            else if (activeTool !== 'pointer') { setTool('pointer'); }
+            e.preventDefault();
+            break;
         case 'f': case 'F': if (!document.body.classList.contains('presenting')) enterPresent(); break;
+        case 'a': case 'A': toggleAiPanel(); e.preventDefault(); break;
+        case 'v': case 'V': setTool('pointer'); e.preventDefault(); break;
+        case 'p': case 'P': setTool('pen'); e.preventDefault(); break;
+        case 'h': case 'H': setTool('highlighter'); e.preventDefault(); break;
+        case 'e': case 'E': setTool('eraser'); e.preventDefault(); break;
+        case 'l': case 'L': setTool('laser'); e.preventDefault(); break;
+        case 't': case 'T': setTool('text'); e.preventDefault(); break;
     }
 });
 
 // ── Present mode ─────────────────────────────────────────────────────────
 async function enterPresent() {
     document.body.classList.add('presenting');
+    setTool(activeTool === 'pointer' ? 'pointer' : activeTool);
+    presentActivity(); // reveal controls, start idle timer
     try { await document.documentElement.requestFullscreen(); } catch (e) { /* denied */ }
+    requestAnimationFrame(() => { wrapForPresent(); fitPresentedSlide(); });
 }
+
 function exitPresent() {
     document.body.classList.remove('presenting');
+    unwrapPresent();
+    presentShowControls();
     try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) { /* ignore */ }
 }
+
 document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement) document.body.classList.remove('presenting');
+    if (!document.fullscreenElement && document.body.classList.contains('presenting')) {
+        document.body.classList.remove('presenting');
+        unwrapPresent();
+    }
 });
+
+// Auto-hide presentation chrome while idle; any mousemove/keydown reveals it.
+function presentActivity() {
+    presentShowControls();
+    clearTimeout(presentIdleTimer);
+    if (!document.body.classList.contains('presenting')) return;
+    presentIdleTimer = setTimeout(presentHideControls, 3000);
+}
+
+function presentShowControls() {
+    document.body.classList.remove('controls-hidden');
+}
+
+function presentHideControls() {
+    if (!document.body.classList.contains('presenting')) return;
+    if (activeTool === 'eraser' || activeTool === 'laser') {
+        // Keep controls visible while those tools are in use.
+        presentShowControls();
+        return;
+    }
+    document.body.classList.add('controls-hidden');
+}
+
+document.addEventListener('mousemove', presentActivity);
+document.addEventListener('keydown', presentActivity);
+
+// Wrap viewport content into a track that scales to fit the screen so the
+// presented slide behaves like a real slide rather than a scrollable page.
+function wrapForPresent() {
+    const vp = document.getElementById('viewport');
+    if (!vp) return;
+    if (vp.querySelector('.pres-track')) return;
+    const track = document.createElement('div');
+    track.className = 'pres-track';
+    Array.prototype.slice.call(vp.children).forEach(function (kid) { track.appendChild(kid); });
+    vp.appendChild(track);
+}
+
+function unwrapPresent() {
+    const vp = document.getElementById('viewport');
+    if (!vp) return;
+    const track = vp.querySelector('.pres-track');
+    if (!track) return;
+    Array.prototype.slice.call(track.children).forEach(function (kid) { vp.appendChild(kid); });
+    track.remove();
+}
+
+function fitPresentedSlide() {
+    const vp = document.getElementById('viewport');
+    if (!vp) return;
+    const track = vp.querySelector('.pres-track');
+    if (!track) return;
+    track.style.transform = '';
+    const w = vp.clientWidth || 1;
+    const h = vp.clientHeight || 1;
+    const sw = track.scrollWidth || w;
+    const sh = track.scrollHeight || h;
+    let s = Math.min((w - 16) / sw, (h - 16) / sh);
+    s = Math.max(0, Math.min(s, 2)); // never blow content up beyond 2x
+    track.style.transform = 'scale(' + s.toFixed(4) + ')';
+}
 
 // ── Visual generation (existing EduVision endpoints) ────────────────────
 function selectType(topicIdx, type) {
@@ -2993,6 +3402,744 @@ function escSvg(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ── Teaching tools & annotations ─────────────────────────────────────────
+
+function annotKey() { return playerMode + ':' + current; }
+
+function annotStore(key) {
+    const k = key || annotKey();
+    if (!annotBySlide[k]) annotBySlide[k] = { items: [], undo: [], redo: [] };
+    return annotBySlide[k];
+}
+
+function snapshot(items) { return JSON.parse(JSON.stringify(items || [])); }
+
+function annotFrame() {
+    return document.getElementById('viewport');
+}
+
+function annotCanvas() {
+    return document.getElementById('annotCanvas');
+}
+
+function ensureAnnotCanvas() {
+    const frame = annotFrame();
+    let c = annotCanvas();
+    if (!c) {
+        c = document.createElement('canvas');
+        c.id = 'annotCanvas';
+        c.className = 'annot-canvas';
+        c.setAttribute('aria-hidden', 'true');
+        frame.insertBefore(c, frame.firstChild);
+    }
+    return c;
+}
+
+function sizeAnnotCanvas() {
+    const frame = annotFrame();
+    const c = ensureAnnotCanvas();
+    if (!frame || !c) return null;
+    // Hide while measuring so the canvas itself does not inflate scrollHeight.
+    const prevStyle = c.style.display;
+    c.style.display = 'none';
+    const w = Math.max(1, frame.scrollWidth || frame.clientWidth);
+    const h = Math.max(1, frame.scrollHeight || frame.clientHeight);
+    c.style.display = prevStyle;
+    const dpr = (window.devicePixelRatio || 1);
+    c.style.width = w + 'px';
+    c.style.height = h + 'px';
+    const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+    if (c.width !== pw || c.height !== ph) {
+        c.width = pw;
+        c.height = ph;
+    }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { c: c, ctx: ctx, w: w, h: h };
+}
+
+function posInShell(e) {
+    const c = ensureAnnotCanvas();
+    const rect = c.getBoundingClientRect();
+    const scale = (c.clientWidth && rect.width) ? (rect.width / c.clientWidth) : 1;
+    return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
+}
+
+// Coordinates in the fixed overlay (shell) space, used for the eraser ring and
+// laser dot which sit on top of the unscrolled, unscaled stage.
+function posOverlay(e) {
+    const frame = annotFrame();
+    const sh = frame ? frame.parentElement : null;
+    const rect = (sh || document.body).getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function rebindAnnotLayer() {
+    cullAnnotEditing();
+    if (!annotFrame()) return;
+    const c = ensureAnnotCanvas();
+    c.style.pointerEvents = activeTool === 'pointer' ? 'none' : 'auto';
+    updateSwatchUI();
+    redrawAnnots();
+}
+
+function redrawAnnots(previewItem) {
+    const env = sizeAnnotCanvas();
+    if (!env) return;
+    const ctx = env.ctx;
+    ctx.clearRect(0, 0, env.c.width, env.c.height);
+    annotStore().items.forEach(function (it) { drawAnnotItem(ctx, it); });
+    annotSelection && annotSelection.selected && drawAnnotItem(ctx, annotSelection, true);
+    if (annotDraw && annotDraw.item) drawAnnotItem(ctx, annotDraw.item, true);
+    if (previewItem) drawAnnotItem(ctx, previewItem, true);
+}
+
+function drawAnnotItem(ctx, it, ghost) {
+    if (!it) return;
+    const a = ghost ? 0.55 : 1;
+    if (it.type === 'stroke') {
+        const pts = it.points;
+        if (!pts || pts.length < 2) return;
+        ctx.save();
+        ctx.globalAlpha = (it.tool === 'highlighter' ? 0.35 : 1) * a;
+        ctx.strokeStyle = it.color;
+        ctx.lineWidth = it.size;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+        ctx.restore();
+    } else if (it.type === 'shape') {
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = it.color;
+        ctx.lineWidth = it.size;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        if (it.kind === 'rect') {
+            const x = Math.min(it.x1, it.x2), y = Math.min(it.y1, it.y2);
+            ctx.rect(x, y, Math.abs(it.x2 - it.x1), Math.abs(it.y2 - it.y1));
+        } else if (it.kind === 'ellipse') {
+            const cx = (it.x1 + it.x2) / 2, cy = (it.y1 + it.y2) / 2;
+            ctx.ellipse(cx, cy, Math.abs(it.x2 - it.x1) / 2 || 1, Math.abs(it.y2 - it.y1) / 2 || 1, 0, 0, Math.PI * 2);
+        } else if (it.kind === 'line') {
+            ctx.moveTo(it.x1, it.y1);
+            ctx.lineTo(it.x2, it.y2);
+        } else if (it.kind === 'arrow') {
+            ctx.moveTo(it.x1, it.y1);
+            ctx.lineTo(it.x2, it.y2);
+            const angle = Math.atan2(it.y2 - it.y1, it.x2 - it.x1);
+            const head = it.size + 8;
+            ctx.moveTo(it.x2, it.y2);
+            ctx.lineTo(it.x2 - head * Math.cos(angle - Math.PI / 6), it.y2 - head * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(it.x2, it.y2);
+            ctx.lineTo(it.x2 - head * Math.cos(angle + Math.PI / 6), it.y2 - head * Math.sin(angle + Math.PI / 6));
+        }
+        ctx.stroke();
+        ctx.restore();
+    } else if (it.type === 'text') {
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = it.color;
+        ctx.font = '600 ' + it.size + 'px "Manrope", sans-serif';
+        const lines = String(it.text || '').split('\n');
+        lines.forEach(function (ln, i) { ctx.fillText(ln, it.x, it.y + i * (it.size + 6)); });
+        ctx.restore();
+    }
+    if (ghost && it.type !== 'text' && (it.kind || it.type === 'stroke')) {
+        ctx.save();
+        const b = bboxFor(it);
+        ctx.strokeStyle = 'rgba(242,166,35,0.9)';
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        ctx.restore();
+    }
+}
+
+function bboxFor(it) {
+    if (it.type === 'text') {
+        const w = Math.max(40, String(it.text || '').split('\n').reduce(function (m, l) { return Math.max(m, l.length * it.size * 0.55); }, 40));
+        return { x: it.x, y: it.y - it.size, w: w, h: it.size * (String(it.text || '').split('\n').length) + 8 };
+    }
+    if (it.type === 'shape') {
+        return { x: Math.min(it.x1, it.x2) - it.size / 2, y: Math.min(it.y1, it.y2) - it.size / 2, w: Math.abs(it.x2 - it.x1) + it.size, h: Math.abs(it.y2 - it.y1) + it.size };
+    }
+    // stroke: approximate bbox from points
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    (it.points || []).slice(0, 400).forEach(function (p) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    });
+    if (!isFinite(minX)) return { x: 0, y: 0, w: 1, h: 1 };
+    const pad = it.size;
+    return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
+}
+
+function hitTestItem(x, y) {
+    const items = annotStore().items;
+    for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        const b = bboxFor(it);
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return it;
+    }
+    return null;
+}
+
+function commitAnnotChange() {
+    const st = annotStore();
+    st.undo.push(snapshot(st.items));
+    if (st.undo.length > 80) st.undo.shift();
+    st.redo = [];
+    updateToolbarState();
+}
+
+function annotDecorationPush() {
+    // push snapshot without clearing redo (used before mutating the current
+    // items list; the caller commits with annotApplyCommit when finished).
+    const st = annotStore();
+    st.undo.push(snapshot(st.items));
+    if (st.undo.length > 80) st.undo.shift();
+}
+
+function annotApplyCommit() {
+    const st = annotStore();
+    st.redo = [];
+    updateToolbarState();
+}
+
+function updateToolbarState() {
+    const st = annotStore();
+    const undoBtn = document.getElementById('teachUndo');
+    const redoBtn = document.getElementById('teachRedo');
+    if (undoBtn) undoBtn.disabled = !(st.undo && st.undo.length);
+    if (redoBtn) redoBtn.disabled = !(st.redo && st.redo.length);
+}
+
+function annotUndo() {
+    const st = annotStore();
+    if (!st.undo.length) return;
+    st.redo.push(snapshot(st.items));
+    st.items = st.undo.pop() || [];
+    cullAnnotEditing();
+    annotSelection = null;
+    redrawAnnots();
+    updateToolbarState();
+}
+
+function annotRedo() {
+    const st = annotStore();
+    if (!st.redo.length) return;
+    st.undo.push(snapshot(st.items));
+    st.items = st.redo.pop() || [];
+    cullAnnotEditing();
+    annotSelection = null;
+    redrawAnnots();
+    updateToolbarState();
+}
+
+function annotClearSlide() {
+    const st = annotStore();
+    if (!st.items.length) return;
+    if (!confirm('Clear all annotations on this slide? The underlying slide is not changed.')) return;
+    annotDecorationPush();
+    cullAnnotEditing();
+    annotSelection = null;
+    st.items = [];
+    annotApplyCommit();
+    redrawAnnots();
+}
+
+function annotClearAll() {
+    const keys = Object.keys(annotBySlide);
+    const total = keys.reduce(function (n, k) { return n + annotBySlide[k].items.length; }, 0);
+    if (total === 0) return;
+    if (!confirm('Clear every annotation layer in this presentation? The slides themselves are never changed.')) return;
+    keys.forEach(function (k) {
+        const s = annotBySlide[k];
+        if (s.items.length) { s.undo.push(snapshot(s.items)); s.redo = []; s.items = []; }
+    });
+    redrawAnnots();
+    updateToolbarState();
+}
+
+// ── Tools & toolbar ──────────────────────────────────────────────────────
+function setTool(tool) {
+    if (tool === activeTool) return;
+    cullAnnotEditing();
+    annotSelection = null;
+    if (activeTool === 'eraser') hideEraserRing();
+    activeTool = tool;
+    document.body.className = document.body.className.replace(/\btool-\w+/g, '');
+    document.body.classList.add('tool-' + tool);
+    document.body.classList.toggle('tool-active', tool !== 'pointer');
+    const label = document.getElementById('teachToolLabel');
+    if (label) label.textContent = (tool.charAt(0).toUpperCase() + tool.slice(1));
+    document.querySelectorAll('.teach-btn[data-tool]').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.tool === tool);
+    });
+    const cv = annotCanvas();
+    if (cv) cv.style.pointerEvents = tool === 'pointer' ? 'none' : 'auto';
+    updateSwatchUI();
+    redrawAnnots();
+    if (tool === 'eraser') showEraserRing();
+}
+
+function updateSwatchUI() {
+    const wrap = document.getElementById('teachSwatches');
+    const colorLabel = document.getElementById('teachColorLabel');
+    const sizeLabel = document.getElementById('teachSizeLabel');
+    wrap.innerHTML = '';
+    const usesColor = ['pen', 'highlighter', 'text', 'rect', 'ellipse', 'arrow', 'line'].indexOf(activeTool) >= 0;
+    const usesHighlighter = activeTool === 'highlighter';
+    colorLabel.style.display = usesColor ? '' : 'none';
+    sizeLabel.style.display = (usesColor || activeTool === 'eraser') ? '' : 'none';
+    wrap.style.display = usesColor ? 'inline-flex' : 'none';
+    if (!usesColor) return;
+    const palette = usesHighlighter ? HIGHLIGHT_PALETTE : PEN_PALETTE;
+    palette.forEach(function (c) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'teach-swatch' + (c === annotColor ? ' active' : '');
+        b.style.background = c;
+        b.title = 'Color ' + c;
+        b.setAttribute('aria-label', 'Choose color ' + c);
+        b.setAttribute('data-color', c);
+        b.onclick = function () { annotColor = c; updateSwatchUI(); };
+        wrap.appendChild(b);
+    });
+}
+
+function onToolSize(input) {
+    annotSize = parseInt(input.value, 10) || 4;
+    if (activeTool === 'eraser') showEraserRing();
+    redrawAnnots();
+}
+
+function showEraserRing() {
+    const ring = document.getElementById('eraserRing');
+    const canvas = annotCanvas();
+    if (!ring || !canvas) return;
+    ring.style.display = 'block';
+    const d = Math.max(20, annotSize * 2.6);
+    ring.style.width = d + 'px';
+    ring.style.height = d + 'px';
+    if (activeTool !== 'eraser') { hideEraserRing(); }
+}
+
+function hideEraserRing() {
+    const ring = document.getElementById('eraserRing');
+    if (ring) ring.style.display = 'none';
+}
+
+// ── Pointer events on the annotation layer ───────────────────────────────
+function onAnnotDown(e) {
+    if (activeTool === 'pointer') return;
+    const p = posInShell(e);
+    const op = posOverlay(e);
+    const canvas = annotCanvas();
+    try { if (canvas && canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId); } catch (err) {}
+
+    if (activeTool === 'laser') { moveLaser(op); return; }
+    if (activeTool === 'eraser') {
+        annotDraw = { mode: 'erase', erased: new Set(), pts: [] };
+        eraserStroke(p);
+        return;
+    }
+    if (activeTool === 'text') {
+        // Clicking an existing text annotation opens it for editing / dragging.
+        const t = hitTestItem(p.x, p.y);
+        if (t && t.type === 'text') {
+            annotSelection = t;
+            annotDraw = { mode: 'drag', item: t, startX: p.x, startY: p.y };
+            redrawAnnots();
+        } else {
+            openTextEditor(p.x, p.y, null);
+        }
+        return;
+    }
+    if (activeTool === 'pen' || activeTool === 'highlighter') {
+        annotDecorationPush();
+        annotDraw = { mode: 'freehand', tool: activeTool, item: { type: 'stroke', tool: activeTool, color: annotColor, size: Math.max(2, annotSize), points: [{ x: p.x, y: p.y }] } };
+        redrawAnnots(annotDraw.item);
+        return;
+    }
+    if (['rect', 'ellipse', 'arrow', 'line'].indexOf(activeTool) >= 0) {
+        annotDecorationPush();
+        annotDraw = { mode: 'shape', kind: activeTool, item: { type: 'shape', kind: activeTool, color: annotColor, size: Math.max(2, annotSize), x1: p.x, y1: p.y, x2: p.x, y2: p.y } };
+        redrawAnnots(annotDraw.item);
+        return;
+    }
+}
+
+function onAnnotMove(e) {
+    const p = posInShell(e);
+    const op = posOverlay(e);
+    if (activeTool === 'laser') { moveLaser(op); return; }
+    if (activeTool === 'eraser') {
+        const ring = document.getElementById('eraserRing');
+        if (ring && ring.style.display !== 'none') {
+            ring.style.left = op.x + 'px';
+            ring.style.top = op.y + 'px';
+        }
+        if (e.buttons & 1 && annotDraw && annotDraw.mode === 'erase') eraserStroke(p);
+        return;
+    }
+    if (!annotDraw) return;
+    if (annotDraw.mode === 'freehand') {
+        annotDraw.item.points.push({ x: p.x, y: p.y });
+        throttledRedraw(annotDraw.item);
+    } else if (annotDraw.mode === 'shape') {
+        annotDraw.item.x2 = p.x;
+        annotDraw.item.y2 = p.y;
+        throttledRedraw(annotDraw.item);
+    } else if (annotDraw.mode === 'drag' && annotDraw.item) {
+        annotDraw.item.x += (p.x - annotDraw.startX);
+        annotDraw.item.y += (p.y - annotDraw.startY);
+        annotDraw.startX = p.x;
+        annotDraw.startY = p.y;
+        throttledRedraw(annotDraw.item);
+    }
+}
+
+function onAnnotUp(e) {
+    if (activeTool === 'pointer') return;
+    if (activeTool === 'laser') return;
+    const d = annotDraw;
+    annotDraw = null;
+    if (!d) { if (activeTool === 'eraser') hideEraserRing(); return; }
+    const st = annotStore();
+    if (d.mode === 'freehand') {
+        if (d.item.points.length >= 2) {
+            st.items.push(d.item);
+            annotApplyCommit();
+        } else {
+            annotApplyCommit();
+        }
+    } else if (d.mode === 'shape') {
+        if (Math.abs(d.item.x2 - d.item.x1) + Math.abs(d.item.y2 - d.item.y1) > 3) {
+            st.items.push(d.item);
+            annotApplyCommit();
+        } else {
+            annotApplyCommit();
+        }
+    } else if (d.mode === 'erase') {
+        if (d.erased.size) annotApplyCommit();
+        hideEraserRing();
+    } else if (d.mode === 'drag') {
+        annotApplyCommit();
+    }
+    redrawAnnots();
+}
+
+function eraserStroke(p) {
+    const ring = document.getElementById('eraserRing');
+    if (ring) { ring.style.left = p.x + 'px'; ring.style.top = p.y + 'px'; }
+    if (!annotDraw || annotDraw.mode !== 'erase') return;
+    const st = annotStore();
+    const radius = Math.max(10, annotSize * 1.6);
+    st.items = st.items.filter(function (it) {
+        const hit = itemHits(it, p, radius);
+        if (hit) annotDraw.erased.add(it);
+        return !hit;
+    });
+    redrawAnnots();
+}
+
+function itemHits(it, p, radius) {
+    if (it.type === 'stroke') {
+        return pointNearPolyline(it.points, p, radius);
+    }
+    if (it.type === 'shape') {
+        if (it.kind === 'rect' || it.kind === 'ellipse') {
+            const b = bboxFor(it);
+            return p.x >= b.x - radius / 2 && p.x <= b.x + b.w + radius / 2 && p.y >= b.y - radius / 2 && p.y <= b.y + b.h + radius / 2;
+        }
+        return pointNearSegment(it.x1, it.y1, it.x2, it.y2, p, radius);
+    }
+    if (it.type === 'text') {
+        const b = bboxFor(it);
+        return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+    }
+    return false;
+}
+
+function pointNearPolyline(pts, p, radius) {
+    if (!pts || !pts.length) return false;
+    for (let i = 0; i < pts.length; i++) {
+        if (Math.abs(pts[i].x - p.x) <= radius && Math.abs(pts[i].y - p.y) <= radius) return true;
+        if (i > 0 && pointNearSegment(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, p, radius)) return true;
+    }
+    return false;
+}
+
+function pointNearSegment(x1, y1, x2, y2, p, radius) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq ? ((p.x - x1) * dx + (p.y - y1) * dy) / lenSq : 0;
+    t = Math.max(0, Math.min(1, t));
+    const px = x1 + t * dx, py = y1 + t * dy;
+    return Math.abs(p.x - px) <= radius && Math.abs(p.y - py) <= radius;
+}
+
+let _redrawPending = false;
+function throttledRedraw(item) {
+    if (_redrawPending) return;
+    _redrawPending = true;
+    requestAnimationFrame(function () {
+        _redrawPending = false;
+        redrawAnnots(item);
+    });
+}
+
+// ── Laser pointer ────────────────────────────────────────────────────────
+function moveLaser(p) {
+    const dot = document.getElementById('laserDot');
+    if (!dot) return;
+    if (document.body.classList.contains('presenting')) {
+        dot.style.left = p.x + 'px';
+        dot.style.top = p.y + 'px';
+        dot.style.setProperty('--laser-angle', (Math.random() * -36 - 4) + 'deg');
+        dot.classList.add('glow');
+        clearTimeout(laserTimer);
+        laserTimer = setTimeout(function () { dot.classList.remove('glow'); }, 1400);
+    }
+}
+
+// ── Text annotations ─────────────────────────────────────────────────────
+function cullAnnotEditing() {
+    if (annotEditing && annotEditing.el && annotEditing.el.parentNode) {
+        annotEditing.el.remove();
+    }
+    annotEditing = null;
+}
+
+function openTextEditor(x, y, textItem) {
+    cullAnnotEditing();
+    const frame = annotFrame();
+    const c = annotCanvas();
+    if (!frame || !c) return;
+    const el = document.createElement('textarea');
+    el.className = 'annot-text-editor';
+    el.value = textItem ? textItem.text : '';
+    el.style.left = Math.max(0, x - 4) + 'px';
+    el.style.top = Math.max(0, y - 18) + 'px';
+    el.setAttribute('aria-label', 'Annotation text');
+    ensureAnnotCanvas();
+    c.before(el);
+    annotEditing = { kind: 'text', el: el, textItem: textItem };
+    el.focus();
+    el.select();
+
+    function commit() {
+        const val = el.value.replace(/\s+$/, '');
+        const st = annotStore();
+        if (val.trim()) {
+            if (annotEditing && annotEditing.textItem) {
+                annotEditing.textItem.text = val;
+                annotApplyCommit();
+            } else {
+                st.items.push({ type: 'text', x: x, y: y, text: val, color: annotColor, size: Math.max(16, annotSize) });
+                annotApplyCommit();
+            }
+        } else if (annotEditing && annotEditing.textItem && st.items.indexOf(annotEditing.textItem) >= 0) {
+            st.items = st.items.filter(function (i) { return i !== annotEditing.textItem; });
+            annotApplyCommit();
+        }
+        cullAnnotEditing();
+        annotSelection = null;
+        redrawAnnots();
+        updateToolbarState();
+    }
+
+    el.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); commit(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); cullAnnotEditing(); redrawAnnots(); }
+    });
+    el.addEventListener('blur', commit);
+}
+
+// ── Wiring the annotation layer ──────────────────────────────────────────
+function wireAnnotationLayer() {
+    const frame = annotFrame();
+    if (!frame || frame.dataset.wired) return;
+    frame.dataset.wired = '1';
+    // Delegated: the canvas is recreated on each slide render, so listen on
+    // the (stable) viewport and only act on events that hit the canvas.
+    frame.addEventListener('pointerdown', function (e) {
+        if (e.target !== annotCanvas()) return;
+        onAnnotDown(e);
+    });
+    frame.addEventListener('pointermove', function (e) {
+        if (e.target !== annotCanvas()) return;
+        onAnnotMove(e);
+    });
+    frame.addEventListener('pointerup', function (e) {
+        if (e.target !== annotCanvas()) return;
+        onAnnotUp(e);
+    });
+    frame.addEventListener('pointercancel', function (e) {
+        if (e.target !== annotCanvas()) return;
+        onAnnotUp(e);
+    });
+}
+
+window.addEventListener('resize', function () {
+    rebindAnnotLayer();
+    fitPresentedSlide();
+});
+
+// ── Shortcut help panel ──────────────────────────────────────────────────
+function openHelp() {
+    document.getElementById('helpOverlay').classList.remove('hidden');
+}
+function closeHelp() {
+    document.getElementById('helpOverlay').classList.add('hidden');
+}
+
+// ── AI Assistant (grounded via Mastery Tutor) ────────────────────────────
+function currentTopicIndex() {
+    if (playerMode === 'source') return -1;
+    if (playerMode === 'learning') {
+        const s = slides[current];
+        return s ? s.topicIdx : -1;
+    }
+    return current; // visual / animation index topics directly
+}
+
+function currentTopicObj() {
+    const ti = currentTopicIndex();
+    return (ti >= 0 && topics[ti]) ? topics[ti] : null;
+}
+
+function sourceSlideSnippet() {
+    const u = sourceUnits[current];
+    if (!u) return '';
+    const blocks = u.blocks || [];
+    const txt = blocks.slice(0, 6).map(function (b) { return b.content || ''; }).join(' ') || (u.raw_text || '') || (u.title || '');
+    return txt.replace(/\s+/g, ' ').trim().substring(0, 700);
+}
+
+function aiPrompt(kind, custom) {
+    const t = currentTopicObj();
+    const label = t ? t.title : ('slide ' + (current + 1));
+    const desc = t ? (t.description || '') : sourceSlideSnippet();
+    const ctx = 'I am working with EduVision slide ' + (current + 1) +
+        (t ? ' on the topic "' + t.title + '"' : '');
+    const content = desc ? ('\nMaterial shown on this slide:\n' + desc) : '';
+    switch (kind) {
+        case 'explain': return ctx + '. Explain this concept clearly:\n' + label + content;
+        case 'simplify': return ctx + '. Explain this concept in the simplest terms, as if to a complete beginner:\n' + label + content;
+        case 'example': return ctx + '. Give a concrete real-world example that illustrates this concept:\n' + label + content;
+        case 'hint': return ctx + '. Give a short hint (not the full answer) to help a learner reason about this concept:\n' + label + content;
+        case 'deeper': return ctx + '. Give a deeper, more detailed technical explanation of this concept:\n' + label + content;
+        default: return custom;
+    }
+}
+
+function toggleAiPanel(force) {
+    const panel = document.getElementById('aiPanel');
+    const back = document.getElementById('aiBackdrop');
+    const open = typeof force === 'boolean' ? force : !panel.classList.contains('open');
+    panel.classList.toggle('open', open);
+    back.classList.toggle('open', open);
+}
+
+function addAiMessage(kind, text, meta) {
+    const thread = document.getElementById('aiThread');
+    const div = document.createElement('div');
+    div.className = 'ai-msg ' + kind;
+    div.textContent = text;
+    if (meta) {
+        const m = document.createElement('div');
+        m.className = 'ai-meta';
+        Object.keys(meta).forEach(function (k) {
+            if (!meta[k]) return;
+            const s = document.createElement('span');
+            s.textContent = k + ': ' + meta[k];
+            m.appendChild(s);
+        });
+        div.appendChild(m);
+    }
+    thread.appendChild(div);
+    const body = document.getElementById('aiBody');
+    if (body) body.scrollTop = body.scrollHeight;
+    return div;
+}
+
+function aiSetBusy(busy) {
+    document.querySelectorAll('#aiActions .ai-action, #aiBody .ai-send').forEach(function (b) {
+        b.disabled = busy;
+    });
+}
+
+async function ensureTutorSession() {
+    if (tutorSessionId) return tutorSessionId;
+    const res = await authFetch(API + '/tutor/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            lesson_id: lessonId,
+            title: 'Presentation player — ' + ((presentationInfo && presentationInfo.title) || 'Lesson'),
+            mode: 'interactive',
+        }),
+    });
+    if (!res.ok) await apiError(res);
+    const data = await res.json();
+    const s = data.data || data;
+    tutorSessionId = s.id || null;
+    if (!tutorSessionId) throw new Error('Tutor session could not be created');
+    return tutorSessionId;
+}
+
+async function aiAsk(kind) {
+    const input = document.getElementById('aiInput');
+    let promptText = aiPrompt(kind, input.value.trim());
+    if (kind === 'custom' && !promptText) { input.focus(); return; }
+    if (kind === 'custom') { input.value = ''; }
+    const kindLabel = kind === 'custom' ? 'Question' : kind.charAt(0).toUpperCase() + kind.slice(1);
+    addAiMessage('user', '[' + kindLabel + '] ' + promptText);
+    aiSetBusy(true);
+    const loading = addAiMessage('assistant', 'Thinking and grounding your question…');
+    loading.classList.add('ai-loading');
+    try {
+        const sid = await ensureTutorSession();
+        const res = await authFetch(API + '/tutor/sessions/' + sid + '/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: promptText, client_message_id: 'tt_' + Date.now() }),
+        });
+        if (!res.ok) await apiError(res);
+        const data = await res.json();
+        const exchange = data.data || data;
+        const reply = exchange.assistant_message || {};
+        const content = reply.content || exchange.response || '';
+        loading.remove();
+        if (!content) {
+            addAiMessage('assistant', reply.error || 'The assistant returned an empty response. Please try again.');
+        } else {
+            addAiMessage('assistant', content, {
+                Source: reply.source_kind || undefined,
+                Attribution: reply.attribution || undefined,
+                Confidence: reply.confidence || undefined,
+            });
+        }
+    } catch (e) {
+        loading.remove();
+        addAiMessage('error', 'AI request failed: ' + e.message);
+    } finally {
+        aiSetBusy(false);
+    }
+}
+
+// Enter to send in the AI ask box (Shift+Enter inserts a newline).
+document.addEventListener('keydown', function (e) {
+    const input = document.getElementById('aiInput');
+    if (e.target === input && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiAsk('custom'); }
+});
+
+// ── Boot ─────────────────────────────────────────────────────────────────
 init();
 </script>
 </body>
