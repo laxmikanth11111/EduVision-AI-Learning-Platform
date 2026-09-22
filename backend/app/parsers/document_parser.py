@@ -226,11 +226,18 @@ def parse_pptx(content: bytes, filename: str) -> list[ExtractedUnit]:
                         para_text = ("".join(run.text for run in para.runs) or getattr(para, "text", "") or "").strip()
                         if not para_text:
                             continue
-                        if getattr(shape, "is_placeholder", False) and para.level > 0:
+                        level = getattr(para, "level", 0) or 0
+                        is_bullet = (
+                            level > 0
+                            or (getattr(shape, "is_placeholder", False) and getattr(shape, "placeholder_format", None) is not None and getattr(shape.placeholder_format, "idx", 0) != 0)
+                            or any(para_text.startswith(bullet_prefix) for bullet_prefix in ("•", "-", "*", "–", "—", "▪", "▫", "►"))
+                        )
+                        if is_bullet:
                             blocks.append(
                                 ExtractedBlock(
                                     block_type=ContentBlockType.LIST_ITEM.value,
                                     content=para_text,
+                                    metadata={"level": level},
                                 )
                             )
                         else:
@@ -238,6 +245,7 @@ def parse_pptx(content: bytes, filename: str) -> list[ExtractedUnit]:
                                 ExtractedBlock(
                                     block_type=ContentBlockType.PARAGRAPH.value,
                                     content=para_text,
+                                    metadata={"level": level},
                                 )
                             )
                 elif getattr(shape, "has_table", False) and shape.has_table:
@@ -250,6 +258,7 @@ def parse_pptx(content: bytes, filename: str) -> list[ExtractedUnit]:
                             metadata={
                                 "rows": len(rows),
                                 "columns": len(rows[0]) if rows else 0,
+                                "table_data": rows,
                             },
                         )
                     )

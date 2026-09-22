@@ -148,11 +148,13 @@ class TestParsePptx:
         assert unit.title == "Slide One"
         block_types = [block.block_type for block in unit.blocks]
         assert block_types == [
-            ContentBlockType.PARAGRAPH.value,
+            ContentBlockType.LIST_ITEM.value,
             ContentBlockType.LIST_ITEM.value,
             ContentBlockType.NOTE.value,
         ]
         assert "First paragraph" in unit.raw_text
+        assert unit.blocks[0].metadata.get("level") == 0
+        assert unit.blocks[1].metadata.get("level") == 1
 
     def test_corrupted_file_raises(self) -> None:
         with pytest.raises(ExtractionError, match="Failed to extract"):
