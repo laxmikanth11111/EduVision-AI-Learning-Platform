@@ -1,5 +1,12 @@
 # EduVision AI — Frontend Design Package
 
+> **DEPRECATED — DO NOT MODIFY.** This directory is a static design prototype
+> preserved for historical reference only. It is **not** served by the
+> application and is **not** the canonical frontend. All active frontend work
+> lives in `backend/frontend/`. Do not add features, fix bugs, or make any
+> changes here. This directory will be removed once the archived design is no
+> longer referenced.
+
 A complete, interactive HTML/CSS/Bootstrap frontend concept for EduVision AI —
 a tool that turns any topic or uploaded document into a short visual
 explanation (animation, image, video, or simulation), with no accounts
