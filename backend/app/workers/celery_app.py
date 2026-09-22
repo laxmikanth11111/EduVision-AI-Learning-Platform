@@ -24,7 +24,13 @@ celery_app = Celery(
     "eduvision",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.workers.tasks", "app.workers.rag_tasks", "app.workers.video_tasks", "app.workers.c3_visual_tasks"],
+    include=[
+        "app.workers.tasks",
+        "app.workers.rag_tasks",
+        "app.workers.video_tasks",
+        "app.workers.c3_visual_tasks",
+        "app.workers.c4_animation_tasks",
+    ],
 )
 
 celery_app.conf.update(

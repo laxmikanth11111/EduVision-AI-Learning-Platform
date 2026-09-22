@@ -57,7 +57,7 @@ EXPECTED_TABLES: set[str] = {
 }
 
 
-EXPECTED_HEAD = "0035_c3_topic_visual_assets"
+EXPECTED_HEAD = "0036_c4_topic_animation_assets"
 
 
 async def test_alembic_revision_is_single_head(pg_engine: AsyncEngine):

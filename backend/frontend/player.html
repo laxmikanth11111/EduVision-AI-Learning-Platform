@@ -320,6 +320,16 @@ body.presenting .present-arrow { display: block; }
 .c2-misc-box { border-left: 3px solid var(--coral); background: rgba(216,90,48,0.06); padding: .65rem .85rem; border-radius: 3px; font-size: .8rem; color: var(--muted-strong); margin-top: .5rem; line-height: 1.5; }
 .c2-misc-label { font-size: .7rem; text-transform: uppercase; font-weight: 700; color: var(--coral); letter-spacing: .06em; margin-bottom: .2rem; }
 .c2-provenance-tag { font-size: .65rem; padding: .15rem .4rem; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; }
+/* ── C4 Animation Mode Styles ─────────────────────────── */
+.c4-anim-stage { border: 1px solid rgba(29,158,117,0.35); border-radius: 8px; overflow: hidden; background: #0B1626; }
+.c4-anim-frame { width: 100%; height: 460px; border: 0; display: block; background: #0B1626; }
+.c4-anim-hud { display: flex; align-items: center; gap: 8px; padding: .5rem .75rem; border-top: 1px solid var(--line); background: rgba(244,239,228,0.03); flex-wrap: wrap; }
+.c4-hud-btn { background: var(--surface); border: 1px solid var(--line); color: var(--paper); border-radius: 4px; min-width: 32px; height: 30px; padding: 0 .5rem; font-size: .85rem; cursor: pointer; transition: all .15s; font-family: 'Space Grotesk', sans-serif; }
+.c4-hud-btn:hover { border-color: var(--teal); color: var(--teal); }
+.c4-hud-btn.c4-hud-primary { background: var(--teal); border-color: var(--teal); color: #04231c; font-weight: 700; }
+.c4-hud-step { margin-left: auto; font-size: .75rem; color: var(--muted); font-family: 'Space Grotesk', sans-serif; letter-spacing: .04em; }
+.c4-anim-caption { min-height: 34px; padding: .5rem .8rem; font-size: .83rem; color: var(--muted-strong); border-top: 1px solid var(--line); line-height: 1.45; }
+.c4-anim-selfcheck { padding: .6rem .8rem; font-size: .82rem; color: var(--teal); border-top: 1px solid rgba(29,158,117,0.25); background: rgba(29,158,117,0.05); }
 </style>
 </head>
 <body>
@@ -339,6 +349,9 @@ body.presenting .present-arrow { display: block; }
         </button>
         <button id="btnModeVisual" class="mode-tab-btn" onclick="setPlayerMode('visual')">
             <span class="mode-icon">&#128444;</span> Visual Mode
+        </button>
+        <button id="btnModeAnimation" class="mode-tab-btn" onclick="setPlayerMode('animation')">
+            <span class="mode-icon">&#9654;</span> Animation Mode
         </button>
     </div>
     <a class="nav-link" href="/frontend/dashboard.html">Dashboard</a>
@@ -438,6 +451,10 @@ let currentLearningSlide = 0;
 // ── C3 Visual Mode state ─────────────────────────────────────────────────
 let c3VisualsByTopic = {};   // topicIdx -> asset (generated + actively_recommended)
 let c3VisualsLoading = false;
+
+// ── C4 Animation Mode state ──────────────────────────────────────────────
+let c4AnimationsByTopic = {};   // topicIdx -> animation asset
+let c4AnimationsLoading = false;
 
 // ── Init ─────────────────────────────────────────────────────────────────
 async function init() {
@@ -545,6 +562,11 @@ function setPlayerMode(mode) {
     if (mode === 'visual') {
         fetchC3Visuals();
     }
+
+    // C4: Fetch animation assets when entering animation mode
+    if (mode === 'animation') {
+        fetchC4Animations();
+    }
 }
 
 function jumpToSourceSlide(slideNum) {
@@ -571,6 +593,7 @@ function updateModeToggleUI() {
     const btnSource = document.getElementById('btnModeSource');
     const btnLearning = document.getElementById('btnModeLearning');
     const btnVisual = document.getElementById('btnModeVisual');
+    const btnAnimation = document.getElementById('btnModeAnimation');
     if (btnSource && btnLearning) {
         btnSource.classList.toggle('active', playerMode === 'source');
         btnLearning.classList.toggle('active', playerMode === 'learning');
@@ -595,6 +618,19 @@ function updateModeToggleUI() {
             btnVisual.disabled = false;
             btnVisual.title = '';
             btnVisual.style.opacity = '1';
+        }
+    }
+    if (btnAnimation) {
+        btnAnimation.classList.toggle('active', playerMode === 'animation');
+        const hasC2 = Array.isArray(slides) && slides.length > 0;
+        if (!hasC2) {
+            btnAnimation.disabled = true;
+            btnAnimation.title = 'No C2 topic hierarchy available for animation';
+            btnAnimation.style.opacity = '0.4';
+        } else {
+            btnAnimation.disabled = false;
+            btnAnimation.title = '';
+            btnAnimation.style.opacity = '1';
         }
     }
 }
@@ -980,6 +1016,8 @@ function renderSlide() {
         renderSourceSlide(current);
     } else if (playerMode === 'visual') {
         renderVisualSlide(current);
+    } else if (playerMode === 'animation') {
+        renderAnimationSlide(current);
     } else {
         renderLearningSlide(current);
     }
@@ -1139,6 +1177,194 @@ function c3DownloadSVG(assetId, filename) {
     }).catch(function (e) {
         alert('Could not download the SVG: ' + e.message);
     });
+}
+
+// ── C4 Animation Mode ────────────────────────────────────────────────────
+const C4_TYPE_LABELS = {
+    'process_sequence': 'Process Sequence', 'cause_effect_chain': 'Cause & Effect',
+    'state_transition': 'State Transition', 'comparison_reveal': 'Comparison Reveal',
+    'hierarchy_zoom': 'Hierarchy Zoom', 'timeline_progress': 'Timeline Progress',
+    'cycle_loop': 'Cycle Loop', 'network_flow': 'Network Flow'
+};
+
+function fetchC4Animations() {
+    const presId = (presentationInfo && presentationInfo.id) || (learningStructure && learningStructure.presentation_id);
+    if (!presId || c4AnimationsLoading) return;
+    c4AnimationsLoading = true;
+    authFetch(API + '/c4/animations/presentation/' + presId + '/ready').then(function (res) {
+        if (!res.ok) return res.text().then(function (t) { throw new Error(t); });
+        return res.json();
+    }).then(function (data) {
+        c4AnimationsLoading = false;
+        const list = (data && data.data) || data.items || [];
+        const byTopic = {};
+        const bySubtopic = {};
+        list.forEach(function (a) {
+            if (!a.topic_title) return;
+            byTopic[a.topic_title] = byTopic[a.topic_title] || [];
+            byTopic[a.topic_title].push(a);
+            if (a.subtopic_title) {
+                bySubtopic[a.subtopic_title] = bySubtopic[a.subtopic_title] || [];
+                bySubtopic[a.subtopic_title].push(a);
+            }
+        });
+        c4AnimationsByTopic = byTopic;
+        if (playerMode === 'animation') renderAnimationSlide(current);
+    }).catch(function (e) {
+        c4AnimationsLoading = false;
+        c4AnimationsByTopic = {};
+        if (playerMode === 'animation') renderAnimationSlide(current);
+    });
+}
+
+function animationsForTopic(t) {
+    const list = c4AnimationsByTopic[t.title] ||
+        (t.outline_title && c4AnimationsByTopic[t.outline_title]) ||
+        (t.animations && t.animations.length ? t.animations : null);
+    if (list && list.length) return list;
+    // Fall back to subtopic-level animation when the topic-level payload is used.
+    if (t.subtopics && t.subtopics.length) {
+        for (let i = 0; i < t.subtopics.length; i++) {
+            const st = t.subtopics[i];
+            const sub = c4AnimationsByTopic[(st.title || '').trim()];
+            if (sub && sub.length) return sub;
+        }
+    }
+    return null;
+}
+
+function renderAnimationSlide(idx) {
+    const vp = document.getElementById('viewport');
+    const t = topics[idx];
+    if (!t) {
+        vp.innerHTML = '<div class="source-empty-note">Topic not found.</div>';
+        return;
+    }
+    const list = animationsForTopic(t);
+    const anim = list ? list[0] : null;
+
+    let html =
+        '<div class="learning-provenance-badge"><span class="badge-dot" style="background:var(--teal);"></span>EduVision Animation &middot; Topic ' + (idx + 1) + '</div>' +
+        '<h2 class="slide-title">' + escHtml(t.title || '') + '</h2>' +
+        (t.section ? '<div style="margin:-.6rem 0 .8rem;"><div class="c2-section-name">Section &middot; ' + escHtml(t.section) + '</div></div>' : '');
+
+    html += '<div class="c3-visual-container">';
+
+    if (c4AnimationsLoading) {
+        html += '<div class="c3-visual-loading">&#9654; Loading generated animations&hellip;</div>';
+    } else if (!anim) {
+        html += '<div class="c3-visual-empty">No animation has been generated for this topic yet. ' +
+            'Animations are derived from ready C3 visuals and appear after background processing.</div>';
+    } else if (anim.status && anim.status !== 'ready') {
+        html += '<div class="c3-visual-error">Animation status: ' + escHtml(anim.status) + '. Generation may still be in progress.</div>';
+    } else {
+        const typeLabel = C4_TYPE_LABELS[anim.animation_type] || anim.animation_type || 'Animation';
+        html += '<div class="c3-visual-header">' +
+            '<div class="c3-visual-badge">&#9654; ' + escHtml(typeLabel) + '</div>' +
+            '<span class="c3-visual-type-tag">' + escHtml(anim.id || anim.asset_id || anim.animation_id || '') + '</span>' +
+            '</div>';
+
+        html += '<div class="c4-anim-stage">' +
+            '<iframe class="c4-anim-frame" sandbox="allow-scripts allow-same-origin" ' +
+            'title="Playback of ' + escHtml(typeLabel) + '" ' +
+            'src="about:blank"></iframe>' +
+            '<div class="c4-anim-hud">' +
+            '<button class="c4-hud-btn" data-act="restart" onclick="c4HudControl(' + idx + ', \'restart\')" title="Restart">&#9198;</button>' +
+            '<button class="c4-hud-btn" data-act="prev" onclick="c4HudControl(' + idx + ', \'prev\')" title="Previous step">&#9198;</button>' +
+            '<button class="c4-hud-btn c4-hud-primary" data-act="play" onclick="c4HudControl(' + idx + ', \'play\')" title="Play/Pause">&#9654;</button>' +
+            '<button class="c4-hud-btn" data-act="next" onclick="c4HudControl(' + idx + ', \'next\')" title="Next step">&#9197;</button>' +
+            '<button class="c4-hud-btn" data-act="slow" onclick="c4HudControl(' + idx + ', \'slow\')" title="Slower">&#8984;</button>' +
+            '<button class="c4-hud-btn" data-act="fast" onclick="c4HudControl(' + idx + ', \'fast\')" title="Faster">&#8984;</button>' +
+            '<span class="c4-hud-step" id="c4-step-' + idx + '">0 / 0</span>' +
+            '</div>' +
+            '<div class="c4-anim-caption" id="c4-caption-' + idx + '"></div>' +
+            '<div class="c4-anim-selfcheck hidden" id="c4-selfcheck-' + idx + '"></div>' +
+            '</div>';
+
+        const expl = anim.explanation || {};
+        html += '<div class="c3-visual-explanation">';
+        html += '<div class="c3-expl-title">&#128173; Why this animation</div>';
+        const typeLabelAgain = C4_TYPE_LABELS[anim.animation_type] || anim.animation_type;
+        if (typeLabelAgain) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Animation type: </span>' +
+                '<span class="c3-expl-text"> ' + escHtml(typeLabelAgain) + '</span></div>';
+        }
+        const why = expl.what_you_see || expl.pedagogical_rationale || anim.pedagogical_rationale || '';
+        if (why) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">What it teaches: </span>' +
+                '<span class="c3-expl-text"> ' + escHtml(why) + '</span></div>';
+        }
+        const takeaway = expl.key_takeaway || expl.why_it_matters || '';
+        if (takeaway) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Key takeaway: </span>' +
+                '<span class="c3-expl-text"> ' + escHtml(takeaway) + '</span></div>';
+        }
+        const concepts = anim.concepts || [];
+        if (Array.isArray(concepts) && concepts.length > 0) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Concepts: </span>' +
+                '<div class="c3-concept-chips">' +
+                concepts.map(function (c) {
+                    return '<span class="c3-concept-chip">' + escHtml(c) + '</span>';
+                }).join('') +
+                '</div></div>';
+        }
+        const refs = anim.source_references || [];
+        if (Array.isArray(refs) && refs.length > 0) {
+            html += '<div class="c3-expl-row"><span class="c3-expl-label">Source grounding: </span>';
+            const nums = [];
+            refs.forEach(function (r) {
+                const n = (r && (r.slide_number || r.section)) ? (r.slide_number || r.section) : (typeof r === 'number' ? r : null);
+                if (n && nums.indexOf(n) === -1) nums.push(n);
+            });
+            nums.forEach(function (n) {
+                html += '<span class="c3-source-ref" onclick="jumpToSourceSlide(' + n + ')">&#128196; Slide ' + n + '</span>';
+            });
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+
+    html += '</div>';
+    vp.innerHTML = html;
+
+    // Embed the package after the DOM is populated.
+    if (anim && anim.package_content) {
+        c4EmbedAnimation(idx, anim);
+    }
+}
+
+function c4EmbedAnimation(idx, anim) {
+    const iframe = document.querySelector('.c4-anim-frame');
+    if (!iframe) return;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    doc.open();
+    doc.write(anim.package_content);
+    doc.close();
+    // The package's own script already drives the play/step state; we only
+    // surface the step counter and captions via postMessage-free polling.
+    const stepEl = document.getElementById('c4-step-' + idx);
+    const captionEl = document.getElementById('c4-caption-' + idx);
+    const poll = setInterval(function () {
+        try {
+            const win = iframe.contentWindow;
+            if (!win || !win.__c4state) return;
+            const st = win.__c4state;
+            if (stepEl) stepEl.textContent = st.step + ' / ' + st.totalSteps;
+            if (captionEl && st.caption) captionEl.textContent = st.caption;
+            clearInterval(poll);
+        } catch (e) { /* cross-frame read failed; stop polling */ }
+    }, 200);
+}
+
+function c4HudControl(idx, action) {
+    const iframe = document.querySelector('.c4-anim-frame');
+    if (!iframe) return;
+    try {
+        const win = iframe.contentWindow;
+        if (!win || typeof win.__c4control !== 'function') return;
+        win.__c4control(action);
+    } catch (e) { /* ignore */ }
 }
 
 function recommendVisualType(topic) {

@@ -4,7 +4,7 @@ Runs against the Alembic-migrated scratch database (postgres:16-alpine) so the
 resume path exercises the *production schema lineage*: ``learning_sessions`` was
 created by migration ``0009`` (``current_slide_position``, ``current_block_position``,
 ``completion_percentage``, ``resume_version``) and P15 reuses those columns —
-adding NO migration. The head is ``0035_c3_topic_visual_assets`` (C3 added the
+adding NO migration. The head is ``0036_c4_topic_animation_assets`` (C3 added the
 ``video_projects`` table after P15).
 
 It drives ``LearningSessionService`` / ``LearnerProgressService`` directly against
@@ -92,7 +92,7 @@ async def resume_seed(pg_session: AsyncSession) -> dict[str, Any]:
 async def test_p15_no_new_migration_head_unchanged(pg_session: AsyncSession) -> None:
     """P15 adds no migration; the Alembic head is 0034 (P16 added it afterwards)."""
     head = (await pg_session.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-    assert head == "0035_c3_topic_visual_assets"
+    assert head == "0036_c4_topic_animation_assets"
 
 
 async def test_p15_position_persists_on_migrated_schema(

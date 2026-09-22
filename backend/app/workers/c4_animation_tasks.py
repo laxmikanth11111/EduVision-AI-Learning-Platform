@@ -1,7 +1,9 @@
-"""C3 Celery Tasks — async visual generation pipeline for topic-level visuals.
+"""C4 Celery Tasks — async animation generation pipeline.
 
-Integrates with the existing Celery infrastructure to handle visual generation
-asynchronously after upload/extraction/C2 processing completes.
+Integrates with the existing Celery infrastructure to handle animation
+generation asynchronously after C3 visual generation completes (either
+triggered explicitly via ``/c4/animations/generate`` or auto-dispatched
+by the C3 worker).
 """
 
 from __future__ import annotations
@@ -50,105 +52,104 @@ def _run_async(coro: Any) -> Any:
 @celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     base=TaskWithDLQ,
-    name="eduvision.c3.generate_visuals",
+    name="eduvision.c4.generate_animations",
     max_retries=2,
     default_retry_delay=60,
     acks_late=True,
 )
-def c3_generate_visuals_task(
+def c4_generate_animations_task(
     self: Any,
     presentation_id: str,
     user_id: str,
     force_regenerate: bool = False,
 ) -> dict[str, Any]:
-    """Generate visuals for all topics in a presentation.
+    """Generate animations for all topics in a presentation.
 
-    Called after C2 topic outline generation completes.
+    Called after C3 visual generation completes, or manually via the API.
     """
     logger.info(
-        "c3_generate_visuals_task_started",
+        "c4_generate_animations_task_started",
         presentation_id=presentation_id,
         user_id=user_id,
     )
-
     result: dict[str, Any] = _run_async(
-        _generate_visuals_async(
+        _generate_animations_async(
             presentation_id=presentation_id,
             user_id=uuid.UUID(user_id),
             force_regenerate=force_regenerate,
         )
     )
-
     logger.info(
-        "c3_generate_visuals_task_completed",
+        "c4_generate_animations_task_completed",
         presentation_id=presentation_id,
         result=result,
     )
     return result
 
 
-async def _generate_visuals_async(
+async def _generate_animations_async(
     presentation_id: str,
     user_id: uuid.UUID,
     force_regenerate: bool = False,
 ) -> dict[str, Any]:
-    """Async implementation of visual generation."""
+    """Async implementation of animation generation."""
     from app.repositories.presentation_repository import PresentationRepository
+    from app.repositories.topic_animation_asset_repository import (
+        TopicAnimationAssetRepository,
+    )
     from app.repositories.topic_outline_repository import TopicOutlineRepository
     from app.repositories.topic_visual_asset_repository import TopicVisualAssetRepository
     from app.schemas.topic_outline import OutlineTopic
-    from app.services.c3_visual_planning_pipeline import C3VisualPlanningPipeline
+    from app.services.c4_animation_planning_pipeline import C4AnimationPlanningPipeline
 
     async with UnitOfWork() as uow:
         pres_repo = PresentationRepository(uow.session)
         presentation = await pres_repo.get_by_public_id(presentation_id)
         if not presentation:
-            logger.error("c3_visual_pres_not_found", presentation_id=presentation_id)
+            logger.error("c4_anim_pres_not_found", presentation_id=presentation_id)
             return {"success": False, "error": "Presentation not found"}
 
         if str(presentation.owner_id) != str(user_id):
-            logger.error("c3_visual_not_owner", presentation_id=presentation_id)
+            logger.error("c4_anim_not_owner", presentation_id=presentation_id)
             return {"success": False, "error": "Not owner"}
 
         # Load C2 outline
         outline_repo = TopicOutlineRepository(uow.session)
         outline = await outline_repo.get_by_presentation_id(presentation.id)
         if not outline or outline.status != "succeeded":
-            logger.warning("c3_visual_no_outline", presentation_id=presentation_id)
+            logger.warning("c4_anim_no_outline", presentation_id=presentation_id)
             return {"success": False, "error": "No C2 outline available"}
 
-        # Parse topics
-        topics = []
+        topics: list[OutlineTopic] = []
         for t_data in outline.topics or []:
             if isinstance(t_data, dict):
                 try:
                     topics.append(OutlineTopic.model_validate(t_data))
                 except Exception:
                     continue
-
         if not topics:
             return {"success": False, "error": "No valid topics found"}
 
-        # Create pipeline
-        asset_repo = TopicVisualAssetRepository(uow.session)
-        pipeline = C3VisualPlanningPipeline(asset_repo=asset_repo)
+        asset_repo = TopicAnimationAssetRepository(uow.session)
+        c3_repo = TopicVisualAssetRepository(uow.session)
+        pipeline = C4AnimationPlanningPipeline(asset_repo=asset_repo, c3_repo=c3_repo)
         pres_db_id = str(presentation.id)
 
-        # Plan visuals
-        plan = await pipeline.plan_presentation_visuals(
+        # Plan animations
+        plan = await pipeline.plan_presentation_animations(
             presentation_id=pres_db_id,
             user_id=user_id,
             topics=topics,
             force_regenerate=force_regenerate,
         )
 
-        # Generate each planned visual
+        # Generate each planned animation
         generated = 0
         failed = 0
         for topic_plan in plan.topic_plans:
-            if topic_plan.visual_needed and topic_plan.specification:
+            if topic_plan.animation_needed and topic_plan.specification:
                 try:
-                    asset = await pipeline.generate_and_persist_visual(
+                    asset = await pipeline.generate_and_persist_animation(
                         plan=topic_plan,
                         presentation_id=pres_db_id,
                         user_id=user_id,
@@ -160,7 +161,7 @@ async def _generate_visuals_async(
                         failed += 1
                 except Exception as exc:
                     logger.error(
-                        "c3_single_visual_generation_failed",
+                        "c4_single_animation_generation_failed",
                         topic=topic_plan.topic_title,
                         error=str(exc),
                     )
@@ -168,27 +169,12 @@ async def _generate_visuals_async(
 
         await uow.commit()
 
-    # Auto-trigger C4 animation generation now that C3 visuals are ready.
-    from app.workers.c4_animation_tasks import c4_generate_animations_task
-    from app.workers.tasks import safe_dispatch
-
-    try:
-        safe_dispatch(
-            c4_generate_animations_task,
-            presentation_id,
-            user_id,
-            force_regenerate,
-        )
-    except Exception as exc:
-        logger.warning("c4_auto_dispatch_failed", error=str(exc))
-
     return {
         "success": True,
         "presentation_id": presentation_id,
-        "visuals_planned": plan.visuals_planned,
-        "visuals_generated": generated,
-        "visuals_failed": failed,
-        "visuals_skipped": plan.visuals_skipped,
+        "animations_planned": plan.animations_planned,
+        "animations_generated": generated,
+        "animations_failed": failed,
+        "animations_skipped": plan.animations_skipped,
         "total_topics": plan.total_topics,
-        "total_subtopics": plan.total_subtopics,
     }

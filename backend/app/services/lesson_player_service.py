@@ -137,10 +137,12 @@ class LessonPlayerService:
             lesson.presentation_id, getattr(lesson, "presentation", None)
         )
         topic_visuals = await self._load_topic_visuals(lesson.presentation_id)
+        topic_animations = await self._load_topic_animations(lesson.presentation_id)
         topics = self._extract_topics(
             version,
             learning_structure=learning_structure,
             topic_visuals=topic_visuals,
+            topic_animations=topic_animations,
         )
         presentation_info = self._serialize_presentation_info(
             getattr(lesson, "presentation", None), len(source_units)
@@ -200,10 +202,12 @@ class LessonPlayerService:
             lesson.presentation_id, getattr(lesson, "presentation", None)
         )
         topic_visuals = await self._load_topic_visuals(lesson.presentation_id)
+        topic_animations = await self._load_topic_animations(lesson.presentation_id)
         topics = self._extract_topics(
             version,
             learning_structure=learning_structure,
             topic_visuals=topic_visuals,
+            topic_animations=topic_animations,
         )
         presentation_info = self._serialize_presentation_info(
             getattr(lesson, "presentation", None), len(source_units)
@@ -513,12 +517,14 @@ class LessonPlayerService:
         version: GeneratedLessonVersion | None,
         learning_structure: dict[str, Any] | None = None,
         topic_visuals: dict[str, list[dict[str, Any]]] | None = None,
+        topic_animations: dict[str, list[dict[str, Any]]] | None = None,
     ) -> list[dict[str, Any]]:
         outline_topics = (learning_structure.get("topics") or []) if learning_structure else []
         outline_map = {
             t["title"].lower(): t for t in outline_topics if isinstance(t, dict) and "title" in t
         }
         topic_visuals = topic_visuals or {}
+        topic_animations = topic_animations or {}
 
         topics = []
         if version and version.blocks:
@@ -547,13 +553,15 @@ class LessonPlayerService:
                     else ""
                 )
                 topic_dict["outline_title"] = outline_title or heading
-                topic_dict["visuals"] = topic_visuals.get(
+                topic_dict["visuals"] = topic_visuals.get((outline_title or heading).lower(), [])
+                topic_dict["animations"] = topic_animations.get(
                     (outline_title or heading).lower(), []
                 )
                 topics.append(topic_dict)
         elif outline_topics:
             for idx, ot in enumerate(outline_topics):
                 if isinstance(ot, dict):
+                    key = str(ot.get("title", "")).lower()
                     topics.append(
                         {
                             "index": idx,
@@ -567,9 +575,8 @@ class LessonPlayerService:
                             "concepts": ot.get("concepts") or [],
                             "learning_objectives": ot.get("learning_objectives") or [],
                             "source_references": ot.get("source_references") or [],
-                            "visuals": topic_visuals.get(
-                                str(ot.get("title", "")).lower(), []
-                            ),
+                            "visuals": topic_visuals.get(key, []),
+                            "animations": topic_animations.get(key, []),
                         }
                     )
         return topics
@@ -599,9 +606,7 @@ class LessonPlayerService:
     def _serialize_visual_for_player(asset: Any) -> dict[str, Any]:
         concept_ids = asset.concept_ids or []
         prefix = f"{asset.topic_id or ''}:"
-        concepts = [
-            cid[len(prefix):] if cid.startswith(prefix) else cid for cid in concept_ids
-        ]
+        concepts = [cid[len(prefix) :] if cid.startswith(prefix) else cid for cid in concept_ids]
         return {
             "visual_id": str(asset.id),
             "public_id": asset.public_id,
@@ -619,6 +624,57 @@ class LessonPlayerService:
             "concept_ids": concept_ids,
             "explanation": asset.explanation or {},
             "svg_content": asset.asset_content,
+        }
+
+    async def _load_topic_animations(
+        self, presentation_id: uuid.UUID | None
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Map ready C4 animations to player topics by topic title."""
+        if not presentation_id:
+            return {}
+        from app.repositories.topic_animation_asset_repository import (
+            TopicAnimationAssetRepository,
+        )
+
+        repo = TopicAnimationAssetRepository(self._uow.session)
+        assets = await repo.get_ready_assets_for_presentation(presentation_id)
+
+        by_topic: dict[str, list[dict[str, Any]]] = {}
+        for asset in assets:
+            key = str(asset.topic_title or "").lower()
+            by_topic.setdefault(key, []).append(self._serialize_animation_for_player(asset))
+        for values in by_topic.values():
+            values.sort(key=lambda v: str(v.get("title") or ""))
+        return by_topic
+
+    @staticmethod
+    def _serialize_animation_for_player(asset: Any) -> dict[str, Any]:
+        concept_ids = asset.concept_ids or []
+        prefix = f"{asset.topic_id or ''}:"
+        concepts = [cid[len(prefix) :] if cid.startswith(prefix) else cid for cid in concept_ids]
+        spec = asset.specification or {}
+        return {
+            "animation_id": str(asset.id),
+            "asset_id": str(asset.id),
+            "public_id": asset.public_id,
+            "animation_type": asset.animation_type,
+            "title": asset.title,
+            "purpose": asset.purpose or "",
+            "learning_objective": asset.learning_objective or "",
+            "asset_format": asset.asset_format,
+            "topic_id": asset.topic_id,
+            "topic_title": asset.topic_title,
+            "subtopic_id": asset.subtopic_id,
+            "subtopic_title": asset.subtopic_title,
+            "provenance": asset.provenance,
+            "confidence": asset.confidence,
+            "concepts": concepts,
+            "concept_ids": concept_ids,
+            "explanation": asset.explanation or {},
+            "specification": spec,
+            "source_references": asset.source_references or [],
+            "package_content": asset.package_content or "",
+            "pedagogical_rationale": spec.get("pedagogical_rationale") or "",
         }
 
     def _serialize_lesson(self, lesson: GeneratedLesson) -> dict[str, Any]:

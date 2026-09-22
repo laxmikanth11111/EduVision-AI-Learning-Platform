@@ -49,6 +49,7 @@ from app.models.quiz_version import QuizVersion
 from app.models.review_schedule import ReviewSchedule
 from app.models.score_summary import ScoreSummary
 from app.models.study_plan import StudyPlan
+from app.models.topic_animation_asset import TopicAnimationAsset
 from app.models.topic_outline import TopicOutline
 from app.models.topic_visual_asset import TopicVisualAsset
 from app.models.tutor_conversation import TutorConversation
@@ -139,5 +140,6 @@ __all__ = [
     "TutorConversation",
     "TutorMessage",
     "TopicVisualAsset",
+    "TopicAnimationAsset",
     "VideoProjectRecord",
 ]
