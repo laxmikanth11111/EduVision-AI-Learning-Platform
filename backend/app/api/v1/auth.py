@@ -41,6 +41,87 @@ _oauth_states: dict[str, float] = {}
 _OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
 _OAUTH_STATE_KEY_PREFIX = "eduvision:oauth:state:"
 
+# In-memory login-failure counters (fallback when Redis is unavailable;
+# primary store is Redis so lockout is enforced across app instances).
+_login_failure_counts: dict[str, int] = {}
+_login_failure_deadlines: dict[str, float] = {}
+_LOGIN_FAILURE_KEY_PREFIX = "eduvision:auth:login_failures:"
+
+
+def _lockout_window_seconds() -> int:
+    return max(settings.LOGIN_LOCKOUT_MINUTES * 60, 1)
+
+
+async def _is_login_locked(email: str) -> bool:
+    """True when an account has exceeded MAX_LOGIN_ATTEMPTS within the window."""
+    try:
+        from redis.asyncio import Redis as AsyncRedis
+
+        from app.workers.redis_client import get_redis_pool
+
+        pool = await get_redis_pool()
+        redis = AsyncRedis(connection_pool=pool)
+        raw = await redis.get(f"{_LOGIN_FAILURE_KEY_PREFIX}{email}")
+        if raw is None:
+            return False
+        try:
+            return int(raw) >= settings.MAX_LOGIN_ATTEMPTS
+        except (TypeError, ValueError):
+            return False
+    except Exception:
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="auth_lockout_read")
+    count = _login_failure_counts.get(email, 0)
+    deadline = _login_failure_deadlines.get(email, 0.0)
+    if count <= 0 or time.time() >= deadline:
+        return False
+    return count >= settings.MAX_LOGIN_ATTEMPTS
+
+
+async def _record_login_failure(email: str) -> None:
+    """Count one failed login attempt with a rolling expiry window."""
+    try:
+        from redis.asyncio import Redis as AsyncRedis
+
+        from app.workers.redis_client import get_redis_pool
+
+        pool = await get_redis_pool()
+        redis = AsyncRedis(connection_pool=pool)
+        count = await redis.incr(f"{_LOGIN_FAILURE_KEY_PREFIX}{email}")
+        if count == 1:
+            await redis.expire(f"{_LOGIN_FAILURE_KEY_PREFIX}{email}", _lockout_window_seconds())
+        return
+    except Exception:
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="auth_lockout_write")
+    now = time.time()
+    deadline = _login_failure_deadlines.get(email, 0.0)
+    if now >= deadline:
+        _login_failure_counts[email] = 0
+    _login_failure_counts[email] = _login_failure_counts.get(email, 0) + 1
+    _login_failure_deadlines[email] = now + _lockout_window_seconds()
+
+
+async def _clear_login_failures(email: str) -> None:
+    """Reset the failure counter after a successful login for this account."""
+    try:
+        from redis.asyncio import Redis as AsyncRedis
+
+        from app.workers.redis_client import get_redis_pool
+
+        pool = await get_redis_pool()
+        redis = AsyncRedis(connection_pool=pool)
+        await redis.delete(f"{_LOGIN_FAILURE_KEY_PREFIX}{email}")
+        return
+    except Exception:
+        from app.observability.metrics import metrics
+
+        metrics.increment("redis_errors_total", operation="auth_lockout_clear")
+    _login_failure_counts.pop(email, None)
+    _login_failure_deadlines.pop(email, None)
+
 
 def _revoked_refresh_ttl() -> int:
     """TTL for a revoked refresh token JTI (lifetime of a refresh token)."""
@@ -206,16 +287,25 @@ async def login(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> AuthResponse:
+    email = request.email.lower()
+    if await _is_login_locked(email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Please try again later.",
+        )
+
     result = await session.execute(
-        select(User).where(User.email == request.email.lower())
+        select(User).where(User.email == email)
     )
     user = result.scalar_one_or_none()
     if not user or not user.password_hash or not verify_password(request.password, user.password_hash):
+        await _record_login_failure(email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
         )
 
+    await _clear_login_failures(email)
     tokens = _issue_tokens(user)
     _set_auth_cookies(response, tokens)
     logger.info("user_logged_in", user_id=str(user.id))
@@ -389,6 +479,11 @@ async def refresh_tokens(
         )
 
     if await _is_refresh_jti_revoked(payload["jti"]):
+        logger.warning(
+            "refresh_token_reuse_detected",
+            user_id=payload.get("sub"),
+            jti=payload["jti"],
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has been revoked.",
@@ -401,5 +496,8 @@ async def refresh_tokens(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
 
     new_tokens = _issue_tokens(user)
+    # Rotate: the presented refresh token must never be usable again. A
+    # replayed old token is now caught by the revoked-JTI check above.
+    await _revoke_refresh_jti(payload["jti"])
     _set_auth_cookies(response, new_tokens)
     return new_tokens
