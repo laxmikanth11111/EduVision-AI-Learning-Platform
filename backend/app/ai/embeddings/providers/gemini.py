@@ -34,7 +34,7 @@ from app.ai.errors import (
 class GeminiEmbeddingProvider(HttpEmbeddingProvider):
     name = "gemini"
     requires_api_key = True
-    default_model = "text-embedding-004"
+    default_model = "gemini-embedding-001"
     default_base_url = "https://generativelanguage.googleapis.com/v1beta"
     default_dimension = 768
     description = "Google Gemini via the generative language REST API"

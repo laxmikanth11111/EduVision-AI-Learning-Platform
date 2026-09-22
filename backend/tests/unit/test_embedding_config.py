@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
+from app.ai.embeddings.config import EmbeddingProviderConfig
 from app.core.config import settings
 from app.observability.metrics import init_default_metrics, metrics
 
@@ -55,6 +57,16 @@ class TestEmbeddingSettings:
         assert settings.EMBEDDING_MODEL is None or isinstance(
             settings.EMBEDDING_MODEL, str
         )
+
+    def test_from_settings_does_not_inherit_chat_model(self) -> None:
+        """An embedding model must never fall back to the chat AI_MODEL (a
+        chat model is not embedContent-capable and would 404 on every
+        embedding call). Unset EMBEDDING_MODEL must resolve to None so the
+        provider's own embedding default_model applies."""
+        with patch.object(settings, "EMBEDDING_PROVIDER", "local"):
+            config = EmbeddingProviderConfig.from_settings()
+        assert config.provider == "local"
+        assert config.model is None or config.model != settings.AI_MODEL
 
     def test_env_example_documents_embedding_settings(self) -> None:
         p2 = Path(__file__).resolve().parents[2]

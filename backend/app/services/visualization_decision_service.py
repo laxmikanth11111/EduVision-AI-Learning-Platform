@@ -76,7 +76,7 @@ class VisualizationDecisionService:
         try:
             ai_service = get_ai_content_service()
             prompt = f"Topic: {topic_title or 'Educational Topic'}\nCategory: {primary_cat.value}\nComponent Count: {len(components)}"
-            req = AIRequest(system_prompt=VISUALIZATION_SELECTION_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2)
+            req = AIRequest(system_prompt=VISUALIZATION_SELECTION_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2, scan_for_injection=True)
             res = await ai_service.generate(req)
 
             data = json.loads(res.text)

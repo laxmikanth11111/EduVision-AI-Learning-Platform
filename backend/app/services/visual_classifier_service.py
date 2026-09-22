@@ -168,7 +168,7 @@ class VisualClassifierService:
         try:
             ai_service = get_ai_content_service()
             prompt = f"Title: {title or 'N/A'}\n\nContent:\n{content[:4000]}"
-            req = AIRequest(system_prompt=CLASSIFICATION_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2)
+            req = AIRequest(system_prompt=CLASSIFICATION_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2, scan_for_injection=True)
             res = await ai_service.generate(req)
 
             data = json.loads(res.text)

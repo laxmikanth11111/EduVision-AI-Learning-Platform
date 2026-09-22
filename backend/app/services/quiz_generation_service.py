@@ -200,6 +200,7 @@ class QuizGenerationService:
             response_format=AIResponseFormat.JSON,
             max_tokens=4096,
             metadata={"purpose": "quiz_generation"},
+            scan_for_injection=True,
         )
         response = await provider.generate(request)
         if not response.success or not response.text:

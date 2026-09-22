@@ -44,7 +44,7 @@ class RelationshipEngineService:
             ai_service = get_ai_content_service()
             comps_json = json.dumps([{"id": c.component_id, "name": c.name} for c in components])
             prompt = f"Components:\n{comps_json}\n\nContent Context:\n{content[:3000]}"
-            req = AIRequest(system_prompt=RELATIONSHIP_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2)
+            req = AIRequest(system_prompt=RELATIONSHIP_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.2, scan_for_injection=True)
             res = await ai_service.generate(req)
 
             data = json.loads(res.text)

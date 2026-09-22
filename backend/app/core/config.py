@@ -143,15 +143,62 @@ class Settings(BaseSettings):
     AI_LESSON_MAX_SOURCE_UNITS: int = 50
     AI_LESSON_MAX_SOURCE_CHARS: int = 40000
     AI_LESSON_MAX_ATTEMPTS: int = 3
-    AI_LESSON_SAFETY_VALIDATOR: str = "noop"
+    AI_LESSON_SAFETY_VALIDATOR: str = "grounded"
 
     # ── AI Quiz Generation ─────────────────────────────────────────────────────
     AI_QUIZ_MAX_SOURCE_UNITS: int = 50
     AI_QUIZ_MAX_SOURCE_CHARS: int = 40000
     AI_QUIZ_MAX_ATTEMPTS: int = 3
     AI_QUIZ_MAX_QUESTIONS: int = 50
-    AI_QUIZ_SAFETY_VALIDATOR: str = "noop"
+    AI_QUIZ_SAFETY_VALIDATOR: str = "grounded"
     QUIZ_MAX_ATTEMPTS_PER_USER_DEFAULT: int = 1
+
+    # ── AI Prompt Injection Defense ─────────────────────────────────────────────
+    # Uploaded documents and learner messages are treated as DATA, never as
+    # instructions. ``AI_PROMPT_INJECTION_ENABLED`` gates the deterministic
+    # lexical scanner; scanning is admissible everywhere by default so document
+    # content cannot silently manipulate generation or tutoring prompts.
+    # ``AI_PROMPT_INJECTION_THRESHOLD`` is the minimum matched-rule weight sum
+    # required before content is considered an injection attempt.
+    AI_PROMPT_INJECTION_ENABLED: bool = True
+    AI_PROMPT_INJECTION_THRESHOLD: float = 3.0
+    # Message used by services that refuse to answer a user message that appears
+    # to be an injection attempt (rather than a genuine learning question).
+    AI_PROMPT_INJECTION_REFUSAL: str = (
+        "I can only help with questions about your learning material."
+    )
+
+    # ── Source Grounding Enforcement ────────────────────────────────────────────
+    # Layer 3 (preliminary, deterministic): minimum fraction of a topic's
+    # content words that must also appear in the source material.  Below this
+    # threshold the topic is rejected.  0.10 is a deliberately low floor that
+    # catches fully fabricated lessons while allowing legitimate paraphrasing.
+    # This is a lexical source-coverage pre-check, NOT a semantic-entailment
+    # judgment; the claim-level grounding layers below make the final decision.
+    AI_LESSON_SOURCE_COVERAGE_THRESHOLD: float = 0.10
+
+    # ── Claim-Level Semantic Grounding (layers 4-6) ───────────────────────────
+    # After passing the lexical pre-check, generated topic descriptions are split
+    # into claims, candidate evidence is retrieved semantically (embeddings +
+    # app-side cosine, reusing the shared retrieval math), and each claim is
+    # verified against its evidence.  Supported claims require at least
+    # ``AI_LESSON_GROUNDING_MIN_CONFIDENCE``; unverified high-risk claims
+    # (numeric, causal, absolute-quantified) are rejected.  The deterministic
+    # verifier is the conservative local/test fallback; the LLM verifier
+    # (existing provider abstraction, strict JSON schema) is the entailment
+    # authority used when a real provider is configured.  These controls may not
+    # be disabled in production (see ``validate_env_config``).
+    AI_LESSON_GROUNDING_ENABLED: bool = True
+    # Verifier backend: "auto" (LLM when AI_PROVIDER is not local, else
+    # deterministic), "llm" (force LLM), or "deterministic" (force local).
+    AI_LESSON_GROUNDING_VERIFIER: str = "auto"
+    # Minimum confidence for a SUPPORTED verdict to count as verified.
+    AI_LESSON_GROUNDING_MIN_CONFIDENCE: float = 0.6
+    # Maximum evidence units retrieved per claim (top-k after ranking).
+    AI_LESSON_GROUNDING_MAX_EVIDENCE: int = 4
+    # Maximum claims evaluated per topic block (remaining text is truncated
+    # from verification and recorded as such).
+    AI_LESSON_GROUNDING_MAX_CLAIMS_PER_TOPIC: int = 24
 
     # ── Adaptive Learning ─────────────────────────────────────────────────────
     MASTERY_VERSION: str = "1"
@@ -232,10 +279,8 @@ class Settings(BaseSettings):
     TUTOR_CONVERSATION_CLEANUP_DAYS: int = 90
     TUTOR_SESSION_IDLE_DAYS: int = 30
     TUTOR_HALLUCINATION_OVERLAP_THRESHOLD: float = 0.25
-    TUTOR_GROUNDED_SENTENCE_THRESHOLD: float = 0.6
     TUTOR_HIGH_CONFIDENCE_THRESHOLD: float = 0.75
     TUTOR_LOW_CONFIDENCE_THRESHOLD: float = 0.5
-    TUTOR_INJECTION_FLAG_THRESHOLD: float = 0.6
     TUTOR_MAX_MESSAGE_QUERY_CHARS: int = 300
 
     # ── Video rendering runtime (P16) ────────────────────────────────────────
@@ -396,6 +441,8 @@ class Settings(BaseSettings):
     # global 100/60s so an abusive client cannot burn AI credits or grading
     # CPU by hammering generation/submission.
     RATE_LIMIT_ROUTES: str = (
+        r"^/api/v1/auth/login$=10/60,"
+        r"^/api/v1/auth/register$=10/60,"
         r"^/api/v1/presentations/[^/]+/quizzes$=10/60,"
         r"^/api/v1/quizzes/[^/]+/attempts/[^/]+/submit$=30/60,"
         r"^/api/v1/users/me/adaptive-quiz$=30/60,"
@@ -472,6 +519,14 @@ class Settings(BaseSettings):
                 raise ValueError("Database credentials must be explicitly configured in production/staging; default 'eduvision:eduvision' password is not allowed.")
             if self.AI_PROVIDER and self.AI_PROVIDER != "local" and not self.AI_API_KEY:
                 raise ValueError(f"AI_API_KEY is required when AI_PROVIDER is '{self.AI_PROVIDER}' in production/staging")
+            if not self.AI_LESSON_GROUNDING_ENABLED:
+                raise ValueError("AI_LESSON_GROUNDING_ENABLED must be True in production/staging; claim-level grounding cannot be disabled")
+            if self.AI_LESSON_GROUNDING_MIN_CONFIDENCE <= 0.0:
+                raise ValueError("AI_LESSON_GROUNDING_MIN_CONFIDENCE must be > 0 in production/staging (a zero floor would silently weaken grounding)")
+            if self.AI_LESSON_GROUNDING_MAX_EVIDENCE < 1:
+                raise ValueError("AI_LESSON_GROUNDING_MAX_EVIDENCE must be >= 1 in production/staging")
+            if self.AI_LESSON_GROUNDING_MAX_CLAIMS_PER_TOPIC < 1:
+                raise ValueError("AI_LESSON_GROUNDING_MAX_CLAIMS_PER_TOPIC must be >= 1 in production/staging")
             if self.STORAGE_PROVIDER == "s3" and (
                 not self.S3_ACCESS_KEY_ID or not self.S3_SECRET_ACCESS_KEY
             ):

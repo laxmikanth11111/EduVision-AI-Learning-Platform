@@ -94,6 +94,7 @@ class AIRequest(BaseModel):
     model_override: str | None = None
     request_id: str | None = None
     correlation_id: str | None = None
+    scan_for_injection: bool = False
 
     @field_validator("user_prompt")
     @classmethod

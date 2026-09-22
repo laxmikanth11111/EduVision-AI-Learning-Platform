@@ -35,7 +35,7 @@ class LearningObjectiveService:
         try:
             ai_service = get_ai_content_service()
             prompt = f"Topic Title: {title or 'General Educational Topic'}\n\nContent:\n{content[:4000]}"
-            req = AIRequest(system_prompt=LEARNING_OBJECTIVE_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.3)
+            req = AIRequest(system_prompt=LEARNING_OBJECTIVE_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.3, scan_for_injection=True)
             res = await ai_service.generate(req)
 
             data = json.loads(res.text)

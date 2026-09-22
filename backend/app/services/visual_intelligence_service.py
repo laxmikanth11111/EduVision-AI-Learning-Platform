@@ -59,6 +59,20 @@ class VisualIntelligenceService:
             err = val_res.errors[0] if val_res.errors else VisualValidationError(code="INVALID_INPUT", message="Invalid input")
             raise ValueError(f"Visual Intelligence validation failed: [{err.code}] {err.message}")
 
+        # Step 1b: Injection guard — reject content containing injection patterns
+        from app.ai.prompt_injection import is_reliably_flagged, scan_for_prompt_injection
+        from app.core.config import settings as _cfg
+        if _cfg.AI_PROMPT_INJECTION_ENABLED:
+            scan_text = f"{title or ''} {content}"
+            _inj_result = scan_for_prompt_injection(scan_text, threshold=_cfg.AI_PROMPT_INJECTION_THRESHOLD)
+            if is_reliably_flagged(_inj_result):
+                raise ValueError(
+                    f"Visual Intelligence validation failed: [INJECTION] "
+                    f"The content contains instruction-override patterns "
+                    f"({', '.join(_inj_result.matched_rules)}). "
+                    f"Generation was blocked for safety."
+                )
+
         # Step 2: Content Hashing & Cache Lookup
         cache_key = self._generate_cache_key(content, title)
         if use_cache and cache_key in self._cache:

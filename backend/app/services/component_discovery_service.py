@@ -38,7 +38,7 @@ class ComponentDiscoveryService:
         try:
             ai_service = get_ai_content_service()
             prompt = f"Topic Title: {title or 'Topic'}\n\nContent:\n{content[:4000]}"
-            req = AIRequest(system_prompt=COMPONENT_DISCOVERY_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.3)
+            req = AIRequest(system_prompt=COMPONENT_DISCOVERY_SYSTEM_PROMPT, user_prompt=prompt, temperature=0.3, scan_for_injection=True)
             res = await ai_service.generate(req)
 
             data = json.loads(res.text)

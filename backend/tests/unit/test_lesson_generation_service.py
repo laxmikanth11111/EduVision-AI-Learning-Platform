@@ -51,8 +51,8 @@ def _payload_json(**overrides: object) -> str:
         "language": "en",
         "difficulty": "beginner",
         "topics": [
-            {"topic": "Intro", "description": "Body"},
-            {"topic": "Details", "description": "More"},
+            {"topic": "World", "description": "Hello world content."},
+            {"topic": "Paragraph", "description": "Slide content details."},
         ],
     }
     data.update(overrides)
@@ -361,7 +361,7 @@ class TestRunGeneration:
         assert len(version.payload_hash) == 64
         assert len(version.prompt_hash) == 64
         assert version.generation_metadata["source_units_count"] == 1
-        assert version.generation_metadata["safety_checks"] == ["noop"]
+        assert version.generation_metadata["safety_checks"] == ["grounded"]
         assert version.quality_score is None
 
         assert len(version.blocks) == 2
@@ -393,8 +393,8 @@ class TestRunGeneration:
         presentation = await _seed(db_session)
         raw = _payload_json(
             topics=[
-                {"topic": "Intro", "description": "Body"},
-                {"topic": "Details", "description": "More"},
+                {"topic": "World", "description": "Hello world content."},
+                {"topic": "Slide", "description": "Paragraph content overview."},
             ]
         )
         fake = FakeAIService([_ai_response(raw)])

@@ -93,6 +93,9 @@ class AIContentService:
         """Generate content through the configured provider with full retries."""
         request = self._finalize_request(request)
 
+        from app.ai.prompt_injection import guard_ai_request
+        guard_ai_request(request)
+
         if self._cache is not None:
             cache_key = self._cache.key_for(request)
             cached = self._cache.get(cache_key)
@@ -176,6 +179,8 @@ class AIContentService:
     async def stream(self, request: AIRequest) -> Any:
         """Stream response text deltas through the provider (no caching)."""
         request = self._finalize_request(request)
+        from app.ai.prompt_injection import guard_ai_request
+        guard_ai_request(request)
         logger.info(
             "ai_stream_started",
             request_id=request.request_id,

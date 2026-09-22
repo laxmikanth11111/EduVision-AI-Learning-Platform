@@ -109,11 +109,13 @@ def _build_http_error_response(
         503: ErrorCode.SERVICE_UNAVAILABLE,
     }
     code = code_map.get(exc.status_code, ErrorCode.INTERNAL_ERROR)
+    headers = getattr(exc, "headers", None)
     return _build_error_response(
         request=request,
         status_code=exc.status_code,
         code=code.value,
         message=str(exc.detail),
+        headers=headers,
     )
 
 
@@ -123,6 +125,7 @@ def _build_error_response(
     code: str,
     message: str,
     details: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     return JSONResponse(
@@ -136,6 +139,7 @@ def _build_error_response(
                 "request_id": request_id,
             },
         },
+        headers=headers,
     )
 
 

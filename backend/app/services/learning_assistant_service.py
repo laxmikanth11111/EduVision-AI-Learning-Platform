@@ -632,6 +632,16 @@ class LearningAssistantService:
         user_message: str,
     ) -> str:
         """Try AI provider; fall back to contextual answer if unavailable."""
+        from app.ai.prompt_injection import is_reliably_flagged, scan_for_prompt_injection
+        from app.core.config import settings
+
+        if settings.AI_PROMPT_INJECTION_ENABLED:
+            result = scan_for_prompt_injection(
+                user_message, threshold=settings.AI_PROMPT_INJECTION_THRESHOLD,
+            )
+            if is_reliably_flagged(result):
+                return settings.AI_PROMPT_INJECTION_REFUSAL
+
         try:
             from app.ai.service import get_ai_content_service
 
@@ -643,6 +653,7 @@ class LearningAssistantService:
                 metadata={},
                 max_tokens=2048,
             )
+            request = request.model_copy(update={"scan_for_injection": True})
             response = await provider.generate(request)
             if response.success and response.text:
                 return response.text

@@ -500,6 +500,33 @@ class MasteryTutorService:
         )
         baseline_conf = _confidence_from_mastery(context.get("weak_mastery"))
 
+        # Untrusted user input is treated as DATA. If the learner message looks
+        # like an instruction-override attempt, refuse deterministically without
+        # ever contacting the model pipeline.
+        if settings.AI_PROMPT_INJECTION_ENABLED:
+            from app.ai.prompt_injection import (
+                is_reliably_flagged,
+                scan_for_prompt_injection,
+            )
+
+            scan = scan_for_prompt_injection(
+                user_message, threshold=settings.AI_PROMPT_INJECTION_THRESHOLD
+            )
+            if is_reliably_flagged(scan):
+                logger.warning(
+                    "tutor_prompt_injection_refused",
+                    matched_rules=scan.matched_rules,
+                )
+                return (
+                    settings.AI_PROMPT_INJECTION_REFUSAL,
+                    TutorSourceKind.DETERMINISTIC.value,
+                    context.get("attribution"),
+                    baseline_conf,
+                    None,
+                    None,
+                    {"deterministic_reason": "prompt_injection_refusal"},
+                )
+
         try:
             from app.ai.models import AIRequest, AIResponseFormat
             from app.ai.service import get_ai_content_service

@@ -50,7 +50,11 @@ class EmbeddingProviderConfig(BaseModel):
         selected = provider or settings.EMBEDDING_PROVIDER or settings.AI_PROVIDER or ""
         return cls(
             provider=selected,
-            model=settings.EMBEDDING_MODEL or settings.AI_MODEL,
+            # An embedding model must never be silently inherited from the chat
+            # model (AI_MODEL): chat models are not embedContent-capable and
+            # would make every embedding call fail. When EMBEDDING_MODEL is
+            # unset the provider's own embedding default is used.
+            model=settings.EMBEDDING_MODEL,
             api_key=settings.AI_API_KEY,
             base_url=settings.AI_BASE_URL,
             max_input_tokens=settings.AI_MAX_INPUT_TOKENS,

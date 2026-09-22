@@ -48,7 +48,7 @@ from app.services.lesson_prompt_builder import (
 from app.services.lesson_safety import (
     LessonSafetyError,
     LessonSafetyValidator,
-    NoopLessonSafetyValidator,
+    build_safety_validator,
 )
 from shared.constants import (
     DIALECTS_SUPPORTED,
@@ -93,7 +93,10 @@ class LessonGenerationService:
         self._safety = (
             safety_validator
             if safety_validator is not None
-            else NoopLessonSafetyValidator()
+            else build_safety_validator(
+                settings.AI_LESSON_SAFETY_VALIDATOR,
+                ai_service=self._ai,
+            )
         )
         self._builder = builder if builder is not None else LessonPromptBuilder()
 
@@ -475,6 +478,7 @@ class LessonGenerationService:
 
         ai_failed = False
         response = None
+        grounding_report: dict[str, Any] | None = None
         try:
             response = await self._ai.generate(request)
         except AIError as exc:
@@ -514,6 +518,7 @@ class LessonGenerationService:
                 source_context=source_context,
                 request=lesson_request,
             )
+            grounding_report = getattr(self._safety, "grounding_report", None)
 
         version = await self._version_repo.create(
             lesson_id=lesson.id,
@@ -548,6 +553,7 @@ class LessonGenerationService:
                 "language": request.language,
                 "difficulty": request.difficulty,
                 "idempotency_key": lesson.idempotency_key,
+                "grounding": grounding_report,
             },
             input_tokens=response.usage.input_tokens if response else 0,
             output_tokens=response.usage.output_tokens if response else 0,
