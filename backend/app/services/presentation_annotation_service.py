@@ -21,6 +21,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.database.unit_of_work import UnitOfWork
 from app.models.presentation_annotation import (
@@ -214,7 +215,26 @@ class PresentationAnnotationService:
             self._uow.session.add(row)
         else:
             row.items = items
-        await self._uow.flush()
+        try:
+            await self._uow.flush()
+        except IntegrityError:
+            # Lost a first-write race: another request created this layer between
+            # our SELECT and INSERT, so our flush violated uq_lesson_annotations_layer.
+            # Recover by adopting the winner's row and folding this write on top
+            # instead of surfacing a 500.
+            await self._uow.rollback()
+            stmt = select(PresentationAnnotation).where(
+                PresentationAnnotation.user_id == user_uuid,
+                PresentationAnnotation.lesson_id == lesson_id,
+                PresentationAnnotation.player_mode == mode,
+                PresentationAnnotation.slide_index == slide_index,
+            )
+            winner = (await self._uow.session.execute(stmt)).scalar_one_or_none()
+            if winner is None:
+                raise
+            winner.items = items
+            await self._uow.flush()
+            row = winner
         return {
             "public_id": row.public_id,
             "player_mode": mode,

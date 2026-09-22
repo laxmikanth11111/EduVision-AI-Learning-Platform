@@ -132,13 +132,18 @@ class TestPlayerFrontendContract:
         assert "Presenter notes" in response.text
 
     async def test_sync_topic_sends_mode_parameter(self, client) -> None:
-        """Position sync and finish both send the normalized player mode so the
-        server preserves source vs learning completion semantics."""
+        """Position sync and finish both send the normalized player mode AND a
+        mode-aware slide index (sessionIndex) so the server preserves source vs
+        learning completion semantics and the visual/animation decks advance
+        learning progress at their topic's concept slide."""
         response = await client.get(FRONTEND_PLAYER_URL)
         assert response.status_code == 200
         body = response.text
-        assert 'slide_index: current, mode: syncMode()' in body
+        assert 'slide_index: sessionIndex(), mode: syncMode()' in body
         assert 'mode: syncMode()' in body
+        # The helper that translates the active deck's index space into the
+        # session/source-vs-learning index space must exist and be reachable.
+        assert "function sessionIndex()" in body
 
     async def test_save_annotations_for_posts_to_layer_endpoint(self, client) -> None:
         """Replaces layers via the backend route used between page reloads."""

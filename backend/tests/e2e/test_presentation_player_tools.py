@@ -403,3 +403,135 @@ def test_annotations_persist_across_player_reload(server_env, page):
         "Object.values(annotBySlide).reduce((n,s)=>n+s.items.length,0)"
     )
     assert restored >= 1, "persisted annotations must be restored after reload"
+
+
+def _draw_stroke(page, x: int, y: int) -> None:
+    """Draw a pen stroke on the annotation canvas at a viewport offset."""
+    page.locator('[data-tool="pen"]').click()
+    canvas = page.locator("#annotCanvas")
+    canvas.wait_for(state="attached", timeout=10_000)
+    page.wait_for_function(
+        """() => {
+            const c = document.getElementById('annotCanvas');
+            return c && c.clientWidth > 0 && c.clientHeight > 0;
+        }""",
+        timeout=10_000,
+    )
+    box = canvas.bounding_box()
+    assert box is not None
+    page.mouse.move(box["x"] + x, box["y"] + y)
+    page.mouse.down()
+    page.mouse.move(box["x"] + x + 80, box["y"] + y + 55, steps=8)
+    page.mouse.up()
+
+
+def _etch_annotations(page, base_url: str, lesson_id: str) -> list[dict]:
+    """Return the server-side annotation layers for this lesson."""
+    return page.evaluate(
+        """async (payload) => {
+            const token = localStorage.getItem('access_token');
+            const res = await fetch(
+                payload.base + '/api/v1/lessons/' + payload.lessonId + '/annotations',
+                { headers: { 'Authorization': 'Bearer ' + token } },
+            );
+            const body = await res.json();
+            return body.data ? body.data.layers : [];
+        }""",
+        {"base": base_url, "lessonId": lesson_id},
+    )
+
+
+@pytest.mark.e2e
+def test_rapid_multi_slide_annotations_all_persist(server_env, page):
+    """Two strokes drawn inside the debounce window must BOTH stay (P2)."""
+    ctx = _open_player(page, server_env["base_url"])
+
+    _draw_stroke(page, 200, 200)                        # slide 0
+    page.locator("#nextBtn").click()                    # navigate fast...
+    page.wait_for_timeout(150)                          # ...inside 700ms debounce
+    _draw_stroke(page, 160, 150)                        # slide 1
+
+    page.wait_for_timeout(2000)                         # flush + PUT round trips
+
+    layers = _etch_annotations(page, server_env["base_url"], ctx["lessonId"])
+    assert len(layers) >= 2, f"both slides must persist, got {layers}"
+    assert all(lyr.get("items") for lyr in layers), f"every layer must hold marks: {layers}"
+
+    page.reload()
+    page.wait_for_load_state("domcontentloaded")
+    page.locator(".thumb-title").first.wait_for(state="visible", timeout=25_000)
+    page.wait_for_function(
+        "() => Object.keys(annotBySlide).length >= 2",
+        timeout=10_000,
+    )
+    keys = page.evaluate("Object.keys(annotBySlide).sort().join(',')")
+    assert len(keys.split(",")) >= 2, f"both layers must hydrate after reload, got {keys!r}"
+
+
+@pytest.mark.e2e
+def test_visual_mode_annotation_persists_under_visual_layer(server_env, page):
+    """A stroke drawn in Visual Mode stays under the visual layer (P1/P7)."""
+    ctx = _open_player(page, server_env["base_url"])
+
+    page.locator("#btnModeVisual").click()
+    page.wait_for_timeout(900)
+    assert page.evaluate("playerMode") == "visual"
+
+    _draw_stroke(page, 160, 160)
+
+    held = page.evaluate(
+        """() => {
+            const vkeys = Object.keys(annotBySlide).filter(k => k.indexOf('visual:') === 0);
+            return {
+                visual: vkeys.map(k => ({ key: k, n: (annotBySlide[k].items || []).length })),
+                learning0: ((annotBySlide['learning:0'] || {}).items || []).length,
+            };
+        }"""
+    )
+    assert held["learning0"] == 0, "visual stroke must not leak into the learning layer"
+    assert any(e["n"] >= 1 for e in held["visual"]), f"visual layer missing the stroke: {held}"
+
+    page.wait_for_timeout(2000)
+    layers = _etch_annotations(page, server_env["base_url"], ctx["lessonId"])
+    vlayers = [lyr for lyr in layers if lyr["player_mode"] == "visual"]
+    assert vlayers, f"visual layer must reach the backend, got {layers}"
+    assert any(lyr.get("items") for lyr in vlayers), f"visual layer must hold marks, got {layers}"
+
+    page.reload()
+    page.wait_for_load_state("domcontentloaded")
+    page.locator(".thumb-title").first.wait_for(state="visible", timeout=25_000)
+    page.wait_for_timeout(1600)                         # hydration
+    page.locator("#btnModeVisual").click()
+    page.wait_for_timeout(900)
+    restored = page.evaluate(
+        """() => {
+            const ks = Object.keys(annotBySlide).filter(k => k.indexOf('visual:') === 0);
+            return { keys: ks, total: ks.reduce((n, k) => n + (annotBySlide[k].items || []).length, 0) };
+        }"""
+    )
+    assert restored["total"] >= 1, f"visual stroke must be restored after reload: {restored}"
+
+
+@pytest.mark.e2e
+def test_clear_all_annotations_persists_after_reload(server_env, page):
+    """Clearing every layer persists the empties so no stroke resurrects (P3)."""
+    ctx = _open_player(page, server_env["base_url"])
+
+    _draw_stroke(page, 200, 200)
+    page.locator("#nextBtn").click()
+    page.wait_for_timeout(150)
+    _draw_stroke(page, 160, 150)
+    page.wait_for_timeout(2000)                          # both layers flushed
+
+    page.evaluate("window.confirm = () => true; annotClearAll();")
+    page.wait_for_timeout(2000)                          # empties flushed
+
+    layers = _etch_annotations(page, server_env["base_url"], ctx["lessonId"])
+    assert not layers, f"cleared layers must be deleted server-side, got {layers}"
+
+    page.reload()
+    page.wait_for_load_state("domcontentloaded")
+    page.locator(".thumb-title").first.wait_for(state="visible", timeout=25_000)
+    page.wait_for_timeout(1600)
+    total = page.evaluate("Object.values(annotBySlide).reduce((n,s)=>n+(s.items||[]).length,0)")
+    assert total == 0, f"no annotations may return after clearing, got total={total}"

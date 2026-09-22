@@ -817,7 +817,7 @@ async function init() {
         // Capture this session's saved representation + slide index so future
         // resumes land on the same deck view; also hydrate any persisted marks.
         syncTopic();
-        loadPersistedAnnotations();
+        annotHydration = loadPersistedAnnotations();
     } catch (e) {
         showState('<div class="state-icon">&#9888;</div>' +
             '<p class="state-msg">Failed to load presentation: ' + escHtml(e.message) + '</p>' +
@@ -832,16 +832,30 @@ function setPlayerMode(mode) {
     }
     if (playerMode === mode) return;
 
+    // Remember only the framing decks' own positions. The visual/animation
+    // decks index topics directly, so they must never write into the learning
+    // position space (doing so corrupts learning-mode progress on resume).
     if (playerMode === 'source') {
         currentSourceSlide = current;
-    } else {
+    } else if (playerMode === 'learning') {
         currentLearningSlide = current;
     }
 
+    const previousMode = playerMode;
     playerMode = mode;
-    current = (playerMode === 'source') ? currentSourceSlide : currentLearningSlide;
+    if (playerMode === 'source') {
+        current = currentSourceSlide;
+    } else if (playerMode === 'learning') {
+        current = currentLearningSlide;
+    } else {
+        // Entering a topic-indexed deck: land on the topic of the learning
+        // slide we arrived from, so marks and renders agree on `current`.
+        if (previousMode === 'learning' && slides[current] && typeof slides[current].topicIdx === 'number') {
+            current = slides[current].topicIdx;
+        }
+    }
 
-    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    const maxLen = deckLength();
     if (current >= maxLen) current = Math.max(0, maxLen - 1);
 
     updateModeToggleUI();
@@ -933,7 +947,7 @@ function startIndexFromUrl() {
     // Explicit ?slide= deep-link wins; otherwise resume the server-persisted
     // position ("pick up where you left off"); otherwise start at slide 0.
     const s = parseInt(params.get('slide'), 10);
-    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    const maxLen = deckLength();
     if (!isNaN(s) && s >= 0 && s < maxLen) return s;
     if (sessionSlide > 0 && sessionSlide < maxLen) return sessionSlide;
     return 0;
@@ -1190,7 +1204,23 @@ function renderSourceSlide(idx) {
                 } else if (bType === 'note' || bType === 'notes') {
                     html += '<div class="source-notes-card"><div class="source-notes-hdr">Speaker Notes</div><div>' +
                         escHtml(b.content || '') + '</div></div>';
-                } else {
+} else if (playerMode === 'visual' || playerMode === 'animation') {
+        // Topic-indexed decks (one slide per topic): thumbnails must follow
+        // the same index space so click i -> goTo(i) renders topics[i].
+        topics.forEach((t, i) => {
+            const el = document.createElement('div');
+            el.className = 'thumb' + (i === current ? ' active' : '');
+            el.id = 'thumb-' + i;
+            el.onclick = () => goTo(i);
+            const prev = (t.description || '').replace(/\s+/g, ' ').trim();
+            el.innerHTML =
+                '<span class="thumb-num">' + String(i + 1).padStart(2, '0') + '</span>' +
+                '<span class="thumb-kind">Topic</span>' +
+                '<div class="thumb-title">' + escHtml(t.title || 'Untitled') + '</div>' +
+                (prev ? '<div class="thumb-prev">' + escHtml(prev.length > 110 ? prev.substring(0, 110) + '…' : prev) + '</div>' : '');
+            frag.appendChild(el);
+        });
+    } else {
                     html += '<p class="source-paragraph">' + escHtml(b.content || '') + '</p>';
                 }
             }
@@ -1736,12 +1766,12 @@ function updateRecoChip(idx, topic, chosen, reco, effective) {
 
 // ── Navigation ───────────────────────────────────────────────────────────
 function goTo(i, syncSession = true) {
-    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    const maxLen = deckLength();
     if (i < 0 || i >= maxLen) return;
     current = i;
     if (playerMode === 'source') {
         currentSourceSlide = i;
-    } else {
+    } else if (playerMode === 'learning') {
         currentLearningSlide = i;
     }
     renderSlide();
@@ -1751,7 +1781,7 @@ function goTo(i, syncSession = true) {
 }
 
 function nextSlide() {
-    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    const maxLen = deckLength();
     if (current < maxLen - 1) goTo(current + 1);
 }
 
@@ -1760,7 +1790,7 @@ function prevSlide() {
 }
 
 function updateChrome() {
-    const maxLen = (playerMode === 'source') ? sourceUnits.length : slides.length;
+    const maxLen = deckLength();
     document.getElementById('counter').innerHTML = '<b>' + (current + 1) + '</b> / ' + maxLen;
     const pc = document.getElementById('presCounter');
     if (pc) pc.textContent = (current + 1) + ' / ' + maxLen;
@@ -1787,7 +1817,7 @@ function syncTopic() {
             const syncRes = await authFetch(API + '/lessons/' + lessonId + '/player/position', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_id: sessionId, slide_index: current, mode: syncMode() }),
+body: JSON.stringify({ session_id: sessionId, slide_index: sessionIndex(), mode: syncMode() }),
             });
             if (syncRes.ok) {
                 let payload = null;
@@ -1805,7 +1835,7 @@ function finishLesson() {
         fetch(API + '/lessons/' + lessonId + '/player/position', {
             method: 'POST',
             headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-            body: JSON.stringify({ session_id: sessionId, slide_index: current, mode: syncMode() }),
+            body: JSON.stringify({ session_id: sessionId, slide_index: sessionIndex(), mode: syncMode() }),
         }).catch(() => {});
     }
     window.location.href = '/frontend/dashboard.html';
@@ -1871,7 +1901,7 @@ document.addEventListener('keydown', (e) => {
         case 'ArrowRight': case 'PageDown': case ' ': nextSlide(); e.preventDefault(); break;
         case 'ArrowLeft': case 'PageUp': prevSlide(); e.preventDefault(); break;
         case 'Home': goTo(0); e.preventDefault(); break;
-        case 'End': goTo(((playerMode === 'source' ? sourceUnits.length : slides.length) || 1) - 1); e.preventDefault(); break;
+        case 'End': goTo(((deckLength()) || 1) - 1); e.preventDefault(); break;
         case 'Escape':
             if (document.body.classList.contains('presenting')) { exitPresent(); }
             else if (document.getElementById('aiPanel').classList.contains('open')) {
@@ -3732,7 +3762,19 @@ function annotClearAll() {
     keys.forEach(function (k) {
         const s = annotBySlide[k];
         if (s.items.length) { s.undo.push(snapshot(s.items)); s.redo = []; s.items = []; }
-        scheduleAnnotSave();
+        const parts = k.split(':');
+        const rawMode = parts[0];
+        const index = parseInt(parts[1], 10);
+        if (rawMode && !isNaN(index)) {
+            // Persist each cleared layer by its OWN key so no cleared layer
+            // resurrects on reload.
+            queueAnnotSave({
+                mode: (rawMode === 'source') ? 'source' : 'learning',
+                rawMode: rawMode,
+                index: index,
+                key: k,
+            });
+        }
     });
     redrawAnnots();
     updateToolbarState();
@@ -4147,6 +4189,29 @@ function toggleNotes() {
     if (notesOpen) closeNotes(); else openNotes();
 }
 
+// ── Deck index spaces ────────────────────────────────────────────────────
+function deckLength() {
+    // One slide per topic in the visual/animation decks; two framing slides
+    // (concept + visual) per topic in learning mode; source units map 1:1.
+    if (playerMode === 'source') return (sourceUnits && sourceUnits.length) || 0;
+    if (playerMode === 'visual' || playerMode === 'animation') return (topics && topics.length) || 0;
+    return (slides && slides.length) || 0;
+}
+
+function sessionIndex() {
+    // Session tracking only distinguishes source vs learning mode; while in a
+    // topic-indexed deck we advance learning progress at the topic's concept
+    // slide so completion reflects the same deck view.
+    if (playerMode === 'source') return current;
+    if (playerMode === 'visual' || playerMode === 'animation') {
+        const len = deckLength();
+        if (len === 0) return 0;
+        const last = (slides && slides.length) ? slides.length - 1 : 0;
+        return Math.min(Math.max(0, current) * 2, last);
+    }
+    return current;
+}
+
 // ── Annotation persistence (per view layer) ───────────────────────────────
 function syncMode() {
     // Completion/session positions only distinguish source vs learning; the
@@ -4159,12 +4224,65 @@ function annotKey() {
     return playerMode + ':' + current;
 }
 
+// Hydration runs once at startup; saves wait for it so a 700ms debounce never
+// overwrites marks that were still being loaded from the server.
+let annotHydration = null;
+
+// Per-layer pending saves, keyed by their own layer key, so drawing on one
+// slide can never cancel a save still owed to another.
+const annotPendingSaves = {};
+
+function annotOwnTarget() {
+    return { mode: syncMode(), rawMode: playerMode, index: current, key: annotKey() };
+}
+
+function queueAnnotSave(target) {
+    annotPendingSaves[target.key] = target;
+    if (!annotSaveTimer) {
+        annotSaveTimer = setTimeout(() => { flushAnnotSaves(); }, 700);
+    }
+}
+
 function scheduleAnnotSave() {
     // Capture the target layer NOW — reading annotKey() at flush time would
     // persist marks onto whichever slide the learner navigated to meanwhile.
-    const target = { mode: syncMode(), rawMode: playerMode, index: current, key: annotKey() };
-    clearTimeout(annotSaveTimer);
-    annotSaveTimer = setTimeout(() => { saveAnnotationsFor(target); }, 700);
+    queueAnnotSave(annotOwnTarget());
+}
+
+async function flushAnnotSaves() {
+    annotSaveTimer = null;
+    const keys = Object.keys(annotPendingSaves);
+    if (!keys.length) return;
+    const targets = keys.map(function (k) { return annotPendingSaves[k]; });
+    Object.keys(annotPendingSaves).forEach(function (k) { delete annotPendingSaves[k]; });
+    if (annotHydration) {
+        try { await annotHydration; } catch (e) { /* annotation hydration is best-effort */ }
+    }
+    for (const t of targets) {
+        try { await saveAnnotationsFor(t); } catch (e) { /* keep local marks */ }
+    }
+}
+
+// Unload flush: send everything still owed with keepalive fetch so reloads and
+// tab closes don't drop strokes that had not reached the 700ms flush yet.
+window.addEventListener('pagehide', flushAnnotSavesOnUnload);
+window.addEventListener('beforeunload', flushAnnotSavesOnUnload);
+
+function flushAnnotSavesOnUnload() {
+    if (!annotSaveTimer && Object.keys(annotPendingSaves).length === 0) return;
+    const targets = Object.keys(annotPendingSaves).map(function (k) { return annotPendingSaves[k]; });
+    Object.keys(annotPendingSaves).forEach(function (k) { delete annotPendingSaves[k]; });
+    if (annotSaveTimer) { clearTimeout(annotSaveTimer); annotSaveTimer = null; }
+    targets.forEach(function (t) {
+        const items = (annotBySlide[t.key] && annotBySlide[t.key].items) || [];
+        fetch(API + '/lessons/' + lessonId + '/annotations/' +
+            encodeURIComponent(t.rawMode) + '/' + t.index, {
+            method: 'PUT',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+            body: JSON.stringify({ items }),
+            keepalive: true,
+        }).catch(function () { /* page is going away; server keeps last good layer */ });
+    });
 }
 
 function annotStatusEl() {
@@ -4196,8 +4314,14 @@ async function loadPersistedAnnotations() {
             if (!layer || typeof layer.player_mode !== 'string' ||
                 typeof layer.slide_index !== 'number' || !Array.isArray(layer.items)) continue;
             const key = layer.player_mode + ':' + layer.slide_index;
-            // Never clobber in-progress work on this visit.
-            if (annotBySlide[key] && (annotBySlide[key].items || []).length > 0) continue;
+            const local = annotBySlide[key];
+            if (local && (local.items || []).length > 0) {
+                // Strokes drawn before this hydration resolved must not mask
+                // the server layer: keep BOTH so the next save persists the
+                // union instead of silently dropping the loaded marks.
+                local.items = layer.items.slice().concat(local.items);
+                continue;
+            }
             annotBySlide[key] = {
                 items: layer.items.slice(),
                 undo: [],
@@ -4214,7 +4338,7 @@ async function saveAnnotationsFor(target) {
     setAnnotStatus('Saving&hellip;', 'saving');
     try {
         const res = await authFetch(API + '/lessons/' + lessonId +
-            '/annotations/' + encodeURIComponent(at.mode) + '/' + at.index, {
+            '/annotations/' + encodeURIComponent(at.rawMode) + '/' + at.index, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ items }),

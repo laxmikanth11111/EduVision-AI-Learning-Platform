@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select
 
 from app.database.unit_of_work import UnitOfWork
 from app.models.generated_lesson import GeneratedLesson
+from app.models.presentation import Presentation
+from app.models.presentation_annotation import (
+    PresentationAnnotation,
+    generate_annotation_public_id,
+)
+from app.models.user import User
 from app.services.presentation_annotation_service import (
     MAX_ITEMS_PER_LAYER,
     MAX_LAYER_BYTES,
@@ -220,3 +228,90 @@ class TestAnnotationLayerPersistence:
                 user_id=str(user.id), lesson_id=lesson.id,
                 player_mode="critical-html", slide_index=0, items=[_TEXT],
             )
+
+    async def test_replace_recovers_from_first_write_race(self, db_session) -> None:
+        """Concurrent first-write for the same layer key must not 500.
+
+        The loser's INSERT violates uq_lesson_annotations_layer after a stale
+        SELECT; replace() must adopt the winner's committed row and fold the
+        write on top, keeping the layer single and idempotent.
+        """
+        # Winner is created and committed through a separate connection so it
+        # survives the loser's rollback inside replace().
+        from app.database import session as db_session_module
+
+        async with db_session_module.async_session_factory() as other:
+            other_user = User(email="race@example.com", name="Race User", password_hash="x")
+            other.add(other_user)
+            presentation = Presentation(
+                title="Race Presentation",
+                owner_id=other_user.id,
+                status="draft",
+                visibility="private",
+            )
+            other.add(presentation)
+            await other.flush()
+            lesson = GeneratedLesson(
+                presentation_id=presentation.id,
+                user_id=None,
+                mode="slide",
+                status="ready",
+                title="Race Lesson",
+                language="en",
+                difficulty="beginner",
+                latest_version=1,
+            )
+            other.add(lesson)
+            await other.flush()
+            layer = PresentationAnnotation(
+                public_id=generate_annotation_public_id(),
+                user_id=other_user.id,
+                lesson_id=lesson.id,
+                player_mode="learning",
+                slide_index=3,
+                items=[_SHAPE],
+            )
+            other.add(layer)
+            await other.commit()
+            lesson_id, user_id, winner_id = lesson.id, other_user.id, layer.public_id
+
+        svc = _service(db_session)
+        real_execute = db_session.execute
+        stale_first = {"saw_winner": False}
+
+        async def _stale_first_execute(stmt, *args, **kwargs):
+            # Simulate the loser reading the layer before the winner committed:
+            # the first lookup returns no row even though the winner now exists.
+            if not stale_first["saw_winner"]:
+                stale_first["saw_winner"] = True
+
+                class _Empty:
+                    def scalar_one_or_none(self) -> None:
+                        return None
+
+                return _Empty()
+            return await real_execute(stmt, *args, **kwargs)
+
+        with patch.object(db_session, "execute", side_effect=_stale_first_execute):
+            saved = await svc.replace(
+                user_id=str(user_id),
+                lesson_id=lesson_id,
+                player_mode="learning",
+                slide_index=3,
+                items=[_TEXT, _STROKE],
+            )
+
+        assert saved["public_id"] == winner_id, "must adopt the winner's row"
+        assert saved["item_count"] == 2
+        result = await db_session.execute(
+            select(PresentationAnnotation).where(
+                PresentationAnnotation.user_id == user_id,
+                PresentationAnnotation.lesson_id == lesson_id,
+                PresentationAnnotation.player_mode == "learning",
+                PresentationAnnotation.slide_index == 3,
+            )
+        )
+        rows = result.scalars().all()
+        assert len(rows) == 1, "layer must stay single"
+        assert rows[0].public_id == winner_id
+        assert rows[0].items == [_TEXT, _STROKE]
