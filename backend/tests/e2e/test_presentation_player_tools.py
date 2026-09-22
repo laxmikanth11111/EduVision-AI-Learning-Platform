@@ -33,19 +33,20 @@ def browser_type_launch_args():
     }
 
 
-def _player_lesson(page, base_url: str) -> dict[str, str]:
+def _player_lesson(page, base_url: str, topics: list[str] | None = None) -> dict[str, str]:
     """Register a user and create a presentation+lesson via in-page fetch."""
     uid = uuid.uuid4().hex[:8]
     email = f"e2e_presenter_{uid}@example.com"
     password = "PlayerPass1234!"
     name = "E2E Presenter User"
+    deck_topics = topics or ["Alpha", "Beta"]
 
     # Navigate to a same-origin page first so localStorage is writable.
     page.goto(f"{base_url}/frontend/index.html")
     page.wait_for_load_state("domcontentloaded")
 
     result = page.evaluate(
-        """async ([base, email, password, name]) => {
+        """async ([base, email, password, name, deckTopics]) => {
             const regRes = await fetch(base + '/api/v1/auth/register', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -57,7 +58,7 @@ def _player_lesson(page, base_url: str) -> dict[str, str]:
             const presRes = await fetch(base + '/api/v1/presentations/manual', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
-                body: JSON.stringify({ title: 'E2E Presenter Deck', topics: ['Alpha', 'Beta'] }),
+                body: JSON.stringify({ title: 'E2E Presenter Deck', topics: deckTopics }),
             });
             const presData = await presRes.json();
             const presId = presData.data.id;
@@ -78,13 +79,15 @@ def _player_lesson(page, base_url: str) -> dict[str, str]:
             localStorage.setItem('refresh_token', regData.tokens.refresh_token);
             return { lessonId: lessonData.data.id, presId: presId };
         }""",
-        [base_url, email, password, name],
+        [base_url, email, password, name, deck_topics],
     )
     return {**result, "email": email, "password": password, "name": name}
 
 
-def _open_player(page, base_url: str):
-    ctx = _player_lesson(page, base_url)
+def _open_player(
+    page, base_url: str, topics: list[str] | None = None
+) -> dict[str, str]:
+    ctx = _player_lesson(page, base_url, topics=topics)
     page.goto(f"{base_url}/frontend/player.html?lesson={ctx['lessonId']}&deck={ctx['presId']}")
     page.wait_for_load_state("domcontentloaded")
     thumbs = page.locator(".thumb-title")
@@ -226,3 +229,72 @@ def test_present_mode_enters_and_exits(server_env, page):
     page.keyboard.press("Escape")
     page.wait_for_timeout(500)
     assert "presenting" not in body.get_attribute("class")
+
+
+@pytest.mark.e2e
+def test_annotation_visibility_toggle_hides_and_shows_layer(server_env, page):
+    _open_player(page, server_env["base_url"])
+
+    # Draw one stroke so there is something to reveal/hide.
+    page.locator('[data-tool="pen"]').click()
+    canvas = page.locator("#annotCanvas")
+    canvas.wait_for(state="attached", timeout=10_000)
+    page.wait_for_function(
+        """() => {
+            const c = document.getElementById('annotCanvas');
+            return c && c.clientWidth > 0 && c.clientHeight > 0;
+        }""",
+        timeout=10_000,
+    )
+    box = canvas.bounding_box()
+    assert box is not None
+    page.mouse.move(box["x"] + 120, box["y"] + 120)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 180, box["y"] + 160, steps=5)
+    page.mouse.up()
+
+    # Hide the annotation layer; the overlay must become invisible.
+    toggle = page.locator("#teachAnnotToggle")
+    toggle.click()
+    assert "hidden" in (canvas.get_attribute("style") or "")
+    assert toggle.get_attribute("aria-pressed") == "false"
+
+    # Reveal it again; the stroke must still be stored and visible.
+    toggle.click()
+    assert "hidden" not in (canvas.get_attribute("style") or "")
+    assert toggle.get_attribute("aria-pressed") == "true"
+    kept = page.evaluate(
+        "Object.values(annotBySlide).reduce((n,s)=>n+s.items.length,0)"
+    )
+    assert kept >= 1
+
+
+@pytest.mark.e2e
+def test_learner_progress_completion_reflects_slide_position(server_env, page):
+    # Four topics so source-mode slide indices map onto both topics and the
+    # backend completion can progress from the first slide to the last.
+    _open_player(page, server_env["base_url"], topics=["Alpha", "Beta", "Gamma", "Delta"])
+
+    # The panel must surface real backend completion (was hardcoded 0%).
+    pct = page.locator("#ljCompletionPct").first
+    pct.wait_for(state="visible", timeout=15_000)
+    try:
+        initial = float(pct.inner_text().rstrip("%"))
+    except ValueError:
+        initial = 0.0
+    # A fresh session starts on topic 0 of a 4-topic deck -> 25% (never 0%).
+    assert initial == 25.0, f"initial completion must be the backend value, got {initial!r}"
+
+    # Jump to the final slide via the End key. The backend maps source slide
+    # index // 2 onto a topic, so the last of 4 source slides sits on topic 1
+    # of 4 -> completion rises to 50% (the known source-mode ceiling).
+    page.keyboard.press("End")
+    page.wait_for_timeout(1600)  # goTo + 400ms position debounce + panel re-render
+
+    final_text = pct.inner_text()
+    try:
+        final = float(final_text.rstrip("%"))
+    except ValueError:
+        final = 0.0
+    assert final > initial, f"completion must advance with the slide position ({initial}% -> {final}%)"
+    assert final == 50.0, f"final source slide must report the backend value, got {final_text!r}"

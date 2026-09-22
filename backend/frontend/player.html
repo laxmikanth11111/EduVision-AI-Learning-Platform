@@ -533,6 +533,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
         <button class="teach-btn" onclick="annotClearAll()" title="Clear all annotation layers for this presentation" aria-label="Clear all presentation annotations">&#128465; all</button>
     </div>
     <span class="teach-divider" aria-hidden="true"></span>
+    <button class="teach-btn" id="teachAnnotToggle" onclick="toggleAnnotVisibility()" title="Show/hide annotations on this slide" aria-label="Show or hide annotations" aria-pressed="true">&#128065;</button>
     <button class="teach-btn" onclick="openHelp()" title="Keyboard shortcuts (?) " aria-label="Keyboard shortcuts help">?</button>
 </div>
 
@@ -713,6 +714,8 @@ async function init() {
         presentationInfo = state.presentation || null;
         sessionId = state.session ? state.session.session_id : null;
         sessionSlide = state.session ? (parseInt(state.session.slide_index, 10) || 0) : 0;
+        const initCompletion = state.session ? parseFloat(state.session.completion_percentage) : NaN;
+        if (isFinite(initCompletion)) learnerCompletion = initCompletion;
         learningStructure = state.learning_structure || null;
 
         // Fallback: If source_units is empty but presentation_id is present, load via GET /api/v1/presentations/{id}/content
@@ -970,6 +973,16 @@ function toggleThumbCompact() {
 let learnerState = { completion: 0, checkpoint: null, mastery: null };
 let learnerCompletion = 0;
 
+// The backend derives lesson completion percentage from the learner's slide
+// position; surface it so the progress panel reflects real navigation.
+function applyCompletionFromResponse(payload) {
+    const pct = payload && payload.data && parseFloat(payload.data.completion_percentage);
+    if (!isFinite(pct)) return;
+    learnerCompletion = pct;
+    learnerState.completion = pct;
+    renderLearnerJourney(document.getElementById('ljPanel'));
+}
+
 async function loadLearnerJourney() {
     const panel = document.getElementById('ljPanel');
     if (!panel) return;
@@ -992,7 +1005,7 @@ function renderLearnerJourney(panel) {
     if (!panel) return;
     let html = '<div class="lj-panel"><h4>Learner Progress</h4>';
 
-    html += '<div class="lj-row"><span>Lesson progress</span><b>' +
+    html += '<div class="lj-row"><span>Lesson progress</span><b id="ljCompletionPct">' +
         Math.round(learnerState.completion) + '%</b></div>' +
         '<div class="lj-bar"><div class="lj-bar-fill" style="width:' +
         Math.min(100, Math.max(0, learnerState.completion)) + '%;"></div></div>';
@@ -1724,11 +1737,16 @@ function syncTopic() {
     clearTimeout(syncTimer);
     syncTimer = setTimeout(async () => {
         try {
-            await authFetch(API + '/lessons/' + lessonId + '/player/position', {
+            const syncRes = await authFetch(API + '/lessons/' + lessonId + '/player/position', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ session_id: sessionId, slide_index: current }),
             });
+            if (syncRes.ok) {
+                let payload = null;
+                try { payload = await syncRes.json(); } catch (e) { /* ignore */ }
+                applyCompletionFromResponse(payload);
+            }
         } catch (e) { /* non-critical */ }
     }, 400);
 }
@@ -3365,7 +3383,6 @@ function renderQuizResult(result) {
 }
 
 async function refreshLearnerJourney() {
-    learnerCompletion = 0;
     await loadLearnerJourney();
 }
 
@@ -3684,6 +3701,23 @@ function setTool(tool) {
     updateSwatchUI();
     redrawAnnots();
     if (tool === 'eraser') showEraserRing();
+}
+
+let annotVisible = true;
+function toggleAnnotVisibility() {
+    annotVisible = !annotVisible;
+    const cv = annotCanvas();
+    if (cv) {
+        cv.style.visibility = annotVisible ? 'visible' : 'hidden';
+        cv.style.pointerEvents = annotVisible ? (activeTool === 'pointer' ? 'none' : 'auto') : 'none';
+    }
+    const btn = document.getElementById('teachAnnotToggle');
+    if (btn) {
+        btn.classList.toggle('active', !annotVisible);
+        btn.setAttribute('aria-pressed', String(annotVisible));
+        btn.title = annotVisible ? 'Show/hide annotations on this slide' : 'Show annotations on this slide';
+    }
+    if (!annotVisible && activeTool !== 'pointer') setTool('pointer');
 }
 
 function updateSwatchUI() {

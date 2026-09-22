@@ -34,6 +34,14 @@ REQUIRED_PLAYER_PIECES = [
     ("toolbar", "annotClearSlide", "function annotClearSlide()"),
     ("toolbar", "annotClearAll", "function annotClearAll()"),
     ("toolbar", "toggleThumbCompact", "function toggleThumbCompact()"),
+    # annotation visibility toggle
+    ("toolbar", "teachAnnotToggle", 'id="teachAnnotToggle"'),
+    ("toolbar", "toggleAnnotVisibility", "function toggleAnnotVisibility()"),
+    ("toolbar", "annotVisible", "let annotVisible = true;"),
+    # learner progress surfacing (backend completion_percentage is displayed)
+    ("progress", "completion_percentage", "completion_percentage"),
+    ("progress", "applyCompletionFromResponse", "function applyCompletionFromResponse(payload)"),
+    ("progress", "ljCompletionPct", 'id="ljCompletionPct"'),
     # laser + eraser helpers
     ("laser", "laserDot", 'id="laserDot"'),
     ("eraser", "eraserRing", 'id="eraserRing"'),
