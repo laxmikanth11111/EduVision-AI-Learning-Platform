@@ -23,6 +23,7 @@ from app.models.assistant_conversation import AssistantConversation
 from app.models.assistant_message import AssistantMessage
 from app.models.assistant_session import AssistantSession
 from app.models.generated_lesson import GeneratedLesson
+from app.models.presentation import Presentation
 from app.repositories.assistant_repository import (
     AssistantContextSnapshotRepository,
     AssistantConversationRepository,
@@ -134,7 +135,7 @@ class LearningAssistantService:
         user_id: uuid.UUID,
         request: SessionCreateRequest,
     ) -> dict[str, Any]:
-        lesson_id = await self._resolve_lesson_id(request.lesson_id)
+        lesson_id = await self._get_owned_lesson_id(user_id, request.lesson_id)
         session = await self._session_repo.create_for_user(
             user_id=user_id,
             title=request.title,
@@ -190,7 +191,7 @@ class LearningAssistantService:
             session_id = sess.id
             session_public_id = sess.public_id
 
-        lesson_id = await self._resolve_lesson_id(request.lesson_id)
+        lesson_id = await self._get_owned_lesson_id(user_id, request.lesson_id)
         conversation = await self._conversation_repo.create_for_user(
             user_id=user_id,
             title=request.title,
@@ -366,13 +367,50 @@ class LearningAssistantService:
 
     # ── Internal helpers ────────────────────────────────────────────────────
 
-    async def _resolve_lesson_id(self, lesson_public_id: str | None) -> uuid.UUID | None:
+    async def _get_owned_lesson_id(
+        self, user_id: uuid.UUID, lesson_public_id: str | None
+    ) -> uuid.UUID | None:
+        """Resolve a lesson the user owns, or raise 404-equalized.
+
+        A lesson is owner-validated through its presentation owner (the single
+        ownership unit) OR its direct user_id, mirroring ``assert_quiz_ownership``
+        and the tutor/quiz-generation ``_get_owned_lesson`` helpers. A missing
+        lesson, an orphaned/soft-deleted presentation, and a non-owner lesson
+        all raise the same ``Lesson not found`` so no cross-user existence leak
+        occurs. ``None`` (no lesson anchor) passes through unchanged.
+        """
         if not lesson_public_id:
             return None
         stmt = select(GeneratedLesson).where(GeneratedLesson.public_id == lesson_public_id)
         result = await self._uow.session.execute(stmt)
         lesson = result.scalar_one_or_none()
-        return lesson.id if lesson else None
+        if lesson is None:
+            raise NotFoundError(
+                message="Lesson not found",
+                details={"lesson_id": lesson_public_id},
+            )
+        owned_via_presentation = False
+        if lesson.presentation_id:
+            pres = (
+                await self._uow.session.execute(
+                    select(Presentation).where(Presentation.id == lesson.presentation_id)
+                )
+            ).scalar_one_or_none()
+            owned_via_presentation = bool(
+                pres
+                and pres.owner_id is not None
+                and str(pres.owner_id) == str(user_id)
+                and pres.deleted_at is None
+            )
+        owned_via_user = bool(
+            lesson.user_id is not None and str(lesson.user_id) == str(user_id)
+        )
+        if not (owned_via_presentation or owned_via_user):
+            raise NotFoundError(
+                message="Lesson not found",
+                details={"lesson_id": lesson_public_id},
+            )
+        return lesson.id
 
     async def _build_context_text(self, conv: AssistantConversation) -> str:
         parts = []
