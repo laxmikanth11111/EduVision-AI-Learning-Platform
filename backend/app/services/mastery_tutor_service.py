@@ -183,22 +183,24 @@ class MasteryTutorService:
         return _serialize_session(session)
 
     async def enforce_retention(
-        self, now: datetime | None = None
+        self, user_id: uuid.UUID, now: datetime | None = None
     ) -> tuple[int, int]:
         """Enforce the configured tutor retention policy (P9 F3).
 
-        Bounded, on-read cleanup so ``tutor_sessions`` and ``tutor_messages``
-        stop growing without bound. Deterministic and idempotent:
+        Bounded, on-read cleanup so the calling user's ``tutor_sessions`` and
+        ``tutor_messages`` stop growing without bound. Deterministic and
+        idempotent:
 
-        * Idle active sessions whose ``updated_at`` is older than
+        * The caller's idle active sessions whose ``updated_at`` is older than
           ``TUTOR_SESSION_IDLE_DAYS`` are archived (status flip only).
-        * Conversations whose ``updated_at`` is older than
+        * The caller's conversations whose ``updated_at`` is older than
           ``TUTOR_CONVERSATION_CLEANUP_DAYS`` are soft-deleted (audit trail
           preserved) and their message rows are hard-deleted (the actual
           unbounded-storage bound, since messages cascade from conversations).
 
-        Fresh records never match the cutoffs, so this is safe to run on every
-        session-history read. Returns ``(archived_sessions, removed_conversations)``.
+        The sweep is strictly scoped to ``user_id`` so one learner's read can
+        never archive, soft-delete or hard-delete another learner's rows.
+        Returns ``(archived_sessions, removed_conversations)``.
         """
         now = now if now is not None else datetime.now(UTC)
         idle_cutoff = now - timedelta(days=settings.TUTOR_SESSION_IDLE_DAYS)
@@ -207,6 +209,7 @@ class MasteryTutorService:
         idle_sessions = (
             await self._uow.session.execute(
                 select(TutorSession).where(
+                    TutorSession.user_id == user_id,
                     TutorSession.deleted_at.is_(None),
                     TutorSession.status == TutorSessionStatus.ACTIVE.value,
                     TutorSession.updated_at < idle_cutoff,
@@ -220,6 +223,7 @@ class MasteryTutorService:
         expired = (
             await self._uow.session.execute(
                 select(TutorConversation).where(
+                    TutorConversation.user_id == user_id,
                     TutorConversation.deleted_at.is_(None),
                     TutorConversation.updated_at < cleanup_cutoff,
                 )
@@ -242,7 +246,7 @@ class MasteryTutorService:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[dict[str, Any]], int]:
-        await self.enforce_retention()
+        await self.enforce_retention(user_id)
         items, total = await self._session_repo.list_for_user(user_id, page, page_size)
         return [_serialize_session(s) for s in items], total
 

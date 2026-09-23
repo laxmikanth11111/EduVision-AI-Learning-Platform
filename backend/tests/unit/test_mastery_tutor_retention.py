@@ -46,7 +46,7 @@ async def _cleanup_seeded_rows():
     DB is reused across tests, so rows this module creates (identified by a
     recognizable title) must be removed to avoid leaking into the global tutor
     tables that other subsystems assert against and to keep
-    ``enforce_retention`` (which is global, not learner-scoped) deterministic.
+    ``enforce_retention`` (now learner-scoped) deterministic.
     """
     yield
     from sqlalchemy import delete, select
@@ -156,7 +156,7 @@ async def test_enforce_retention_archives_idle_sessions(
 
     fresh = await _seed_user_with_session(db_session, user_id=uuid.uuid4(), until=now)
 
-    archived, removed = await _make_service(db_session).enforce_retention(now=now)
+    archived, removed = await _make_service(db_session).enforce_retention(user_id=uid, now=now)
 
     assert archived == 1
     assert removed == 0
@@ -179,7 +179,7 @@ async def test_enforce_retention_removes_expired_conversation_messages(
         db_session, user_id=uid, session=session, until=cleanup_past
     )
 
-    archived, removed = await _make_service(db_session).enforce_retention(now=now)
+    archived, removed = await _make_service(db_session).enforce_retention(user_id=uid, now=now)
 
     # The 100-day-old session is idle too, so it is correctly archived AND its
     # expired conversation is removed with its messages.
@@ -205,7 +205,7 @@ async def test_enforce_retention_leaves_fresh_data_intact(
         db_session, user_id=uid, session=session, until=now
     )
 
-    archived, removed = await _make_service(db_session).enforce_retention(now=now)
+    archived, removed = await _make_service(db_session).enforce_retention(user_id=uid, now=now)
 
     assert archived == 0
     assert removed == 0
