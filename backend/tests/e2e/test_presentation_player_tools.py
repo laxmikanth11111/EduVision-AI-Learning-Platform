@@ -84,6 +84,142 @@ def _player_lesson(page, base_url: str, topics: list[str] | None = None) -> dict
     return {**result, "email": email, "password": password, "name": name}
 
 
+def _seed_surplus_source_units(presentation_id: str, count: int = 6) -> None:
+    """Append extra ContentUnits so source count outnumbers ``2 * topics``.
+
+    Injects rows directly into the shared SQLite test DB the running server
+    uses, giving the F1 drift regression a deck whose uploaded source units
+    exceed the learning deck (e.g. 10 source units vs 4 topics * 2 slides).
+    The browser test thread may already be inside an event loop (pytest-asyncio
+    session loop), so the async write runs in a dedicated thread.
+    """
+    import threading
+
+    def _run() -> None:
+        import asyncio
+
+        from sqlalchemy import func, select
+
+        from app.models.content_unit import ContentUnit
+        from app.models.presentation import Presentation
+        from tests.conftest import TestSessionLocal
+
+        async def _seed() -> None:
+            async with TestSessionLocal() as session:
+                pres = (
+                    await session.execute(
+                        select(Presentation).where(Presentation.public_id == presentation_id)
+                    )
+                ).scalar_one()
+                first_free = (
+                    await session.execute(
+                        select(func.max(ContentUnit.position)).where(
+                            ContentUnit.presentation_id == pres.id
+                        )
+                    )
+                ).scalar_one()
+                for position in range(
+                    int(first_free or 0) + 1, int(first_free or 0) + 1 + count
+                ):
+                    session.add(
+                        ContentUnit(
+                            presentation_id=pres.id,
+                            unit_type="slide",
+                            position=position,
+                            title=f"Surplus Unit {position}",
+                            raw_text=f"Raw text for surplus unit {position}.",
+                        )
+                    )
+                await session.commit()
+
+        asyncio.run(_seed())
+
+    thread = threading.Thread(target=_run)
+    thread.start()
+    thread.join(timeout=30)
+
+
+def _seed_ready_version(
+    lesson_id: str, topics: list[str], surplus_source_units: int = 6
+) -> None:
+    """Make a queued manual lesson player-ready and inflate its source deck.
+
+    The manual-creation API leaves the lesson ``queued`` with no lesson version,
+    so the backend would degenerate ``total_topics`` into the source-unit count.
+    To exercise the real F1 drift path we need genuine topics: seed a succeeded
+    lesson version with one block per topic, then attach surplus ContentUnits so
+    the source count outnumbers ``2 * topics``. Same dedicated-thread pattern as
+    ``_seed_surplus_source_units``.
+    """
+    import threading
+
+    def _run() -> None:
+        import asyncio
+
+        from sqlalchemy import select
+
+        from app.models.content_unit import ContentUnit
+        from app.models.generated_block import GeneratedBlock
+        from app.models.generated_lesson import GeneratedLesson
+        from app.models.generated_lesson_version import GeneratedLessonVersion
+        from tests.conftest import TestSessionLocal
+
+        async def _seed() -> None:
+            async with TestSessionLocal() as session:
+                lesson = (
+                    await session.execute(
+                        select(GeneratedLesson).where(GeneratedLesson.public_id == lesson_id)
+                    )
+                ).scalar_one()
+                lesson.status = "ready"
+                lesson.latest_version = 1
+                version = GeneratedLessonVersion(
+                    lesson_id=lesson.id,
+                    version=1,
+                    status="succeeded",
+                    title=lesson.title,
+                    language="en",
+                    difficulty="beginner",
+                )
+                session.add(version)
+                await session.flush()
+                for position, title in enumerate(topics):
+                    session.add(
+                        GeneratedBlock(
+                            lesson_version_id=version.id,
+                            block_type="paragraph",
+                            position=position,
+                            heading=title,
+                            content=f"Body for {title}.",
+                        )
+                    )
+                await session.flush()
+                first_free = (
+                    await session.execute(
+                        select(ContentUnit.position)
+                        .where(ContentUnit.presentation_id == lesson.presentation_id)
+                        .order_by(ContentUnit.position.desc())
+                    )
+                ).scalars().first()
+                for position in range(int(first_free or 0) + 1, int(first_free or 0) + 1 + surplus_source_units):
+                    session.add(
+                        ContentUnit(
+                            presentation_id=lesson.presentation_id,
+                            unit_type="slide",
+                            position=position,
+                            title=f"Surplus Unit {position}",
+                            raw_text=f"Raw text for surplus unit {position}.",
+                        )
+                    )
+                await session.commit()
+
+        asyncio.run(_seed())
+
+    thread = threading.Thread(target=_run)
+    thread.start()
+    thread.join(timeout=30)
+
+
 def _open_player(
     page, base_url: str, topics: list[str] | None = None
 ) -> dict[str, str]:
@@ -299,6 +435,44 @@ def test_learner_progress_completion_reflects_slide_position(server_env, page):
         final = 0.0
     assert final > initial, f"completion must advance with the slide position ({initial}% -> {final}%)"
     assert final == 100.0, f"final source slide must reach the backend value, got {final_text!r}"
+
+
+@pytest.mark.e2e
+def test_learning_mode_completion_reaches_100_despite_surplus_source_units(
+    server_env, page,
+):
+    # Learning-mode completion must be indexed against the topic deck
+    # (2 * 4 = 8 slides) even when uploaded source units outnumber it. A surplus
+    # source deck used to inflate the denominator and cap the final learning
+    # slide below 100%.
+    topics = ["Alpha", "Beta", "Gamma", "Delta"]
+    ctx = _player_lesson(page, server_env["base_url"], topics=topics)
+    # Give the queued manual lesson a real succeeded version PLUS surplus source
+    # units so the drift path (4 topics, 10 source units > 8 deck slides) runs.
+    _seed_ready_version(ctx["lessonId"], topics, surplus_source_units=6)
+
+    page.goto(
+        server_env["base_url"]
+        + f"/frontend/player.html?lesson={ctx['lessonId']}&deck={ctx['presId']}&mode=learning"
+    )
+    page.wait_for_load_state("domcontentloaded")
+    thumbs = page.locator(".thumb-title")
+    thumbs.first.wait_for(state="visible", timeout=25_000)
+
+    pct = page.locator("#ljCompletionPct").first
+    pct.wait_for(state="visible", timeout=15_000)
+
+    # Jump to the final learning slide via the End key. The final of 8 learning
+    # slides must report 100% even with 10 source units attached.
+    page.keyboard.press("End")
+    page.wait_for_timeout(1600)  # goTo + 400ms position debounce + panel re-render
+
+    final_text = pct.inner_text()
+    try:
+        final = float(final_text.rstrip("%"))
+    except ValueError:
+        final = 0.0
+    assert final == 100.0, f"final learning slide must reach 100%, got {final_text!r}"
 
 
 @pytest.mark.e2e

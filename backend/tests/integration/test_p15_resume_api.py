@@ -232,6 +232,36 @@ async def _position(
     )
 
 
+async def _seed_surplus_source_units(lookups: dict[str, str], count: int = 6) -> None:
+    """Attach extra source units so source count outnumbers ``2 * topics``.
+
+    This is the drift scenario behind F1: a lesson whose uploaded source deck is
+    larger than the learning deck. Learning-mode completion must be indexed
+    against ``topics * 2`` slides, never the source-unit count.
+    """
+    from app.models.content_unit import ContentUnit
+    from app.models.generated_lesson import GeneratedLesson
+    from tests.conftest import TestSessionLocal
+
+    async with TestSessionLocal() as session:
+        lesson = (
+            await session.execute(
+                select(GeneratedLesson).where(GeneratedLesson.public_id == lookups["lesson_id"])
+            )
+        ).scalar_one()
+        for position in range(1, count + 1):
+            session.add(
+                ContentUnit(
+                    presentation_id=lesson.presentation_id,
+                    unit_type="slide",
+                    position=position,
+                    title=f"Surplus Unit {position}",
+                    raw_text=f"Raw text for surplus unit {position}.",
+                )
+            )
+        await session.commit()
+
+
 async def _seed_source_material(lookups: dict[str, str]) -> None:
     """Attach 4 source units + a 4-topic outline to the seeded lesson's deck.
 
@@ -457,6 +487,97 @@ async def test_source_mode_final_slide_reaches_full_completion() -> None:
         assert state_resp.status_code == 200
         session = state_resp.json()["data"]["session"]
         assert session["player_mode"] == "source"
+        assert session["slide_index"] == 3
+        assert session["completion_percentage"] == 100.0
+
+
+async def test_learning_mode_completion_ignores_surplus_source_units() -> None:
+    """F1: learning-mode completion is indexed against the topic deck only.
+
+    A 2-topic lesson (4 learning slides) with 6 source units (6 > 2 * 2) must
+    reach 100% on its final learning slide, and the readback must never
+    re-inflate the deck from the surplus source count. Previously the start /
+    get-state readback folded ``len(source_units)`` into the learning
+    denominator (``max(6, 4) = 6``), re-surfacing phantom slides on resume.
+    """
+    from app.models.generated_lesson import GeneratedLesson
+    from app.models.learning_session import LearningSession
+    from tests.conftest import TestSessionLocal
+
+    lookups = await _seed_resume_learner()
+    await _seed_surplus_source_units(lookups, count=6)
+    async with await _make_client() as client:
+        session_id = await _start_session(client, lookups)
+
+        # Slide 1 is the first topic's visual slide (topic 0 of 2) -> 50%.
+        resp = await _position(client, lookups, session_id, slide_index=1)
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["slide_index"] == 1
+        assert data["topic_index"] == 0
+        assert data["completion_percentage"] == 50.0
+
+        # The final learning slide (3) reaches 100% regardless of source count.
+        resp = await _position(client, lookups, session_id, slide_index=3)
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        assert data["slide_index"] == 3
+        assert data["topic_index"] == 1
+        assert data["completion_percentage"] == 100.0
+        assert data["player_mode"] == "learning"
+
+        # Simulate a stale position persisted under the OLD inflated
+        # denominator (learning interpreted as max(6, 4) = 6 slides, so slide 5
+        # was "valid"). Reading it back must clamp back into the real deck
+        # (4 slides -> index 3), never re-surface the phantom slide 5.
+        async with TestSessionLocal() as session:
+            row = (
+                await session.execute(
+                    select(LearningSession).where(LearningSession.public_id == session_id)
+                )
+            ).scalar_one()
+            row.current_slide_position = 5
+            row.current_block_position = 2
+            row.completion_percentage = round((3 / 5) * 100.0, 1)
+            row.player_mode = "learning"
+            await session.commit()
+
+        state_resp = await client.get(
+            f"/api/v1/lessons/{lookups['lesson_id']}/player",
+            headers=_headers(uuid.UUID(lookups["user_id"])),
+        )
+        assert state_resp.status_code == 200, state_resp.text
+        session = state_resp.json()["data"]["session"]
+        assert session["slide_index"] == 3, (
+            f"readback must clamp the stale inflated-denominator slide into the "
+            f"real deck, got {session['slide_index']}"
+        )
+        assert session["completion_percentage"] == 60.0  # stored value, untouched
+
+        # The /start resume path is subject to the same clamp.
+        start_resp = await client.post(
+            f"/api/v1/lessons/{lookups['lesson_id']}/player/start",
+            json={},
+            headers=_headers(uuid.UUID(lookups["user_id"])),
+        )
+        assert start_resp.status_code == 200, start_resp.text
+        assert start_resp.json()["data"]["session"]["slide_index"] == 3
+
+        # And out-of-range requests clamp to the real final learning slide, not
+        # a phantom slide derived from the surplus source count.
+        clamped = await _position(client, lookups, session_id, 999)
+        assert clamped.status_code == 200
+        assert clamped.json()["data"]["slide_index"] == 3
+        assert clamped.json()["data"]["completion_percentage"] == 100.0
+
+        # The cold reload (get_state) then reflects the repaired position.
+        state_resp = await client.get(
+            f"/api/v1/lessons/{lookups['lesson_id']}/player",
+            headers=_headers(uuid.UUID(lookups["user_id"])),
+        )
+        assert state_resp.status_code == 200
+        session = state_resp.json()["data"]["session"]
+        assert session["player_mode"] == "learning"
         assert session["slide_index"] == 3
         assert session["completion_percentage"] == 100.0
 

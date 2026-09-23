@@ -526,7 +526,11 @@ class LessonPlayerService:
         """Slide count of the deck a mode-relative position is indexed against."""
         if (player_mode or PlayerMode.LEARNING.value) == PlayerMode.SOURCE.value:
             return max(source_count, 1)
-        return max(source_count, total_topics * 2)
+        # Learning deck is exactly one concept + one visual slide per topic.
+        # Source-unit count is irrelevant to learning-mode completion: inflating
+        # the denominator with uploaded-source length would cap completion below
+        # 100% whenever source slides outnumber 2 * topics.
+        return max(total_topics * 2, 1)
 
     def _build_source_topic_map(
         self,
