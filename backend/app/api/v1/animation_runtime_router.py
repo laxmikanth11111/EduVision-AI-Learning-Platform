@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
 from app.core.dependencies import get_current_user
+from app.core.exceptions import NotFoundError
 from app.core.logging import get_logger
 from app.models.user import User
 from app.services.educational_memory_service import educational_memory_service
@@ -25,6 +26,26 @@ animation_runtime_router = APIRouter(
 # Bounded in-process state: evicts the least-recently-written session once it
 # exceeds the cap so long-running servers never accumulate state without limit.
 _RUNTIME_STATES: BoundedCache[str, dict[str, Any]] = BoundedCache(max_size=4096)
+
+
+def _assert_session_owned(
+    session_id: str,
+    existing: dict[str, Any] | None,
+    user_id: str,
+) -> None:
+    """404-equalized ownership check for an animation runtime-session slot.
+
+    If no state exists yet the caller may create it (first-write preserved);
+    if it exists it must belong to ``user_id``. A foreign session surfaces as
+    a uniform ``NotFoundError`` so no ownership/existence detail is leaked.
+    """
+    if existing is None:
+        return
+    if existing.get("user_id") != user_id:
+        raise NotFoundError(
+            message="Runtime session not found",
+            details={"session_id": session_id},
+        )
 
 
 class SyncRuntimeRequest(BaseModel):
@@ -45,6 +66,11 @@ async def sync_animation_runtime(
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     now = time.time()
+    _assert_session_owned(
+        req.session_id,
+        _RUNTIME_STATES.get(req.session_id),
+        str(user.id),
+    )
     _RUNTIME_STATES.set(req.session_id, {
         "blueprint_id": req.blueprint_id,
         "scene_index": req.scene_index,

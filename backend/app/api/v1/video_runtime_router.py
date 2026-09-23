@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
 from app.core.dependencies import get_current_user
+from app.core.exceptions import NotFoundError
 from app.core.logging import get_logger
 from app.models.user import User
 from app.services.educational_memory_service import educational_memory_service
@@ -47,6 +48,41 @@ def _append_capped(
     return items
 
 
+def _assert_session_owned(
+    session_id: str,
+    existing: Any,
+    user_id: str,
+) -> None:
+    """404-equalized ownership check for a runtime-session slot.
+
+    ``existing`` is the current cached value for ``session_id``: a runtime
+    state dict or a list of bookmark/assessment entries. If no state exists
+    yet the caller may create it (first-write preserved); if it exists it
+    must belong to ``user_id``. A foreign session is reported as a uniform
+    ``NotFoundError`` so no ownership or existence detail is leaked.
+    """
+    if existing is None:
+        return
+    if isinstance(existing, dict):
+        owner = existing.get("user_id")
+        if owner != user_id:
+            raise NotFoundError(
+                message="Runtime session not found",
+                details={"session_id": session_id},
+            )
+        return
+    if isinstance(existing, list):
+        if not existing:
+            return
+        owners = {entry.get("user_id") for entry in existing if isinstance(entry, dict)}
+        if owners != {user_id}:
+            raise NotFoundError(
+                message="Runtime session not found",
+                details={"session_id": session_id},
+            )
+        return
+
+
 class SyncVideoRuntimeRequest(BaseModel):
     session_id: str
     video_id: str
@@ -79,6 +115,11 @@ async def sync_video_runtime(
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     now = time.time()
+    _assert_session_owned(
+        req.session_id,
+        _VIDEO_RUNTIME_STATES.get(req.session_id),
+        str(user.id),
+    )
     _VIDEO_RUNTIME_STATES.set(req.session_id, {
         "video_id": req.video_id,
         "scene_index": req.scene_index,
@@ -149,7 +190,9 @@ async def create_video_bookmark(
         "user_id": str(user.id),
         "created_at": time.time(),
     }
-    bookmarks = _VIDEO_BOOKMARKS.get(req.session_id) or []
+    bookmarks = _VIDEO_BOOKMARKS.get(req.session_id)
+    _assert_session_owned(req.session_id, bookmarks, str(user.id))
+    bookmarks = bookmarks or []
     _VIDEO_BOOKMARKS.set(
         req.session_id,
         _append_capped(bookmarks, bm, _MAX_BOOKMARKS_PER_SESSION),
@@ -175,7 +218,9 @@ async def submit_video_assessment(
         "user_id": str(user.id),
         "submitted_at": time.time(),
     }
-    assessments = _VIDEO_ASSESSMENTS.get(req.session_id) or []
+    assessments = _VIDEO_ASSESSMENTS.get(req.session_id)
+    _assert_session_owned(req.session_id, assessments, str(user.id))
+    assessments = assessments or []
     _VIDEO_ASSESSMENTS.set(
         req.session_id,
         _append_capped(assessments, attempt, _MAX_ASSESSMENTS_PER_SESSION),
