@@ -229,13 +229,10 @@ async def get_effectiveness_report(
         from app.core.exceptions import NotFoundError
         raise NotFoundError(message="No assessment data for this presentation")
 
-    from sqlalchemy import select
-
-    from app.models.presentation import Presentation
-
-    pres_stmt = select(Presentation).where(Presentation.id == presentation_id)
-    pres_result = await uow.session.execute(pres_stmt)
-    pres = pres_result.scalar_one_or_none()
+    pres = await service.get_owned_presentation(
+        user_id=user.id,
+        presentation_id=presentation_id,
+    )
 
     return APIResponse(
         data=EffectivenessReportResponse(

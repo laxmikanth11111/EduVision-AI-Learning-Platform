@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.effectiveness_assessment import EffectivenessAssessment
+from app.models.presentation import Presentation
 from app.models.quiz_attempt import QuizAttempt
 from app.models.user_feedback import UserFeedback
 from app.schemas.effectiveness import AssessmentType
@@ -19,6 +20,37 @@ from app.schemas.effectiveness import AssessmentType
 class EffectivenessService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_owned_presentation(
+        self,
+        *,
+        user_id: uuid.UUID,
+        presentation_id: uuid.UUID,
+    ) -> Presentation:
+        """Return the presentation if the caller owns it, else 404.
+
+        Ownership is enforced through the presentation owner, the single
+        top-level ownership unit in the individual-first model. A missing
+        presentation, an orphaned presentation (no owner), a soft-deleted
+        presentation, and a non-owner are all reported identically as 404
+        "Presentation not found" so no cross-user existence leak occurs.
+        """
+        stmt = select(Presentation).where(
+            Presentation.id == presentation_id,
+            Presentation.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        presentation = result.scalar_one_or_none()
+        if (
+            presentation is None
+            or presentation.owner_id is None
+            or str(presentation.owner_id) != str(user_id)
+        ):
+            raise NotFoundError(
+                message="Presentation not found",
+                details={"presentation_id": str(presentation_id)},
+            )
+        return presentation
 
     async def get_or_create_assessment(
         self,
@@ -61,6 +93,11 @@ class EffectivenessService:
             AssessmentType.RETENTION,
         ):
             raise ValidationError(message=f"Invalid assessment type: {assessment_type}")
+
+        await self.get_owned_presentation(
+            user_id=user_id,
+            presentation_id=presentation_id,
+        )
 
         assessment = await self.get_or_create_assessment(
             user_id=user_id,
