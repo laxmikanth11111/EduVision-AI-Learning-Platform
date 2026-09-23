@@ -42,7 +42,7 @@ def parse_route_overrides(raw: str) -> dict[str, tuple[int, int]]:
 
     Format: comma-separated ``PATH_REGEX=LIMIT/WINDOW`` entries, e.g.::
 
-        RATE_LIMIT_ROUTES=^/api/v1/presentations/[^/]+/quizzes$=10/60,^/api/v1/quizzes/[^/]+/attempts/[^/]+/submit$=30/60
+        RATE_LIMIT_ROUTES=^/api/v1/quizzes/generate$=10/60,^/api/v1/quizzes/[^/]+/attempts/[^/]+/submit$=30/60
 
     Each pattern is compiled with :mod:`re` and matched with ``search`` against
     the request path; the first match wins. Malformed entries are logged and

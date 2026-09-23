@@ -12,13 +12,14 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.database.unit_of_work import UnitOfWork
 from app.models.answer_key import AnswerKey
 from app.models.generated_block import GeneratedBlock
 from app.models.generated_lesson import GeneratedLesson
 from app.models.generated_lesson_version import GeneratedLessonVersion
+from app.models.presentation import Presentation
 from app.models.question_explanation import QuestionExplanation
 from app.models.quiz import Quiz
 from app.models.quiz_content import Question, QuestionOption
@@ -100,17 +101,8 @@ class QuizGenerationService:
 
         Returns the created quiz metadata.
         """
-        # 1. Load lesson and its content
-        lesson_stmt = select(GeneratedLesson).where(
-            GeneratedLesson.public_id == lesson_public_id
-        )
-        result = await self._uow.session.execute(lesson_stmt)
-        lesson = result.scalar_one_or_none()
-        if not lesson:
-            raise ValidationError(
-                message="Lesson not found",
-                details={"lesson_id": lesson_public_id},
-            )
+        # 1. Load lesson (ownership-scoped) and its content
+        lesson = await self._get_owned_lesson(user_id, lesson_public_id)
 
         # 2. Load lesson blocks for content
         content_text = await self._load_lesson_content(lesson)
@@ -158,6 +150,56 @@ class QuizGenerationService:
             "question_count": quiz.question_count,
             "status": quiz.status,
         }
+
+    async def _get_owned_lesson(
+        self, user_id: uuid.UUID, lesson_public_id: str
+    ) -> GeneratedLesson:
+        """Load a lesson the user owns or fail 404-equalized.
+
+        Ownership is the lesson's parent presentation owner (the single
+        top-level ownership unit) OR the lesson's direct ``user_id``
+        (legacy/edge data). Missing lessons, orphaned/soft-deleted
+        presentations, and non-owner lessons all surface the same
+        ``Lesson not found`` error so the endpoint leaks nothing about
+        cross-user resource existence.
+        """
+        lesson_stmt = select(GeneratedLesson).where(
+            GeneratedLesson.public_id == lesson_public_id
+        )
+        lesson = (
+            await self._uow.session.execute(lesson_stmt)
+        ).scalar_one_or_none()
+        if not lesson:
+            raise NotFoundError(
+                message="Lesson not found",
+                details={"lesson_id": lesson_public_id},
+            )
+
+        if (
+            lesson.user_id is not None
+            and str(lesson.user_id) == str(user_id)
+        ):
+            return lesson
+
+        presentation = (
+            await self._uow.session.execute(
+                select(Presentation).where(
+                    Presentation.id == lesson.presentation_id
+                )
+            )
+        ).scalar_one_or_none()
+        if (
+            presentation is None
+            or presentation.owner_id is None
+            or presentation.deleted_at is not None
+            or str(presentation.owner_id) != str(user_id)
+        ):
+            raise NotFoundError(
+                message="Lesson not found",
+                details={"lesson_id": lesson_public_id},
+            )
+
+        return lesson
 
     async def _load_lesson_content(self, lesson: GeneratedLesson) -> str:
         """Load the actual content blocks from the latest lesson version."""

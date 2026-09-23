@@ -443,7 +443,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_ROUTES: str = (
         r"^/api/v1/auth/login$=10/60,"
         r"^/api/v1/auth/register$=10/60,"
-        r"^/api/v1/presentations/[^/]+/quizzes$=10/60,"
+        r"^/api/v1/quizzes/generate$=10/60,"
         r"^/api/v1/quizzes/[^/]+/attempts/[^/]+/submit$=30/60,"
         r"^/api/v1/users/me/adaptive-quiz$=30/60,"
         r"^/api/v1/quizzes/[^/]+/session$=240/60,"
