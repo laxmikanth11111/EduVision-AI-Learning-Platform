@@ -245,7 +245,11 @@ class ExportService:
                 except ValueError:
                     where_clause = (Presentation.public_id == target_id)
 
-                stmt_pres = select(Presentation).where(where_clause).options(selectinload(Presentation.content_units))
+                stmt_pres = (
+                    select(Presentation)
+                    .where(where_clause, Presentation.owner_id == job.user_id)
+                    .options(selectinload(Presentation.content_units))
+                )
                 res_pres = await uow.session.execute(stmt_pres)
                 pres = res_pres.scalar_one_or_none()
 
