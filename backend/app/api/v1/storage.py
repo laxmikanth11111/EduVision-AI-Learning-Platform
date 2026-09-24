@@ -8,6 +8,7 @@ scoped to the current user's own export namespace.
 from __future__ import annotations
 
 import mimetypes
+import posixpath
 
 from fastapi import APIRouter, Depends, Response
 
@@ -18,6 +19,17 @@ from app.storage.base import StorageBackend
 from app.storage.factory import get_storage_backend
 
 storage_router = APIRouter(prefix="/storage", tags=["Storage"])
+
+
+def _canonicalize_key(key: str) -> str:
+    """Normalize a storage key for authorization checks.
+
+    Uvicorn/gunicorn deliver the request-target verbatim, so ``..`` segments,
+    dot segments and escaped separators must be collapsed here before the
+    ownership prefix is validated. Windows separators are mapped too since the
+    local backend resolves paths on the host filesystem.
+    """
+    return posixpath.normpath(key.replace("\\", "/"))
 
 
 @storage_router.get(
@@ -36,6 +48,7 @@ async def get_storage_content(
     (``exports/user_<user-id-hex>/...``) are served; anything else is masked as
     a 404 so storage keys cannot be probed across users.
     """
+    key = _canonicalize_key(key)
     expected_prefix = f"exports/user_{user.id.hex}/"
     if not key.startswith(expected_prefix):
         raise NotFoundError("Object not found")

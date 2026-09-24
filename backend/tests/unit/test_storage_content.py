@@ -87,6 +87,74 @@ class TestStorageContentEndpoint:
 
         assert resp.status_code == 404
 
+    async def test_denies_path_escape_into_other_objects(
+        self, tmp_path
+    ) -> None:
+        """A crafted key with ``..`` segments must never read objects outside
+        the caller's export namespace (real filesystem backend).
+
+        Uvicorn/gunicorn deliver the request-target verbatim, so ``..`` reaches
+        the route unchanged: the guard must reject the key before resolving it.
+        """
+        import io
+        import uuid as uuid_mod
+
+        from app.api.v1.storage import get_storage_content
+        from app.core.config import settings
+        from app.core.dependencies import get_current_user
+        from app.core.exceptions import NotFoundError
+        from app.main import app
+        from app.storage.factory import get_storage_backend
+        from app.storage.local import LocalStorageBackend
+
+        original_local_path = settings.LOCAL_STORAGE_PATH
+        try:
+            settings.LOCAL_STORAGE_PATH = str(tmp_path)
+            backend = LocalStorageBackend()
+            await backend.initialize()
+
+            victim_key = (
+                f"sources/{uuid_mod.uuid4()}/{uuid_mod.uuid4()}_victim.pdf"
+            )
+            await backend.upload_fileobj(
+                io.BytesIO(b"victim-secret-bytes"), victim_key
+            )
+
+            forged = f"exports/user_{TEST_USER_ID.hex}/../../{victim_key}"
+            from tests.conftest import _FakeUser as _FakeUserCls
+
+            with pytest.raises(NotFoundError):
+                await get_storage_content(
+                    key=forged,
+                    user=_FakeUserCls(),
+                    storage=backend,
+                )
+
+            forged_backslash = (
+                f"exports\\user_{TEST_USER_ID.hex}\\..\\..\\..{victim_key.replace('/', '\\')}"
+            )
+            with pytest.raises(NotFoundError):
+                await get_storage_content(
+                    key=forged_backslash,
+                    user=_FakeUserCls(),
+                    storage=backend,
+                )
+
+            own_key = f"exports/user_{TEST_USER_ID.hex}/job1/report.pdf"
+            await backend.upload_fileobj(
+                io.BytesIO(b"own-export-bytes"), own_key
+            )
+            canonical_key = own_key.replace("job1/", "./job1/../job1/")
+            response = await get_storage_content(
+                key=canonical_key,
+                user=_FakeUserCls(),
+                storage=backend,
+            )
+            assert response.status_code == 200
+            assert response.body == b"own-export-bytes"
+        finally:
+            settings.LOCAL_STORAGE_PATH = original_local_path
+
     async def test_requires_authentication(self) -> None:
         from app.core.dependencies import get_current_user
         from app.main import app
