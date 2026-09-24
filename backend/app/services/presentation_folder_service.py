@@ -5,14 +5,12 @@ from typing import Any
 
 from sqlalchemy import update
 
-from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.core.logging import get_logger
 from app.database.unit_of_work import UnitOfWork
 from app.models.presentation import Presentation
 from app.models.presentation_folder import PresentationFolder
 from app.repositories.presentation_folder_repository import PresentationFolderRepository
-from app.services.presentation_audit_service import PresentationAuditService
-from shared.constants import PresentationAction
 
 logger = get_logger(__name__)
 
@@ -21,13 +19,14 @@ class PresentationFolderService:
     def __init__(self, uow: UnitOfWork) -> None:
         self._uow = uow
         self._repo = PresentationFolderRepository(uow.session)
-        self._audit_service = PresentationAuditService(uow)
 
     async def _assert_folder_owner(
         self, folder: PresentationFolder, owner_id: uuid.UUID
     ) -> None:
+        # A folder owned by someone else is indistinguishable from a missing
+        # one (no resource-existence or ownership oracle at the API boundary).
         if folder.owner_id != owner_id:
-            raise PermissionDeniedError("You do not have access to this folder")
+            raise NotFoundError(message="Folder not found")
 
     async def create_folder(
         self,
@@ -37,21 +36,19 @@ class PresentationFolderService:
     ) -> PresentationFolder:
         if parent_id is not None:
             parent = await self._repo.get(parent_id)
-            if parent is None:
+            if parent is None or parent.owner_id != owner_id:
                 raise NotFoundError(message="Parent folder not found")
-            await self._assert_folder_owner(parent, owner_id)
         folder = await self._repo.create(
             name=name,
             owner_id=owner_id,
             parent_id=parent_id,
         )
-        await self._audit_service.log(
-            folder.id,
-            PresentationAction.FOLDER_CREATED,
-            actor_id=owner_id,
-            entity_type="folder",
-            entity_id=folder.id,
-            details={"name": name},
+        logger.info(
+            "folder_created",
+            folder_id=str(folder.id),
+            actor_id=str(owner_id),
+            name=name,
+            parent_id=str(parent_id) if parent_id else None,
         )
         await self._uow.flush()
         return folder
@@ -73,25 +70,24 @@ class PresentationFolderService:
             if new_parent_id == folder.id:
                 raise ConflictError(message="A folder cannot be its own parent")
             parent = await self._repo.get(new_parent_id)
-            if parent is None:
+            if parent is None or parent.owner_id != owner_id:
                 raise NotFoundError(message="Parent folder not found")
-            await self._assert_folder_owner(parent, owner_id)
             await self._ensure_cycle_free(folder.id, parent.id)
 
         if name is not None:
             folder.name = name
         folder.parent_id = new_parent_id
 
-        await self._audit_service.log(
-            folder.id,
-            PresentationAction.FOLDER_UPDATED,
-            actor_id=owner_id,
-            entity_type="folder",
-            entity_id=folder.id,
-            details={"name": name, "parent_id": str(new_parent_id) if new_parent_id else None},
+        logger.info(
+            "folder_updated",
+            folder_id=str(folder.id),
+            actor_id=str(owner_id),
+            name=name,
+            parent_id=str(new_parent_id) if new_parent_id else None,
         )
         await self._uow.flush()
-        return folder
+        fresh = await self._repo.get(folder.id)
+        return fresh if fresh is not None else folder
 
     async def delete_folder(self, folder_id: uuid.UUID, owner_id: uuid.UUID) -> None:
         folder = await self._repo.get(folder_id)
@@ -108,16 +104,14 @@ class PresentationFolderService:
         for child in await self._repo.find_all(parent_id=folder.id):
             child.parent_id = None
 
-        await self._audit_service.log(
-            folder.id,
-            PresentationAction.FOLDER_DELETED,
-            actor_id=owner_id,
-            entity_type="folder",
-            entity_id=folder.id,
+        logger.info(
+            "folder_deleted",
+            folder_id=str(folder.id),
+            actor_id=str(owner_id),
         )
         await self._repo.delete(folder.id, hard=True)
         await self._uow.flush()
-        logger.info("folder_deleted", folder_id=str(folder.id))
+        logger.info("folder_deleted_done", folder_id=str(folder.id))
 
     async def list_folders(
         self, owner_id: uuid.UUID, include_presentation_count: bool = True

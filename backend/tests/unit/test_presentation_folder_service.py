@@ -6,9 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.services.presentation_folder_service import PresentationFolderService
-from shared.constants import PresentationAction
 
 pytestmark = pytest.mark.asyncio
 
@@ -27,7 +26,6 @@ def mock_uow() -> MagicMock:
 @pytest.fixture
 def folder_service(mock_uow: MagicMock) -> PresentationFolderService:
     service = PresentationFolderService(mock_uow)
-    service._audit_service.log = AsyncMock(return_value=MagicMock())
     return service
 
 
@@ -55,14 +53,6 @@ class TestCreateFolder:
         assert result is folder
         folder_service._repo.create.assert_awaited_once_with(
             name="Math", owner_id=TEST_OWNER, parent_id=None
-        )
-        folder_service._audit_service.log.assert_awaited_once_with(
-            folder.id,
-            PresentationAction.FOLDER_CREATED,
-            actor_id=TEST_OWNER,
-            entity_type="folder",
-            entity_id=folder.id,
-            details={"name": "Math"},
         )
         mock_uow.flush.assert_awaited_once()
 
@@ -93,13 +83,14 @@ class TestCreateFolder:
                 "Child", owner_id=TEST_OWNER, parent_id=uuid.uuid4()
             )
 
-    async def test_create_nested_folder_denies_other_owner_parent(
+    async def test_create_nested_folder_foreign_parent_is_404(
         self, folder_service: PresentationFolderService,
     ) -> None:
         parent = _make_folder(name="Parent", owner_id=OTHER_OWNER)
         folder_service._repo.get = AsyncMock(return_value=parent)
 
-        with pytest.raises(PermissionDeniedError, match="do not have access"):
+        # A foreign parent is indistinguishable from a missing one (no oracle).
+        with pytest.raises(NotFoundError, match="Parent folder not found"):
             await folder_service.create_folder(
                 "Child", owner_id=TEST_OWNER, parent_id=parent.id
             )
@@ -144,13 +135,13 @@ class TestUpdateFolder:
                 parent.id, owner_id=TEST_OWNER, parent_id=child.id
             )
 
-    async def test_update_denies_other_owner(
+    async def test_update_foreign_folder_is_404(
         self, folder_service: PresentationFolderService,
     ) -> None:
         folder = _make_folder(owner_id=OTHER_OWNER)
         folder_service._repo.get = AsyncMock(return_value=folder)
 
-        with pytest.raises(PermissionDeniedError, match="do not have access"):
+        with pytest.raises(NotFoundError, match="Folder not found"):
             await folder_service.update_folder(
                 folder.id, owner_id=TEST_OWNER, name="Hacked"
             )
@@ -170,22 +161,15 @@ class TestDeleteFolder:
 
         assert child.parent_id is None
         folder_service._repo.delete.assert_awaited_once_with(folder.id, hard=True)
-        folder_service._audit_service.log.assert_awaited_once_with(
-            folder.id,
-            PresentationAction.FOLDER_DELETED,
-            actor_id=TEST_OWNER,
-            entity_type="folder",
-            entity_id=folder.id,
-        )
         mock_uow.flush.assert_awaited_once()
 
-    async def test_delete_denies_other_owner(
+    async def test_delete_foreign_folder_is_404(
         self, folder_service: PresentationFolderService,
     ) -> None:
         folder = _make_folder(owner_id=OTHER_OWNER)
         folder_service._repo.get = AsyncMock(return_value=folder)
 
-        with pytest.raises(PermissionDeniedError, match="do not have access"):
+        with pytest.raises(NotFoundError, match="Folder not found"):
             await folder_service.delete_folder(folder.id, owner_id=TEST_OWNER)
 
 
@@ -238,11 +222,11 @@ class TestBreadcrumbs:
         with pytest.raises(NotFoundError, match="Folder not found"):
             await folder_service.get_breadcrumbs(uuid.uuid4(), owner_id=TEST_OWNER)
 
-    async def test_breadcrumbs_denies_other_owner(
+    async def test_breadcrumbs_foreign_folder_is_404(
         self, folder_service: PresentationFolderService,
     ) -> None:
         folder = _make_folder(owner_id=OTHER_OWNER)
         folder_service._repo.get = AsyncMock(return_value=folder)
 
-        with pytest.raises(PermissionDeniedError, match="do not have access"):
+        with pytest.raises(NotFoundError, match="Folder not found"):
             await folder_service.get_breadcrumbs(folder.id, owner_id=TEST_OWNER)
