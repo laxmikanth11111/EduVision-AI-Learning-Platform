@@ -438,7 +438,7 @@ class TestE2EPlayerFlow:
         _app.dependency_overrides[get_current_user] = _other_user
         try:
             resp = await client.get(f"/api/v1/lessons/{lesson_id}/player")
-            assert resp.status_code == 403
+            assert resp.status_code == 404
         finally:
             async def _restore():
                 return _FakeUser()

@@ -38,10 +38,11 @@ async def get_player_state(
 ) -> APIResponse[PlayerStateResponse]:
     try:
         result = await LessonPlayerService(uow).get_state(lesson_id, owner_id=str(user.id))
-    except PermissionError:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except (PermissionError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Lesson {lesson_id} not found",
+        )
     return APIResponse(data=PlayerStateResponse(**result))
 
 
@@ -63,10 +64,11 @@ async def start_player_session(
             client_metadata=request.client_metadata,
             player_mode=request.player_mode,
         )
-    except PermissionError:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except (PermissionError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Lesson {lesson_id} not found",
+        )
     return APIResponse(data=PlayerStateResponse(**result), message="Session started")
 
 
@@ -85,9 +87,13 @@ async def advance_topic(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> APIResponse[PlayerSessionResponse]:
     service = LessonPlayerService(uow)
-    state = await service.advance_topic(request.session_id, owner_id=str(user.id))
-    if state is None:
-        raise ValueError(f"Session {request.session_id} not found")
+    try:
+        state = await service.advance_topic(request.session_id, owner_id=str(user.id))
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
     return APIResponse(data=PlayerSessionResponse(**state), message="Topic advanced")
 
 
@@ -107,9 +113,13 @@ async def set_topic(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> APIResponse[PlayerSessionResponse]:
     service = LessonPlayerService(uow)
-    state = await service.set_topic(request.session_id, request.topic_index, owner_id=str(user.id))
-    if state is None:
-        raise ValueError(f"Session {request.session_id} not found")
+    try:
+        state = await service.set_topic(request.session_id, request.topic_index, owner_id=str(user.id))
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
     return APIResponse(data=PlayerSessionResponse(**state), message="Topic set")
 
 
@@ -150,10 +160,11 @@ async def get_checkpoint(
     """Return the assessment checkpoint bound to a lesson, if any."""
     try:
         result = await LessonPlayerService(uow).get_checkpoint(lesson_id, owner_id=str(user.id))
-    except PermissionError:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except (PermissionError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Lesson {lesson_id} not found",
+        )
     return APIResponse(data=result)
 
 
@@ -171,8 +182,9 @@ async def get_mastery_and_next_action(
         result = await LessonPlayerService(uow).get_mastery_and_next_action(
             lesson_id, owner_id=str(user.id)
         )
-    except PermissionError:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except (PermissionError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Lesson {lesson_id} not found",
+        )
     return APIResponse(data=result)

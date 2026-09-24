@@ -5,7 +5,8 @@ Covers the real HTTP endpoints ``GET/PUT /api/v1/lessons/{id}/annotations``:
 * every allowed view layer (source / learning / visual / animation) round-trips
   its own items independently of the other layers
 * storing an empty item list delegates (deletes) that layer
-* a non-owner cannot read or write through these endpoints (403)
+* a non-owner gets the same 404 as a missing lesson (no existence/ownership
+  oracle)
 * invalid layer modes and negative slide indexes are rejected (422)
 """
 
@@ -30,6 +31,7 @@ _STROKE = {
     "size": 4,
     "points": [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}],
 }
+_MISSING_LESSON_ID = "lesson_does_not_exist"
 _TEXT = {
     "type": "text",
     "x": 5.0,
@@ -151,17 +153,25 @@ async def test_storing_empty_items_deletes_the_layer(
     assert (await client.get(url)).json()["data"]["layers"] == []
 
 
-async def test_non_owner_is_denied(client: AsyncClient, owner: _AuthedUser) -> None:
-    """A user who does not own the presentation gets 403 on both read + write."""
+async def test_non_owner_gets_same_404_as_missing(client: AsyncClient, owner: _AuthedUser) -> None:
+    """A non-owner's read/write equals the missing-lesson 404 (no oracle)."""
     lesson_id = owner.lesson_id  # type: ignore[attr-defined]
     other = _AuthedUser(uuid.uuid4())
+    missing_url = await _url(_MISSING_LESSON_ID)
+    missing_read = await client.get(missing_url)
+    assert missing_read.status_code == 404
     other.install()
     try:
         url = await _url(lesson_id)
         write = await client.put(f"{url}/learning/1", json={"items": [_TEXT]})
-        assert write.status_code == 403, write.text
+        assert write.status_code == 404, write.text
         read = await client.get(url)
-        assert read.status_code == 403, read.text
+        assert read.status_code == 404, read.text
+        # Same not-found phrasing as the missing lesson (no ownership leak).
+        assert read.json()["error"]["message"] == f"Lesson {lesson_id} not found"
+        assert missing_read.json()["error"]["message"] == (
+            f"Lesson {_MISSING_LESSON_ID} not found"
+        )
     finally:
         other.restore()
 

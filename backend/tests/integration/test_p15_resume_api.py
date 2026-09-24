@@ -448,13 +448,14 @@ async def test_cross_user_position_is_404_with_no_write() -> None:
         session = state_resp.json()["data"]["session"]
         assert session["slide_index"] == 0
 
-        # B's own GET /player is forbidden: the lesson belongs to A, so B can
-        # neither read nor even see that a session exists (no info leak).
+        # B's own GET /player is indistinguishable from a missing lesson: the
+        # lesson belongs to A, so B can neither read nor even see that a lesson
+        # or session exists (no info leak).
         b_view = await client.get(
             f"/api/v1/lessons/{lookups['lesson_id']}/player",
             headers=_headers(uid_b),
         )
-        assert b_view.status_code == 403
+        assert b_view.status_code == 404
 
 
 async def test_source_mode_final_slide_reaches_full_completion() -> None:

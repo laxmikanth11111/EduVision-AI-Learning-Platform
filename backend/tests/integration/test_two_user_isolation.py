@@ -656,8 +656,9 @@ async def test_user_b_cannot_start_player_on_user_a_lesson() -> None:
             json={},
             headers=_headers(_USER_B_ID),
         )
-        # Ownership is enforced at player level: User B gets 403 on User A's lesson
-        assert resp.status_code in (200, 403, 404)
+        # Ownership is enforced at player level: User B gets the same 404 as a
+        # missing lesson on User A's lesson (no existence/ownership oracle)
+        assert resp.status_code in (200, 404)
 
 
 async def test_user_b_cannot_see_user_a_player_session_state() -> None:
@@ -694,9 +695,9 @@ async def test_user_b_cannot_see_user_a_player_session_state() -> None:
         assert a_state_session is not None
         assert a_state_session["session_id"] == a_session["session_id"]
 
-        # User B gets state — ownership enforced, should get 403
+        # User B gets state — ownership enforced: indistinguishable from missing
         resp = await client.get(
             f"/api/v1/lessons/{lesson_public_id}/player",
             headers=_headers(_USER_B_ID),
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 404

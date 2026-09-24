@@ -80,11 +80,11 @@ class TestListAnnotations:
         assert layers[0]["slide_index"] == 0
         assert len(layers[0]["items"]) == 1
 
-    async def test_ownership_403(self, client, mock_services, override_uow) -> None:
+    async def test_ownership_404(self, client, mock_services, override_uow) -> None:
         lesson_service, _ = mock_services
         lesson_service._assert_lesson_ownership = AsyncMock(side_effect=PermissionError)
         response = await client.get(f"/api/v1/lessons/{_LESSON_ID}/annotations")
-        assert response.status_code == 403
+        assert response.status_code == 404
 
     async def test_missing_lesson_404(self, client, mock_services, override_uow) -> None:
         lesson_service, _ = mock_services
@@ -159,11 +159,11 @@ class TestSaveAnnotationLayer:
         assert response.status_code == 200
         assert response.json()["data"]["item_count"] == 0
 
-    async def test_unauthorized_owner_403(self, client, mock_services, override_uow) -> None:
+    async def test_unauthorized_owner_404(self, client, mock_services, override_uow) -> None:
         lesson_service, _ = mock_services
         lesson_service._assert_lesson_ownership = AsyncMock(side_effect=PermissionError)
         response = await client.put(
             f"/api/v1/lessons/{_LESSON_ID}/annotations/learning/0",
             json={"items": [_STROKE]},
         )
-        assert response.status_code == 403
+        assert response.status_code == 404

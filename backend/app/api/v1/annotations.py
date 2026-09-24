@@ -1,9 +1,9 @@
 """Per-slide annotation layer endpoints (teaching continuity).
 
 All routes are lesson-owner-scoped: the shared lesson ownership helper (also
-used by every player route) is invoked first so a non-owner gets 403 without
-any information leak, then layer reads are further filtered by the
-authenticated user id.
+used by every player route) is invoked first so a non-owner gets the same 404
+as a missing lesson (no resource-existence or ownership oracle), then layer
+reads are further filtered by the authenticated user id.
 """
 
 from __future__ import annotations
@@ -40,13 +40,18 @@ class SaveAnnotationLayerRequest(BaseModel):
 
 
 async def _owned_lesson(lesson_id: str, user_id: str, uow: UnitOfWork):
-    """Load a lesson, asserting the caller owns its presentation."""
+    """Load a lesson, asserting the caller owns its presentation.
+
+    Missing and non-owned lessons render identically (404) so the route does
+    not leak whether a lesson exists or who owns it.
+    """
     try:
         return await LessonPlayerService(uow)._assert_lesson_ownership(lesson_id, user_id)
-    except PermissionError:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except (PermissionError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Lesson {lesson_id} not found",
+        )
 
 
 @annotations_router.get(
