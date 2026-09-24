@@ -863,19 +863,23 @@ class TestGroupComparison:
         service._compute_gains(assessment_b)
         await db_session.flush()
 
+        # Comparisons are scoped to the calling user: the caller's own group
+        # resolves, while another user's group stays empty.
         result = await service.compare_groups(
+            user_id=TEST_USER_ID,
             group_a="reference", group_b="eduvision",
         )
         assert result["group_a_count"] == 1
-        assert result["group_b_count"] == 1
+        assert result["group_b_count"] == 0
         assert result["group_a_avg_absolute_gain"] == 30.0
-        assert result["group_b_avg_absolute_gain"] == 50.0
+        assert result["group_b_avg_absolute_gain"] is None
         assert result["group_a_avg_baseline"] == 40.0
-        assert result["group_b_avg_baseline"] == 40.0
+        assert result["group_b_avg_baseline"] is None
 
     async def test_compare_groups_empty(self, db_session):
         service = EffectivenessService(db_session)
         result = await service.compare_groups(
+            user_id=TEST_USER_ID,
             group_a="nonexistent_a", group_b="nonexistent_b",
         )
         assert result["group_a_count"] == 0
@@ -883,14 +887,14 @@ class TestGroupComparison:
         assert result["group_a_avg_absolute_gain"] is None
         assert result["group_b_avg_absolute_gain"] is None
 
-    async def test_compare_groups_multiple_users(self, db_session):
+    async def test_compare_groups_multiple_own_assessments(self, db_session):
         service = EffectivenessService(db_session)
+        owner = await _ensure_user(db_session, uuid.uuid4())
 
         for i in range(3):
             pres = await _create_presentation(db_session)
-            user_id = await _ensure_user(db_session, uuid.uuid4())
             assessment = await service.get_or_create_assessment(
-                user_id=user_id, presentation_id=pres.id,
+                user_id=owner, presentation_id=pres.id,
                 experiment_group="reference",
             )
             assessment.baseline_score = 30.0 + i * 10
@@ -899,9 +903,8 @@ class TestGroupComparison:
 
         for i in range(2):
             pres = await _create_presentation(db_session)
-            user_id = await _ensure_user(db_session, uuid.uuid4())
             assessment = await service.get_or_create_assessment(
-                user_id=user_id, presentation_id=pres.id,
+                user_id=owner, presentation_id=pres.id,
                 experiment_group="eduvision",
             )
             assessment.baseline_score = 30.0 + i * 10
@@ -910,6 +913,7 @@ class TestGroupComparison:
         await db_session.flush()
 
         result = await service.compare_groups(
+            user_id=owner,
             group_a="reference", group_b="eduvision",
         )
         assert result["group_a_count"] == 3
@@ -930,12 +934,14 @@ class TestGroupComparison:
         await db_session.flush()
 
         result_ref = await service.compare_groups(
+            user_id=TEST_USER_ID,
             group_a="reference", group_b="eduvision",
         )
         assert result_ref["group_a_count"] == 1
         assert result_ref["group_b_count"] == 0
 
         result_rev = await service.compare_groups(
+            user_id=TEST_USER_ID,
             group_a="eduvision", group_b="reference",
         )
         assert result_rev["group_a_count"] == 0

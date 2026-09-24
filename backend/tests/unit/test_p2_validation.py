@@ -217,13 +217,13 @@ class TestNoStatisticalClaims:
     async def test_comparison_returns_raw_averages(self, db_session):
         """compare_groups returns descriptive statistics only."""
         service = EffectivenessService(db_session)
+        owner = await _ensure_user(db_session, uuid.uuid4())
 
-        # Create two groups
+        # Create two groups from the caller's own assessments
         for i in range(5):
             pres = await _create_pres(db_session)
-            uid = await _ensure_user(db_session, uuid.uuid4())
             a = await service.get_or_create_assessment(
-                user_id=uid, presentation_id=pres.id,
+                user_id=owner, presentation_id=pres.id,
                 experiment_group="reference",
             )
             a.baseline_score = 40.0
@@ -232,9 +232,8 @@ class TestNoStatisticalClaims:
 
         for i in range(5):
             pres = await _create_pres(db_session)
-            uid = await _ensure_user(db_session, uuid.uuid4())
             a = await service.get_or_create_assessment(
-                user_id=uid, presentation_id=pres.id,
+                user_id=owner, presentation_id=pres.id,
                 experiment_group="eduvision",
             )
             a.baseline_score = 40.0
@@ -243,7 +242,7 @@ class TestNoStatisticalClaims:
         await db_session.flush()
 
         result = await service.compare_groups(
-            group_a="reference", group_b="eduvision",
+            user_id=owner, group_a="reference", group_b="eduvision",
         )
 
         # Raw counts and averages only — no statistical inference
@@ -267,11 +266,12 @@ class TestNoStatisticalClaims:
     async def test_comparison_count_required_for_inference(self, db_session):
         """Small sample sizes make any comparison meaningless."""
         service = EffectivenessService(db_session)
+        owner = await _ensure_user(db_session, uuid.uuid4())
         pres = await _create_pres(db_session)
 
-        # Only 1 user per group — far too small for any statistical claim
+        # Only 1 assessment per group — far too small for any statistical claim
         a = await service.get_or_create_assessment(
-            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
+            user_id=owner, presentation_id=pres.id,
             experiment_group="reference",
         )
         a.baseline_score = 40.0
@@ -280,7 +280,7 @@ class TestNoStatisticalClaims:
 
         pres2 = await _create_pres(db_session)
         b = await service.get_or_create_assessment(
-            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres2.id,
+            user_id=owner, presentation_id=pres2.id,
             experiment_group="eduvision",
         )
         b.baseline_score = 40.0
@@ -289,7 +289,7 @@ class TestNoStatisticalClaims:
         await db_session.flush()
 
         result = await service.compare_groups(
-            group_a="reference", group_b="eduvision",
+            user_id=owner, group_a="reference", group_b="eduvision",
         )
         assert result["group_a_count"] == 1
         assert result["group_b_count"] == 1
@@ -313,6 +313,7 @@ class TestComparisonFramework:
     async def test_aggregation_is_correct(self, db_session):
         """Averages are computed correctly from the underlying data."""
         service = EffectivenessService(db_session)
+        owner = await _ensure_user(db_session, uuid.uuid4())
 
         gains_a = [20.0, 40.0, 60.0]
         gains_b = [30.0, 50.0]
@@ -320,7 +321,7 @@ class TestComparisonFramework:
         for g in gains_a:
             pres = await _create_pres(db_session)
             a = await service.get_or_create_assessment(
-                user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
+                user_id=owner, presentation_id=pres.id,
                 experiment_group="ref",
             )
             a.baseline_score = 40.0
@@ -330,7 +331,7 @@ class TestComparisonFramework:
         for g in gains_b:
             pres = await _create_pres(db_session)
             a = await service.get_or_create_assessment(
-                user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
+                user_id=owner, presentation_id=pres.id,
                 experiment_group="ev",
             )
             a.baseline_score = 40.0
@@ -338,7 +339,7 @@ class TestComparisonFramework:
             service._compute_gains(a)
         await db_session.flush()
 
-        result = await service.compare_groups(group_a="ref", group_b="ev")
+        result = await service.compare_groups(user_id=owner, group_a="ref", group_b="ev")
         assert result["group_a_count"] == 3
         assert result["group_b_count"] == 2
         assert result["group_a_avg_absolute_gain"] == pytest.approx(sum(gains_a) / 3)
@@ -348,6 +349,7 @@ class TestComparisonFramework:
         """Empty groups produce None averages, not 0."""
         service = EffectivenessService(db_session)
         result = await service.compare_groups(
+            user_id=await _ensure_user(db_session, uuid.uuid4()),
             group_a="empty_a", group_b="empty_b",
         )
         assert result["group_a_avg_absolute_gain"] is None
@@ -356,9 +358,10 @@ class TestComparisonFramework:
     async def test_group_isolation_bidirectional(self, db_session):
         """Group assignment is independent of query direction."""
         service = EffectivenessService(db_session)
+        owner = await _ensure_user(db_session, uuid.uuid4())
         pres = await _create_pres(db_session)
         a = await service.get_or_create_assessment(
-            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
+            user_id=owner, presentation_id=pres.id,
             experiment_group="alpha",
         )
         a.baseline_score = 50.0
@@ -366,11 +369,15 @@ class TestComparisonFramework:
         service._compute_gains(a)
         await db_session.flush()
 
-        result_ab = await service.compare_groups(group_a="alpha", group_b="beta")
+        result_ab = await service.compare_groups(
+            user_id=owner, group_a="alpha", group_b="beta",
+        )
         assert result_ab["group_a_count"] == 1
         assert result_ab["group_b_count"] == 0
 
-        result_ba = await service.compare_groups(group_a="beta", group_b="alpha")
+        result_ba = await service.compare_groups(
+            user_id=owner, group_a="beta", group_b="alpha",
+        )
         assert result_ba["group_a_count"] == 0
         assert result_ba["group_b_count"] == 1
 
@@ -433,10 +440,11 @@ class TestBoundaryBetweenSoftwareAndLearning:
         time of day, sample size, or countless other confounders.
         """
         service = EffectivenessService(db_session)
+        owner = await _ensure_user(db_session, uuid.uuid4())
         pres = await _create_pres(db_session)
 
         a = await service.get_or_create_assessment(
-            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres.id,
+            user_id=owner, presentation_id=pres.id,
             experiment_group="control",
         )
         a.baseline_score = 50.0
@@ -445,7 +453,7 @@ class TestBoundaryBetweenSoftwareAndLearning:
 
         pres2 = await _create_pres(db_session)
         b = await service.get_or_create_assessment(
-            user_id=await _ensure_user(db_session, uuid.uuid4()), presentation_id=pres2.id,
+            user_id=owner, presentation_id=pres2.id,
             experiment_group="treatment",
         )
         b.baseline_score = 50.0
@@ -454,7 +462,7 @@ class TestBoundaryBetweenSoftwareAndLearning:
         await db_session.flush()
 
         result = await service.compare_groups(
-            group_a="control", group_b="treatment",
+            user_id=owner, group_a="control", group_b="treatment",
         )
         # The system computes: treatment group avg gain = 30, control = 20
         assert result["group_b_avg_absolute_gain"] > result["group_a_avg_absolute_gain"]

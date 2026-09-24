@@ -381,20 +381,22 @@ class TestP2EffectivenessE2E:
         assert gain_a["absolute_gain"] == 40.0
         assert gain_b["absolute_gain"] == 60.0
 
-        # ── Step 11: Verify comparison returns correct group data ─────────
+        # ── Step 11: Verify comparison is scoped to the caller ────────────
+        # User A only aggregates their OWN group data; User B's group stays empty.
         comparison = await effectiveness_svc.compare_groups(
+            user_id=TEST_USER_A,
             group_a="reference", group_b="eduvision",
         )
         assert comparison["group_a"] == "reference"
         assert comparison["group_b"] == "eduvision"
         assert comparison["group_a_count"] == 1
-        assert comparison["group_b_count"] == 1
+        assert comparison["group_b_count"] == 0
         assert comparison["group_a_avg_absolute_gain"] == 40.0
-        assert comparison["group_b_avg_absolute_gain"] == 60.0
+        assert comparison["group_b_avg_absolute_gain"] is None
         assert comparison["group_a_avg_baseline"] == 40.0
-        assert comparison["group_b_avg_baseline"] == 30.0
+        assert comparison["group_b_avg_baseline"] is None
         assert comparison["group_a_completed"] == 1
-        assert comparison["group_b_completed"] == 1
+        assert comparison["group_b_completed"] == 0
 
         # ── Step 12: Verify user isolation ────────────────────────────────
         summary_a = await effectiveness_svc.user_summary(TEST_USER_A)

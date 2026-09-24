@@ -340,7 +340,11 @@ async def compare_groups(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> APIResponse[GroupComparisonResponse]:
     service = EffectivenessService(uow.session)
-    result = await service.compare_groups(group_a=group_a, group_b=group_b)
+    result = await service.compare_groups(
+        user_id=user.id,
+        group_a=group_a,
+        group_b=group_b,
+    )
     return APIResponse(data=GroupComparisonResponse(**result))
 
 

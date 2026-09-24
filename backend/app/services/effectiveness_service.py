@@ -361,14 +361,17 @@ class EffectivenessService:
     async def compare_groups(
         self,
         *,
+        user_id: uuid.UUID,
         group_a: str,
         group_b: str,
     ) -> dict[str, Any]:
         stmt_a = select(EffectivenessAssessment).where(
             EffectivenessAssessment.experiment_group == group_a,
+            EffectivenessAssessment.user_id == user_id,
         )
         stmt_b = select(EffectivenessAssessment).where(
             EffectivenessAssessment.experiment_group == group_b,
+            EffectivenessAssessment.user_id == user_id,
         )
         result_a = await self._session.execute(stmt_a)
         result_b = await self._session.execute(stmt_b)
