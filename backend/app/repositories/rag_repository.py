@@ -700,8 +700,14 @@ class EmbeddingJobRepository(BaseRepository[EmbeddingJob]):
         return list(result.scalars().all())
 
     async def get_by_idempotency_key(
-        self, user_id: uuid.UUID, idempotency_key: str
+        self, user_id: uuid.UUID | None, idempotency_key: str
     ) -> EmbeddingJob | None:
+        """Look up a job by (user_id, idempotency_key).
+
+        ``EmbeddingJob.user_id`` is nullable, so ``user_id`` must accept None:
+        comparing the column to NULL would otherwise never match. A NULL user
+        simply yields no row, which is the correct "no prior job" answer.
+        """
         stmt = (
             select(EmbeddingJob)
             .where(

@@ -342,13 +342,17 @@ class QuizGenerationService:
             # Create AnswerKey
             ak = qp.answer_key
             # Map correct_option_idxs to public_ids for the answer key
-            correct_ids = None
+            correct_ids: list[str] = []
             if ak.correct_option_idxs is not None and qp.options:
-                correct_ids = [
-                    option_id_map.get(qp.options[i].id, str(i))
-                    for i in ak.correct_option_idxs
-                    if i < len(qp.options)
-                ]
+                for i in ak.correct_option_idxs:
+                    if i >= len(qp.options):
+                        continue
+                    option_id = qp.options[i].id
+                    # An unset option id falls back to its positional index,
+                    # which is the historical behaviour.
+                    correct_ids.append(
+                        option_id_map.get(option_id, str(i)) if option_id else str(i)
+                    )
 
             answer_key = AnswerKey(
                 question_id=question.id,

@@ -32,6 +32,7 @@ from app.models.quiz_version import QuizVersion
 from app.models.user import User
 from app.models.user_answer import UserAnswer
 from app.services.quiz_attempt_service import QuizAttemptService
+from tests.postgres.conftest import expected_migration_head
 
 pytestmark = pytest.mark.postgres
 
@@ -176,7 +177,7 @@ async def test_0032_schema_contract(pg_session: AsyncSession) -> None:
     heads = (await pg_session.execute(
         text("SELECT version_num FROM alembic_version")
     )).scalar_one()
-    assert heads == "0036_c4_topic_animation_assets"
+    assert heads == expected_migration_head()
 
     adaptive_col = await pg_session.execute(
         text(

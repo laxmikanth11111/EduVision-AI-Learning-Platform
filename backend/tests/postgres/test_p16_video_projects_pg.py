@@ -27,6 +27,7 @@ from app.models.video_project import VideoProjectRecord, VideoRenderStatus
 from app.services.video_project_builder import build_visual_learning_model, compose_project
 from app.services.video_project_service import VideoProjectService
 from app.services.video_render_backend import MockRenderBackend
+from tests.postgres.conftest import expected_migration_head
 
 pytestmark = pytest.mark.postgres
 
@@ -49,7 +50,7 @@ async def _compose_blueprint(topic: str) -> dict[str, Any]:
 
 async def test_p16_migration_head_is_0034(pg_session: AsyncSession) -> None:
     head = (await pg_session.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-    assert head == "0036_c4_topic_animation_assets"
+    assert head == expected_migration_head()
 
 
 async def test_p16_video_projects_table_and_constraints(pg_session: AsyncSession) -> None:

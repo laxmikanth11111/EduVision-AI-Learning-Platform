@@ -54,11 +54,14 @@ class VideoRendererService:
         logger.info("video_render_start", video_id=project.video_id, path=output_path)
 
         # 1. Render Visual Video Stream to Temporary Video File
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        # cv2.VideoWriter.fourcc is the supported spelling from OpenCV 4.5.4
+        # onward; the older module-level cv2.VideoWriter_fourcc alias is
+        # deprecated and is absent from the 5.x type stubs.
+        fourcc = cv2.VideoWriter.fourcc(*"mp4v")
         writer = cv2.VideoWriter(temp_video_path, fourcc, float(fps), (width, height))
 
         if not writer.isOpened():
-            fourcc = cv2.VideoWriter_fourcc(*"XVID")
+            fourcc = cv2.VideoWriter.fourcc(*"XVID")
             writer = cv2.VideoWriter(temp_video_path, fourcc, float(fps), (width, height))
 
         try:

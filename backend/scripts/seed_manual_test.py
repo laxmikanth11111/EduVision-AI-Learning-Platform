@@ -1,12 +1,12 @@
 import asyncio
 
-from app.models.presentation_collaborator import PresentationCollaborator
 from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.database.session import async_session_factory
 from app.models.content_unit import ContentUnit
 from app.models.presentation import Presentation
+from app.models.presentation_collaborator import PresentationCollaborator
 from app.models.user import User
 from shared.constants import (
     CollaboratorRole,

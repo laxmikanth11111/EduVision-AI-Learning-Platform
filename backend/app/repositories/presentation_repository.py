@@ -127,7 +127,12 @@ class PresentationRepository(BaseRepository[Presentation]):
 
         conditions: list[ColumnElement[bool]] = [Presentation.deleted_at.is_(None)]
 
-        if not is_admin and user_id is not None:
+        if not is_admin:
+            if user_id is None:
+                # Fail closed. An unscoped non-admin search used to skip the
+                # owner filter entirely and therefore returned every
+                # presentation in the table, regardless of who owned them.
+                return [], 0
             conditions.append(Presentation.owner_id == user_id)
 
         if q:

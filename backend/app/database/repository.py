@@ -20,6 +20,12 @@ from app.database.base import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
 
+# Preserves the exact Select shape across `_apply_load_options`. SQLAlchemy 2.x
+# models `Select` as variadic (`Select[*Ts]`), and `Select.options()` returns the
+# same type it was given, so a dedicated TypeVar keeps the row type intact
+# instead of widening or narrowing it at every call site.
+SelectType = TypeVar("SelectType", bound=Select[Any])
+
 LoadType = list[_AbstractLoad | type[_AbstractLoad]]
 
 
@@ -50,9 +56,9 @@ class BaseRepository(Generic[ModelType]):
 
     def _apply_load_options(
         self,
-        stmt: Select[tuple[ModelType]],
+        stmt: SelectType,
         load_options: LoadType | None,
-    ) -> Select[tuple[ModelType]]:
+    ) -> SelectType:
         if load_options:
             options: list[Any] = load_options
             stmt = stmt.options(*options)

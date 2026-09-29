@@ -301,7 +301,11 @@
     async function resumeSession(sessionId) {
         state.sessionId = sessionId;
         try {
-            const res = await authFetch(API + '/tutor/conversations/' + encodeURIComponent(sessionId) + '/messages?page=1&page_size=200');
+            // Address history by the session id (tus_), not the conversation
+            // id (tuc_). The old call passed the session id to
+            // /tutor/conversations/{id}/messages, which could never resolve and
+            // always 404'd, so resuming a session never showed any history.
+            const res = await authFetch(API + '/tutor/sessions/' + encodeURIComponent(sessionId) + '/messages?page=1&page_size=200');
             if (!res.ok) throw new Error('history ' + res.status);
             const json = await res.json();
             const messages = (json.data || []).slice().sort(function (a, b) {

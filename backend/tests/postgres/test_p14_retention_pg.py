@@ -32,6 +32,7 @@ from app.models.user import User
 from app.services.learner_analytics_service import LearnerAnalyticsService
 from app.services.review_schedule_service import ReviewScheduleService
 from app.services.review_scheduler import interval_at_step
+from tests.postgres.conftest import expected_migration_head
 
 pytestmark = pytest.mark.postgres
 
@@ -165,7 +166,7 @@ async def review_seed(pg_session: AsyncSession) -> dict[str, Any]:
 async def test_p14_no_new_migration_head_unchanged(pg_session: AsyncSession) -> None:
     """P14 reads existing tables only — the Alembic head is 0034 (P16 added it)."""
     head = (await pg_session.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-    assert head == "0036_c4_topic_animation_assets"
+    assert head == expected_migration_head()
 
 
 async def test_p14_complete_good_persists_jsonb_on_migrated_schema(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -44,7 +45,7 @@ class ScoreSummary(Base, UUIDMixin, TimestampMixin):
     incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     partially_correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unanswered_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    breakdown: Mapped[dict | None] = mapped_column(PortableJSONB, nullable=True)
+    breakdown: Mapped[dict[str, Any] | None] = mapped_column(PortableJSONB, nullable=True)
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -33,6 +33,7 @@ from app.models.quiz_version import QuizVersion
 from app.models.score_summary import ScoreSummary
 from app.models.user import User
 from app.services.learner_analytics_service import LearnerAnalyticsService
+from tests.postgres.conftest import expected_migration_head
 
 pytestmark = pytest.mark.postgres
 
@@ -221,7 +222,7 @@ async def test_p13_no_new_migration_head_unchanged(pg_session: AsyncSession) -> 
     head = (
         await pg_session.execute(text("SELECT version_num FROM alembic_version"))
     ).scalar_one()
-    assert head == "0036_c4_topic_animation_assets"
+    assert head == expected_migration_head()
 
 
 async def test_p13_overview_aggregates_on_migrated_schema(

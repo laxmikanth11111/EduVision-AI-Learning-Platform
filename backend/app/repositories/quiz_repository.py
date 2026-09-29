@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,7 @@ class QuizRepository(BaseRepository[Quiz]):
     async def get_by_public_id(
         self,
         public_id: str,
-        load_options: list | None = None,
+        load_options: list[Any] | None = None,
     ) -> Quiz | None:
         stmt = select(Quiz).where(Quiz.public_id == public_id)
         if load_options:

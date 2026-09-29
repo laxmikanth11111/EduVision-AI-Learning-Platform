@@ -37,7 +37,9 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.database.unit_of_work import UnitOfWork
 from app.models.document_chunk import DocumentChunk
+from app.models.embedding_job import EmbeddingJob
 from app.models.generated_lesson_version import GeneratedLessonVersion
+from app.models.vector_index import VectorIndex
 from app.repositories.content_repository import ContentUnitRepository
 from app.repositories.generated_lesson_repository import GeneratedLessonRepository
 from app.repositories.presentation_repository import PresentationRepository
@@ -48,6 +50,7 @@ from app.repositories.rag_repository import (
 )
 from app.services.chunking_service import (
     ChunkingService,
+    ChunkSourceUnit,
     units_from_content_unit,
     units_from_generated_lesson_version,
 )
@@ -230,7 +233,7 @@ class RagIndexingService:
     # ── Internals ─────────────────────────────────────────────────────────────
 
     def _chunk(
-        self, source_units: list[object], *, source: str
+        self, source_units: list[ChunkSourceUnit], *, source: str
     ) -> list[DocumentChunk]:
         chunker = ChunkingService(
             strategy=settings.RAG_INDEXING_STRATEGY or ChunkingStrategy.SEMANTIC.value,
@@ -312,12 +315,12 @@ class RagIndexingService:
     async def _ensure_index(
         self,
         *,
-        index: object | None,
+        index: VectorIndex | None,
         presentation_id: uuid.UUID | None,
         lesson_id: uuid.UUID | None,
         index_type: str,
         source_hash: str,
-    ) -> object:
+    ) -> VectorIndex:
         if index is not None:
             index = await self._indexes.mark_rebuilding(index)
             index.source_hash = source_hash
@@ -346,7 +349,7 @@ class RagIndexingService:
         index_id: uuid.UUID,
         idempotency_base: str,
         total_items: int,
-    ) -> object:
+    ) -> EmbeddingJob:
         normalized_user_id = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
         idempotency_key = f"index:{idempotency_base}"[:128]
         existing = await self._jobs.get_by_idempotency_key(normalized_user_id, idempotency_key)
@@ -412,7 +415,7 @@ class RagIndexingService:
         result = await self._uow.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def _dispatch(self, job: object) -> None:
+    async def _dispatch(self, job: EmbeddingJob) -> None:
         from app.workers.rag_tasks import embedding_generation_task
         from app.workers.tasks import safe_dispatch
 
@@ -423,8 +426,8 @@ class RagIndexingService:
         scope: str,
         public_id: str,
         *,
-        index: object,
-        job: object | None,
+        index: VectorIndex,
+        job: EmbeddingJob | None,
         chunks: int,
         skipped: bool = False,
     ) -> dict[str, object]:

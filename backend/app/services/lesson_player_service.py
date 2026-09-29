@@ -336,7 +336,9 @@ class LessonPlayerService:
         session_id: str,
         *,
         owner_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
+        # Every path either returns a session payload or raises ValueError, so
+        # this never returns None. Callers may safely splat the result.
         if owner_id:
             lesson_id = await self._lesson_id_for_session(session_id, owner_id)
             if lesson_id is None:
@@ -372,7 +374,7 @@ class LessonPlayerService:
         topic_index: int,
         *,
         owner_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         if owner_id:
             lesson_id = await self._lesson_id_for_session(session_id, owner_id)
             if lesson_id is None:
@@ -564,7 +566,9 @@ class LessonPlayerService:
         for idx, unit in enumerate(source_units):
             raw_pos = unit.get("position")
             try:
-                pos = int(raw_pos)
+                # A missing position falls back to the ordinal, matching the
+                # original `int(None)` -> TypeError behaviour explicitly.
+                pos = int(raw_pos) if raw_pos is not None else idx + 1
             except (TypeError, ValueError):
                 pos = idx + 1
             topic_index = next(

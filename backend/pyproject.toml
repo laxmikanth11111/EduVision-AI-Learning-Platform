@@ -70,7 +70,11 @@ include = ["app*"]
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-fix = true
+# `ruff check` is a VERIFICATION command and must be read-only. With fix = true
+# it silently rewrote working-tree source during a verification run and once
+# reverted a security guard in app/repositories/presentation_repository.py.
+# Applying fixes is now explicit: `ruff check --fix`.
+fix = false
 
 [tool.ruff.lint]
 select = [

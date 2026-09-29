@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
@@ -39,6 +39,27 @@ from app.services.assistant_prompt_builder import AssistantPromptBuilder
 from shared.constants import (
     AssistantMessageStatus,
 )
+
+if TYPE_CHECKING:
+    # Imported lazily at runtime to keep the app.ai -> app.services import
+    # direction acyclic; only needed for the history type annotations below.
+    from app.ai.models import AIMessage, RoleName
+
+
+def _as_role(value: str) -> RoleName:
+    """Narrow a stored role string onto the AIMessage Literal.
+
+    AssistantMessage.role is free-form text, but AIMessage requires one of four
+    known roles. Anything unrecognised becomes "assistant" instead of raising a
+    ValidationError while rebuilding prompt history.
+    """
+    if value == "system":
+        return "system"
+    if value == "user":
+        return "user"
+    if value == "model":
+        return "model"
+    return "assistant"
 
 
 def _serialize_session(s: AssistantSession) -> dict[str, Any]:
@@ -654,11 +675,11 @@ class LearningAssistantService:
         chunks = chunk_result.scalars().all()
         return [c.content[:500] for c in chunks if c.content]
 
-    async def _load_history(self, conversation_id: uuid.UUID) -> list:
+    async def _load_history(self, conversation_id: uuid.UUID) -> list[AIMessage]:
         msgs = await self._message_repo.recent_for_conversation(conversation_id, limit=20)
         from app.ai.models import AIMessage
         return [
-            AIMessage(role=m.role, content=m.content)
+            AIMessage(role=_as_role(m.role), content=m.content)
             for m in msgs
             if m.status == AssistantMessageStatus.COMPLETED.value
         ]
@@ -666,7 +687,7 @@ class LearningAssistantService:
     async def _generate_response(
         self,
         context_text: str,
-        history: list,
+        history: list[AIMessage],
         user_message: str,
     ) -> str:
         """Try AI provider; fall back to contextual answer if unavailable."""

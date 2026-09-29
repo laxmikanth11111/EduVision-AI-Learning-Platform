@@ -48,7 +48,11 @@ class Presentation(SoftDeletableBaseModel):
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[PresentationStatus] = mapped_column(
+    # Backed by a plain String(20) column, so reads and writes are text, not
+    # enum members. PresentationStatus is a str-mixin enum and every call site
+    # uses `.value`, so this is annotated as str to match what the database
+    # actually returns.
+    status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
         default=PresentationStatus.DRAFT,

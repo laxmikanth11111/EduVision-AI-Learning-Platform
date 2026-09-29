@@ -15,8 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.dependencies import get_current_user
 from app.database.unit_of_work import UnitOfWork, get_unit_of_work
+from app.models.generated_lesson import GeneratedLesson
 from app.models.user import User
 from app.schemas.annotations import (
+    AnnotationLayerResponse,
     AnnotationListResponse,
     AnnotationSaveResponse,
 )
@@ -39,7 +41,9 @@ class SaveAnnotationLayerRequest(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
 
 
-async def _owned_lesson(lesson_id: str, user_id: str, uow: UnitOfWork):
+async def _owned_lesson(
+    lesson_id: str, user_id: str, uow: UnitOfWork
+) -> GeneratedLesson:
     """Load a lesson, asserting the caller owns its presentation.
 
     Missing and non-owned lessons render identically (404) so the route does
@@ -68,7 +72,11 @@ async def list_annotations(
         user_id=str(user.id),
         lesson_id=lesson.id,
     )
-    return APIResponse(data=AnnotationListResponse(layers=layers))
+    return APIResponse(
+        data=AnnotationListResponse(
+            layers=[AnnotationLayerResponse(**layer) for layer in layers]
+        )
+    )
 
 
 @annotations_router.put(

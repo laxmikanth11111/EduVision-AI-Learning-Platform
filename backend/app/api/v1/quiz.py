@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, status
 
 from app.core.dependencies import get_current_user
@@ -160,7 +162,7 @@ async def get_attempt(
 
 @quiz_router.post(
     "/{quiz_id}/attempts/{attempt_id}/answers/{question_id}",
-    response_model=APIResponse[dict],
+    response_model=APIResponse[dict[str, Any]],
 )
 async def submit_single_answer(
     quiz_id: str,
@@ -169,7 +171,7 @@ async def submit_single_answer(
     request: SingleAnswerRequest,
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
-) -> APIResponse[dict]:
+) -> APIResponse[dict[str, Any]]:
     service = QuizAttemptService(uow)
     result = await service.submit_answer(
         quiz_id,

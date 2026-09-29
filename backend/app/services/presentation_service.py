@@ -29,6 +29,7 @@ from app.services.presentation_audit_service import PresentationAuditService
 from app.services.presentation_folder_service import PresentationFolderService
 from app.services.presentation_tag_service import PresentationTagService
 from app.services.presentation_version_service import PresentationVersionService
+from app.storage.base import StorageBackend
 from app.storage.factory import get_storage_backend
 from app.utils.file_helpers import (
     SUPPORTED_DOCUMENT_EXTENSIONS,
@@ -187,7 +188,9 @@ class PresentationService:
         owner_id: uuid.UUID | None = None,
     ) -> dict[str, Any]:
         if request.folder_id is not None:
-            await self._folder_service.validate_folder_ownership(request.folder_id)
+            await self._folder_service.validate_folder_ownership(
+                request.folder_id, owner_id
+            )
 
         presentation = await self._repo.create(
             title=request.title,
@@ -219,7 +222,9 @@ class PresentationService:
         owner_id: uuid.UUID | None = None,
     ) -> dict[str, Any]:
         if request.folder_id is not None:
-            await self._folder_service.validate_folder_ownership(request.folder_id)
+            await self._folder_service.validate_folder_ownership(
+                request.folder_id, owner_id
+            )
 
         presentation = await self._repo.create(
             title=request.title,
@@ -298,12 +303,15 @@ class PresentationService:
         self,
         public_id: str,
         request: PresentationUpdateRequest,
+        owner_id: uuid.UUID | None = None,
     ) -> dict[str, Any]:
         presentation = await self._get_presentation(public_id)
         self._assert_updated_at_matches(presentation, request.expected_updated_at)
 
         if request.folder_id is not None:
-            await self._folder_service.validate_folder_ownership(request.folder_id)
+            await self._folder_service.validate_folder_ownership(
+                request.folder_id, owner_id
+            )
 
         update_data: dict[str, Any] = {}
         if request.title is not None:
@@ -1040,7 +1048,7 @@ class PresentationService:
         return {"presentation_id": presentation.public_id, "task_scheduled": True}
 
     @staticmethod
-    async def _storage_delete_best_effort(storage: object, key: str) -> None:
+    async def _storage_delete_best_effort(storage: StorageBackend, key: str) -> None:
         """Remove a freshly-uploaded object when the DB write rolled back.
 
         Keeps storage and the database consistent: an object uploaded before a

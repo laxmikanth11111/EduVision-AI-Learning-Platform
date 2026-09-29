@@ -6,6 +6,7 @@ import csv
 import io
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
@@ -177,14 +178,14 @@ async def get_assessment(
 
 @effectiveness_router.get(
     "/learning-gain/{presentation_id}",
-    response_model=APIResponse[dict],
+    response_model=APIResponse[dict[str, Any]],
     summary="Calculate learning gain for a presentation",
 )
 async def get_learning_gain(
     presentation_id: uuid.UUID,
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
-) -> APIResponse[dict]:
+) -> APIResponse[dict[str, Any]]:
     service = EffectivenessService(uow.session)
     gain = await service.compute_learning_gain(
         user_id=user.id,
@@ -262,7 +263,7 @@ async def get_effectiveness_report(
 
 @effectiveness_router.post(
     "/feedback",
-    response_model=APIResponse[dict],
+    response_model=APIResponse[dict[str, Any]],
     status_code=status.HTTP_201_CREATED,
     summary="Submit optional learning feedback",
 )
@@ -270,7 +271,7 @@ async def submit_feedback(
     request: FeedbackSubmitRequest,
     user: User = Depends(get_current_user),
     uow: UnitOfWork = Depends(get_unit_of_work),
-) -> APIResponse[dict]:
+) -> APIResponse[dict[str, Any]]:
     pres_id = uuid.UUID(request.presentation_id) if request.presentation_id else None
     assess_id = uuid.UUID(request.assessment_id) if request.assessment_id else None
     service = UserFeedbackService(uow.session)

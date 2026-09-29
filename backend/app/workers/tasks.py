@@ -5,9 +5,9 @@ import html
 import smtplib
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from email.mime.text import MIMEText
-from typing import Any
+from typing import Any, TypeVar
 
 from celery import Task
 
@@ -21,13 +21,16 @@ logger = get_logger(__name__)
 
 DLQ_QUEUE = "dead_letter"
 
+_R = TypeVar("_R")
+
 
 def retry_backoff(task: Task, base_seconds: int = 60, cap_seconds: int = 600) -> int:
-    retries = int(task.request.retries or 0)
-    return min(base_seconds * (2**retries), cap_seconds)
+    # task.request is untyped (celery ships no stubs), so coerce explicitly.
+    retries = int(getattr(task.request, "retries", 0) or 0)
+    return int(min(base_seconds * (2**retries), cap_seconds))
 
 
-class TaskWithDLQ(Task):
+class TaskWithDLQ(Task):  # type: ignore[misc]  # celery ships no type stubs
     abstract = True
 
     def on_failure(
@@ -64,8 +67,8 @@ class TaskWithDLQ(Task):
             pass
 
 
-def _run_async(coro: Any) -> Any:
-    async def _wrapper() -> Any:
+def _run_async(coro: Coroutine[Any, Any, _R]) -> _R:
+    async def _wrapper() -> _R:
         try:
             return await coro
         finally:
@@ -160,7 +163,7 @@ def _forward_to_dlq(
         logger.error("task_dispatch_dlq_forward_failed", task_name=task_name)
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     name="eduvision.dlq.record",
     max_retries=0,
     acks_late=True,
@@ -219,7 +222,7 @@ async def _generate_thumbnail_async(public_id: str) -> str:
         return await PresentationService(uow).generate_thumbnail(public_id)
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="eduvision.presentations.generate_thumbnail",
     max_retries=settings.CELERY_TASK_MAX_RETRIES,
@@ -244,7 +247,7 @@ async def _start_source_ingestion_async(public_id: str) -> str:
         return await PresentationService(uow).start_source_ingestion(public_id)
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="eduvision.presentations.process_source_ingestion",
     max_retries=settings.CELERY_TASK_MAX_RETRIES,
@@ -269,7 +272,7 @@ async def _aggregate_analytics_async() -> int:
         return await PresentationAnalyticsService(uow).recompute_aggregates()
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="eduvision.presentations.aggregate_analytics",
     max_retries=settings.CELERY_TASK_MAX_RETRIES,
@@ -294,7 +297,7 @@ async def _cleanup_drafts_async(max_age_days: int) -> int:
         return await PresentationService(uow).cleanup_draft_presentations(max_age_days=max_age_days)
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="eduvision.presentations.cleanup_drafts",
     max_retries=settings.CELERY_TASK_MAX_RETRIES,
@@ -320,7 +323,7 @@ async def _cleanup_archived_async(retention_days: int) -> int:
         )
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="eduvision.presentations.cleanup_archived",
     max_retries=settings.CELERY_TASK_MAX_RETRIES,
@@ -346,7 +349,7 @@ async def _cleanup_soft_deleted_async(retention_days: int) -> int:
         )
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="eduvision.presentations.cleanup_soft_deleted",
     max_retries=settings.CELERY_TASK_MAX_RETRIES,
@@ -374,7 +377,7 @@ async def _generate_lesson_async(lesson_public_id: str) -> str:
     return lesson_public_id
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     base=TaskWithDLQ,
     name="eduvision.lessons.generate",
@@ -406,7 +409,7 @@ async def _export_generation_async(job_public_id: str) -> None:
         await service.process_export_job(job_public_id)
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     base=TaskWithDLQ,
     name="eduvision.exports.generate",

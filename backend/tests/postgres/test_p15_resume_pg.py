@@ -31,6 +31,7 @@ from app.models.presentation import Presentation
 from app.models.user import User
 from app.services.learner_progress_service import LearnerProgressService
 from app.services.learning_session_service import LearningSessionService
+from tests.postgres.conftest import expected_migration_head
 
 pytestmark = pytest.mark.postgres
 
@@ -92,7 +93,7 @@ async def resume_seed(pg_session: AsyncSession) -> dict[str, Any]:
 async def test_p15_no_new_migration_head_unchanged(pg_session: AsyncSession) -> None:
     """P15 adds no migration; the Alembic head is 0034 (P16 added it afterwards)."""
     head = (await pg_session.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-    assert head == "0036_c4_topic_animation_assets"
+    assert head == expected_migration_head()
 
 
 async def test_p15_position_persists_on_migrated_schema(

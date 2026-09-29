@@ -119,6 +119,29 @@ class TestCreatePresentation:
         self, presentation_service: PresentationService,
     ) -> None:
         folder_id = uuid.uuid4()
+        owner_id = uuid.uuid4()
+        presentation = _make_presentation(folder_id=folder_id)
+        presentation_service._repo.create = AsyncMock(return_value=presentation)
+
+        request = PresentationCreateRequest(title="Deck", folder_id=folder_id)
+        await presentation_service.create_presentation(request, owner_id=owner_id)
+
+        # The acting owner must be threaded into the check. It previously was
+        # not: the call passed only ``folder_id``, so ownership could not be
+        # verified at all.
+        presentation_service._folder_service.validate_folder_ownership.assert_awaited_once_with(
+            folder_id, owner_id
+        )
+
+    async def test_create_with_folder_passes_none_owner_for_fail_closed_check(
+        self, presentation_service: PresentationService,
+    ) -> None:
+        """A ``None`` owner must still reach the validator, not be skipped.
+
+        Skipping the check when no owner is available would silently allow an
+        unowned presentation to be filed into any folder.
+        """
+        folder_id = uuid.uuid4()
         presentation = _make_presentation(folder_id=folder_id)
         presentation_service._repo.create = AsyncMock(return_value=presentation)
 
@@ -126,7 +149,7 @@ class TestCreatePresentation:
         await presentation_service.create_presentation(request)
 
         presentation_service._folder_service.validate_folder_ownership.assert_awaited_once_with(
-            folder_id
+            folder_id, None
         )
 
 

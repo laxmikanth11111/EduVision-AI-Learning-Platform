@@ -74,6 +74,19 @@ class S3StorageBackend(StorageBackend):
             logger.error("s3_storage_init_failed", error=str(e))
             raise StorageError(message="Failed to initialize S3 storage", details={"error": str(e)})
 
+        # Provision the configured buckets. A fresh object store (MinIO on an
+        # empty volume, which is how docker compose starts it) has neither
+        # bucket, and every subsequent PutObject fails with NoSuchBucket.
+        # Provisioning is best-effort: a store the app may not create is not a
+        # startup failure, the first real upload still surfaces the error.
+        for bucket_name in (settings.S3_BUCKET_NAME, settings.S3_PUBLIC_BUCKET_NAME):
+            if not bucket_name:
+                continue
+            try:
+                await self._ensure_bucket(bucket_name)
+            except (BotoCoreError, ClientError, StorageError) as e:
+                logger.warning("s3_bucket_provisioning_skipped", bucket=bucket_name, error=str(e))
+
     async def _ensure_bucket(self, bucket_name: str) -> None:
         if not self._client:
             raise StorageError("S3 client not initialized")

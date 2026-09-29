@@ -127,16 +127,7 @@ app = FastAPI(
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.cors_origins_list
-    + ["localhost", "127.0.0.1", "[::1]", "backend", "frontend", "test", "testserver"],
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Response-Time"],
+    allowed_hosts=settings.trusted_hosts_list,
 )
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
@@ -161,6 +152,25 @@ app.add_middleware(
 )
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RequestIDMiddleware)
+
+# CORS is registered last so that it is the OUTERMOST middleware
+# (add_middleware inserts at position 0, so the last added runs first).
+#
+# It used to be added second, which left it almost innermost -- behind the
+# rate limiter, the request-size limiter, the host check, the security headers
+# and gzip. Any response those layers generated on their own (429, 413, 400)
+# therefore carried no Access-Control-* headers, so a cross-origin browser saw
+# an opaque CORS failure instead of the actual status code. CORS also
+# short-circuits preflight OPTIONS requests, so keeping it outermost stops
+# preflights from being rate-limited against the caller's real-request budget.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Response-Time"],
+)
 
 setup_exception_handlers(app)
 

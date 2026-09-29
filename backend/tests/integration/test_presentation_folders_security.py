@@ -225,3 +225,82 @@ async def test_create_under_foreign_parent_matches_missing_parent() -> None:
         )
         _assert_equalized_folder_not_found(foreign, message="Parent folder not found")
         _assert_equalized_folder_not_found(missing, message="Parent folder not found")
+
+
+async def test_create_presentation_in_own_folder_succeeds() -> None:
+    """The owner can attach their own folder when creating a presentation.
+
+    Regression guard: this path called
+    ``PresentationFolderService.validate_folder_ownership``, which did not exist
+    (only the private ``_assert_folder_owner`` did), so *any* presentation
+    create carrying a ``folder_id`` raised ``AttributeError`` -> HTTP 500.
+    """
+    async with await _make_client() as client:
+        a_headers = _headers(_USER_A_ID)
+        folder_id = await _create_folder(client, "Own Folder", owner=_USER_A_ID)
+
+        resp = await client.post(
+            "/api/v1/presentations/manual",
+            json={"title": "Filed Deck", "topics": ["Algebra"], "folder_id": str(folder_id)},
+            headers=a_headers,
+        )
+        assert resp.status_code in (200, 201), resp.text
+        assert resp.json()["data"]["folder_id"] == str(folder_id)
+
+
+async def test_create_presentation_in_foreign_folder_is_equalized() -> None:
+    """B cannot file a presentation into A's folder, and the 404 matches missing."""
+    async with await _make_client() as client:
+        folder_id = await _create_folder(client, "Victim Folder", owner=_USER_A_ID)
+        b_headers = _headers(_USER_B_ID)
+
+        foreign = await client.post(
+            "/api/v1/presentations/manual",
+            json={"title": "Trespass", "topics": ["Algebra"], "folder_id": str(folder_id)},
+            headers=b_headers,
+        )
+        missing = await client.post(
+            "/api/v1/presentations/manual",
+            json={"title": "Trespass", "topics": ["Algebra"], "folder_id": str(_MISSING_FOLDER_ID)},
+            headers=b_headers,
+        )
+        _assert_equalized_folder_not_found(foreign)
+        _assert_equalized_folder_not_found(missing)
+
+
+async def test_move_presentation_into_foreign_folder_is_equalized() -> None:
+    """Re-filing an owned presentation into another user's folder is rejected.
+
+    Also covers the missing ``owner_id`` argument on ``update_presentation``:
+    without threading the actor through, the target folder was never checked
+    against the caller.
+    """
+    async with await _make_client() as client:
+        a_headers = _headers(_USER_A_ID)
+        a_folder = await _create_folder(client, "A Folder", owner=_USER_A_ID)
+
+        created = await client.post(
+            "/api/v1/presentations/manual",
+            json={"title": "Movable", "topics": ["Algebra"]},
+            headers=a_headers,
+        )
+        assert created.status_code in (200, 201), created.text
+        presentation_id = created.json()["data"]["id"]
+
+        # Moving into A's own folder works.
+        ok = await client.patch(
+            f"/api/v1/presentations/{presentation_id}",
+            json={"folder_id": str(a_folder)},
+            headers=a_headers,
+        )
+        assert ok.status_code == 200, ok.text
+
+        b_folder = await _create_folder(client, "B Folder", owner=_USER_B_ID)
+
+        # A cannot move the presentation into B's folder.
+        foreign = await client.patch(
+            f"/api/v1/presentations/{presentation_id}",
+            json={"folder_id": str(b_folder)},
+            headers=a_headers,
+        )
+        _assert_equalized_folder_not_found(foreign)

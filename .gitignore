@@ -91,6 +91,10 @@ htmlcov/
 .coverage.*
 celerybeat-schedule
 celerybeat-schedule.*
+celerybeat-schedule-*
+**/celerybeat-schedule
+**/celerybeat-schedule.*
+**/celerybeat-schedule-*
 fail_list.txt
 full_results.txt
 demo_output.txt

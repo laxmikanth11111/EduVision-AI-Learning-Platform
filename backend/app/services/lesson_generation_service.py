@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.errors import AIError, AITruncationError
@@ -195,18 +196,24 @@ class LessonGenerationService:
         # Atomically claim the lesson for this attempt. A plain status check
         # races a concurrent dispatch (both sessions read QUEUED from their
         # own snapshot); the conditional UPDATE serializes on the write lock.
-        claim = await self._uow.session.execute(
-            update(GeneratedLesson)
-            .where(
-                GeneratedLesson.id == lesson.id,
-                GeneratedLesson.status != LessonStatus.PROCESSING.value,
-            )
-            .values(
-                status=LessonStatus.PROCESSING.value,
-                attempt_count=GeneratedLesson.attempt_count + 1,
-                retry_state=LessonRetryState.NONE.value,
-                next_retry_at=None,
-            )
+        # AsyncSession.execute() is declared to return the Result base class,
+        # but for DML it is always a CursorResult, which is the only type that
+        # exposes rowcount.
+        claim = cast(
+            "CursorResult[Any]",
+            await self._uow.session.execute(
+                update(GeneratedLesson)
+                .where(
+                    GeneratedLesson.id == lesson.id,
+                    GeneratedLesson.status != LessonStatus.PROCESSING.value,
+                )
+                .values(
+                    status=LessonStatus.PROCESSING.value,
+                    attempt_count=GeneratedLesson.attempt_count + 1,
+                    retry_state=LessonRetryState.NONE.value,
+                    next_retry_at=None,
+                )
+            ),
         )
         await self._uow.flush()
         if claim.rowcount == 0:
@@ -412,11 +419,14 @@ class LessonGenerationService:
             return None
         topics: list[SourceTopic] = []
         for topic in outline.topics or []:
+            raw_ranges = topic.get("slide_ranges")
+            if not isinstance(raw_ranges, (list, tuple)):
+                continue
             try:
                 topics.append(
                     SourceTopic(
                         title=str(topic["title"]),
-                        slide_ranges=[int(v) for v in topic["slide_ranges"]],
+                        slide_ranges=[int(v) for v in raw_ranges],
                     )
                 )
             except (KeyError, TypeError, ValueError):

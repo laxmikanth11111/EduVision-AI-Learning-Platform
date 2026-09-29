@@ -1153,16 +1153,18 @@ def _evaluate_answer(
         return is_correct, points_possible if is_correct else 0.0
 
     if ak_type == "multiple_select":
-        correct_ids = {str(i) for i in (answer_key.correct_option_ids or [])}
-        user_ids = {str(i) for i in (user_answer.option_ids or [])}
-        if correct_ids == user_ids:
+        # Distinct names from the multiple_choice branch above: these are sets
+        # (compared with & and -) while that branch's are ordered lists.
+        correct_id_set = {str(i) for i in (answer_key.correct_option_ids or [])}
+        user_id_set = {str(i) for i in (user_answer.option_ids or [])}
+        if correct_id_set == user_id_set:
             return True, points_possible
         # Partial credit: proportion of correct selections
-        if not correct_ids:
+        if not correct_id_set:
             return False, 0.0
-        correct_selected = len(correct_ids & user_ids)
-        incorrect_selected = len(user_ids - correct_ids)
-        ratio = max(0.0, (correct_selected - incorrect_selected) / len(correct_ids))
+        correct_selected = len(correct_id_set & user_id_set)
+        incorrect_selected = len(user_id_set - correct_id_set)
+        ratio = max(0.0, (correct_selected - incorrect_selected) / len(correct_id_set))
         points = round(points_possible * ratio, 2)
         return ratio >= 1.0, points
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -47,7 +47,9 @@ class QuizVersion(Base, UUIDMixin, TimestampMixin):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    generation_metadata: Mapped[dict | None] = mapped_column(PortableJSONB, nullable=True)
+    generation_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        PortableJSONB, nullable=True
+    )
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

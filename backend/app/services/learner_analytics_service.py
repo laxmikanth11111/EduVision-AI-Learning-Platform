@@ -579,6 +579,10 @@ class LearnerAnalyticsService:
 
         per_lesson: dict[uuid.UUID, dict[str, Any]] = {}
         for percent, time_spent, lesson_id in attempt_rows:
+            if lesson_id is None:
+                # The `Quiz.lesson_id.in_(lesson_ids)` filter already excludes
+                # these; guard anyway so a NULL can never become a dict key.
+                continue
             bucket = per_lesson.setdefault(
                 lesson_id, {"attempts": 0, "seconds": 0, "percents": []}
             )

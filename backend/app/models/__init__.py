@@ -1,10 +1,5 @@
 from app.database.base import Base
 from app.models.ai_usage import AIUsageLog
-from app.models.analytics import (
-    CreatorAnalyticsSnapshot,
-    LearningAnalyticsSnapshot,
-    SystemAnalytics,
-)
 from app.models.answer_key import AnswerKey
 from app.models.assistant_context_snapshot import AssistantContextSnapshot
 from app.models.assistant_conversation import AssistantConversation
@@ -38,6 +33,7 @@ from app.models.presentation import Presentation
 from app.models.presentation_analytics import PresentationAnalytics
 from app.models.presentation_annotation import PresentationAnnotation
 from app.models.presentation_audit_log import PresentationAuditLog
+from app.models.presentation_collaborator import PresentationCollaborator
 from app.models.presentation_folder import PresentationFolder
 from app.models.presentation_tag import PresentationTag
 from app.models.presentation_version import PresentationVersion

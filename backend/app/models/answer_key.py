@@ -24,11 +24,17 @@ class AnswerKey(Base, UUIDMixin, TimestampMixin):
         unique=True,
     )
     answer_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    correct_option_ids: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
+    correct_option_ids: Mapped[list[str] | None] = mapped_column(
+        PortableJSONB, nullable=True
+    )
     correct_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    acceptable_answers: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
-    matching_pairs: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
-    correct_order: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
+    acceptable_answers: Mapped[list[str] | None] = mapped_column(
+        PortableJSONB, nullable=True
+    )
+    matching_pairs: Mapped[list[dict[str, str]] | None] = mapped_column(
+        PortableJSONB, nullable=True
+    )
+    correct_order: Mapped[list[str] | None] = mapped_column(PortableJSONB, nullable=True)
     scoring_rule: Mapped[str | None] = mapped_column(String(20), nullable=True)
     points_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     case_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

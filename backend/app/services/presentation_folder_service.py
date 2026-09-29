@@ -28,6 +28,29 @@ class PresentationFolderService:
         if folder.owner_id != owner_id:
             raise NotFoundError(message="Folder not found")
 
+    async def validate_folder_ownership(
+        self, folder_id: uuid.UUID, owner_id: uuid.UUID | None
+    ) -> PresentationFolder:
+        """Return *folder_id* if it belongs to *owner_id*, else raise 404.
+
+        Used when a caller attaches an existing folder to a presentation. The
+        caller must supply the acting owner: without it there is nothing to
+        compare against, so the check fails closed rather than trusting an
+        unauthenticated ``folder_id``.
+
+        This method used to be referenced by ``PresentationService`` but never
+        existed (only the private ``_assert_folder_owner`` did), so every
+        presentation create/update carrying a ``folder_id`` raised
+        ``AttributeError`` -> 500.
+        """
+        if owner_id is None:
+            raise NotFoundError(message="Folder not found")
+        folder = await self._repo.get(folder_id)
+        if folder is None:
+            raise NotFoundError(message="Folder not found")
+        await self._assert_folder_owner(folder, owner_id)
+        return folder
+
     async def create_folder(
         self,
         name: str,

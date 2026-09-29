@@ -32,7 +32,7 @@ async def _render_project_async(user_id: uuid.UUID, public_id: str) -> str:
     return public_id
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     base=TaskWithDLQ,
     name="eduvision.videos.render_project",

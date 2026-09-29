@@ -112,6 +112,43 @@ async def send_message(
 
 
 @tutor_router.get(
+    "/sessions/{session_id}/messages",
+    response_model=PaginatedResponse[TutorMessageResponse],
+)
+async def list_session_messages(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> PaginatedResponse[TutorMessageResponse]:
+    """Tutor history for a session, addressed by the session's own public id.
+
+    Mirrors the POST above so the frontend can load history with the ``tus_``
+    session id it already holds, instead of a ``tuc_`` conversation id it never
+    has.
+    """
+    try:
+        items, total = await MasteryTutorService(uow).list_session_messages(
+            user.id, session_id, page=page, page_size=page_size
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    return PaginatedResponse(
+        data=[TutorMessageResponse(**i) for i in items],
+        pagination=PaginationMeta(
+            page=page,
+            page_size=page_size,
+            total=total,
+            total_pages=total_pages,
+            has_next=page < total_pages,
+            has_previous=page > 1,
+        ),
+    )
+
+
+@tutor_router.get(
     "/conversations/{conversation_id}/messages",
     response_model=PaginatedResponse[TutorMessageResponse],
 )

@@ -41,6 +41,28 @@ MIGRATIONS_DIR = BACKEND_DIR / "app" / "database" / "migrations"
 SCRATCH_DB = "eduvision_p2_pgtest"
 
 
+def expected_migration_head() -> str:
+    """Return the repository's single Alembic head revision id.
+
+    Asserting the applied version against a *hardcoded* string forced a manual
+    edit to six test modules every time a migration was added, and that churn
+    had silently rotted: four separate modules were still pinned to
+    ``0036`` while the real head had already reached ``0037``, so the whole
+    PostgreSQL suite was red. Deriving the head from the migration scripts keeps
+    the original intent ("the scratch DB is migrated to the repository head")
+    while making it self-maintaining.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
+    script = ScriptDirectory.from_config(cfg)
+    heads = script.get_heads()
+    assert len(heads) == 1, f"expected a single Alembic head, found {sorted(heads)}"
+    return heads[0]
+
+
 def _to_asyncpg_url(url: str) -> str:
     return (
         url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)

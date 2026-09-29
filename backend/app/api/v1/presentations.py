@@ -175,7 +175,7 @@ async def update_presentation(
 ) -> APIResponse[PresentationResponse]:
     service = PresentationService(uow)
     await service.assert_ownership(presentation_id, user.id)
-    result = await service.update_presentation(presentation_id, request)
+    result = await service.update_presentation(presentation_id, request, owner_id=user.id)
     return APIResponse(data=PresentationResponse(**result))
 
 

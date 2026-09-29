@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,7 +46,7 @@ class Question(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
-    meta: Mapped[dict | None] = mapped_column(PortableJSONB, nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(PortableJSONB, nullable=True)
 
     options: Mapped[list[QuestionOption]] = relationship(
         "QuestionOption",
@@ -79,6 +79,6 @@ class QuestionOption(Base, TimestampMixin):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    meta: Mapped[dict | None] = mapped_column(PortableJSONB, nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(PortableJSONB, nullable=True)
 
     question: Mapped[Question] = relationship("Question", foreign_keys=[question_id], back_populates="options")

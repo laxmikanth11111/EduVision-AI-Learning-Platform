@@ -50,6 +50,27 @@ from app.schemas.visual_intelligence import (
 logger = get_logger(__name__)
 
 
+def _as_str_list(value: Any) -> list[str]:
+    """Coerce an untyped JSON column into the ``list[str]`` the schemas expect.
+
+    The ``learning_objectives`` table stores these as generic JSON arrays, so the
+    element type is only guaranteed at the API boundary. Normalising here keeps
+    a malformed legacy row from raising a ValidationError deep in the response
+    serializer, and drops non-scalar entries instead of stringifying dicts.
+    """
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [value]
+    out: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, (int, float, bool)):
+            out.append(str(item))
+    return out
+
+
 class VisualGraphValidationError(ValidationError):
 
     def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
@@ -287,10 +308,12 @@ class VisualPersistenceService:
         obj = canvas.learning_objective
         objectives_schema = LearningObjectives(
             main_goal=obj.main_goal if obj else f"Understand {canvas.title}",
-            learning_objectives=obj.learning_objectives if obj else [],
-            important_ideas=obj.important_ideas if obj else [],
-            prerequisites=obj.prerequisites if obj else [],
-            expected_outcomes=obj.expected_outcomes if obj else [],
+            learning_objectives=_as_str_list(
+                obj.learning_objectives if obj else None
+            ),
+            important_ideas=_as_str_list(obj.important_ideas if obj else None),
+            prerequisites=_as_str_list(obj.prerequisites if obj else None),
+            expected_outcomes=_as_str_list(obj.expected_outcomes if obj else None),
         )
 
         layout_obj = canvas.layout

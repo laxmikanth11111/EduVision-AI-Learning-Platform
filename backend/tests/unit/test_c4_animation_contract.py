@@ -94,4 +94,9 @@ def test_c4_12_player_wires_animation_mode():
     assert "renderAnimationSlide" in html
     assert "c4HudControl" in html
     assert "/c4/animations/presentation/" in html
-    assert 'sandbox="allow-scripts allow-same-origin"' in html
+    # The animation frame must stay sandboxed. Combining allow-scripts with
+    # allow-same-origin lets AI-generated package content script the parent
+    # origin, so only allow-scripts is granted.
+    assert 'sandbox="allow-scripts"' in html
+    assert 'sandbox="allow-scripts allow-same-origin"' not in html
+    assert "allow-same-origin" not in html

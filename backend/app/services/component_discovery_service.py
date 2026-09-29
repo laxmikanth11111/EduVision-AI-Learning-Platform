@@ -152,7 +152,7 @@ class ComponentDiscoveryService:
             "only", "just", "still", "even", "now", "new", "old", "all",
         }
 
-        unique_names: list[str] = []
+        deduped_names: list[str] = []
         seen_lower: set[str] = set()
         for term, _score in scored:
             lower = term.lower()
@@ -166,14 +166,22 @@ class ComponentDiscoveryService:
             if len(term) < 3:
                 continue
             seen_lower.add(lower)
-            unique_names.append(term)
-            if len(unique_names) >= 6:
+            deduped_names.append(term)
+            if len(deduped_names) >= 6:
                 break
 
-        if not unique_names:
-            unique_names = [f"{title or 'Topic'} Step 1", f"{title or 'Topic'} Step 2", f"{title or 'Topic'} Step 3"]
+        if not deduped_names:
+            return self._build_components(
+                [
+                    f"{title or 'Topic'} Step 1",
+                    f"{title or 'Topic'} Step 2",
+                    f"{title or 'Topic'} Step 3",
+                ],
+                content,
+                title,
+            )
 
-        return self._build_components(unique_names, content, title)
+        return self._build_components(deduped_names, content, title)
 
     def _build_components(
         self, names: list[str], content: str, title: str | None,

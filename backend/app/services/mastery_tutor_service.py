@@ -358,6 +358,36 @@ class MasteryTutorService:
         items = list(result.scalars().all())
         return [_serialize_message(m) for m in items], int(total)
 
+    async def list_session_messages(
+        self,
+        user_id: uuid.UUID,
+        session_public_id: str,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List the messages of the conversation belonging to a tutor *session*.
+
+        Sessions are the frontend's handle (``tus_``), but ``TutorMessage`` rows
+        are keyed by conversation (``tuc_``). The frontend only ever has the
+        session id, so it previously called
+        ``GET /tutor/conversations/{conversation_id}/messages`` with a session
+        id, which cannot resolve and always 404s -- tutor history/resume was
+        unreachable. This resolves the same session -> latest conversation link
+        that ``send_message`` uses, so the two are guaranteed consistent.
+
+        A session with no messages yet has no conversation; that is an empty
+        history, not an error.
+        """
+        session = await self._session_repo.get_for_user_or_raise(
+            user_id, session_public_id
+        )
+        conversation = await self._conversation_repo.latest_for_session(session.id)
+        if conversation is None:
+            return [], 0
+        return await self.list_messages(
+            user_id, conversation.public_id, page=page, page_size=page_size
+        )
+
     # ── Remediation ─────────────────────────────────────────────────────────
 
     async def remediate(

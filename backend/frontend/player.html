@@ -1462,7 +1462,12 @@ function renderVisualSlide(idx) {
             '</div>';
 
         if (asset.svg_content) {
-            html += '<div class="c3-visual-svg-wrap">' + asset.svg_content + '</div>';
+            const safeSvg = sanitizeSvgMarkup(asset.svg_content);
+            if (safeSvg) {
+                html += '<div class="c3-visual-svg-wrap">' + safeSvg + '</div>';
+            } else {
+                html += '<div class="c3-visual-empty">The generated visual content could not be safely displayed.</div>';
+            }
         } else {
             html += '<div class="c3-visual-empty">The generated visual content is not available for display.</div>';
         }
@@ -1510,7 +1515,15 @@ function renderVisualSlide(idx) {
                 if (n && nums.indexOf(n) === -1) nums.push(n);
             });
             nums.forEach(function (n) {
-                html += '<span class="c3-source-ref" onclick="jumpToSourceSlide(' + n + ')">&#128196; Slide ' + n + '</span>';
+                // Only a real slide number may reach the inline handler. The
+                // value is LLM-authored, so it is coerced to an integer first;
+                // anything else renders as inert, non-clickable text.
+                const num = parseInt(String(n), 10);
+                if (Number.isFinite(num) && num > 0) {
+                    html += '<span class="c3-source-ref" onclick="jumpToSourceSlide(' + num + ')">&#128196; Slide ' + num + '</span>';
+                } else {
+                    html += '<span class="c3-source-ref">&#128196; ' + escHtml(n) + '</span>';
+                }
             });
             html += '</div>';
         }
@@ -1520,7 +1533,7 @@ function renderVisualSlide(idx) {
         const aid = asset.id || asset.asset_id;
         if (aid) {
             html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-                '<button class="c3-download-btn" onclick="c3DownloadSVG(\'' + aid + '\',\'' + escHtml(t.title) + '.svg\')">&#11015; Download SVG</button>' +
+                '<button class="c3-download-btn" onclick="c3DownloadSVG(\'' + escHtml(aid) + '\',\'' + escHtml(t.title) + '.svg\')">&#11015; Download SVG</button>' +
                 '</div>';
         }
     }
@@ -1635,7 +1648,10 @@ function renderAnimationSlide(idx) {
             '</div>';
 
         html += '<div class="c4-anim-stage">' +
-            '<iframe class="c4-anim-frame" sandbox="allow-scripts allow-same-origin" ' +
+            // The frame stays sandboxed and must never regain the same-origin
+            // grant: that combination lets AI-generated package content reach
+            // back into this origin and defeat the sandbox entirely.
+            '<iframe class="c4-anim-frame" sandbox="allow-scripts" ' +
             'title="Playback of ' + escHtml(typeLabel) + '" ' +
             'src="about:blank"></iframe>' +
             '<div class="c4-anim-hud">' +
@@ -1687,7 +1703,14 @@ function renderAnimationSlide(idx) {
                 if (n && nums.indexOf(n) === -1) nums.push(n);
             });
             nums.forEach(function (n) {
-                html += '<span class="c3-source-ref" onclick="jumpToSourceSlide(' + n + ')">&#128196; Slide ' + n + '</span>';
+                // See the C3 renderer above: LLM-authored value is coerced to
+                // an integer before it reaches the inline handler.
+                const num = parseInt(String(n), 10);
+                if (Number.isFinite(num) && num > 0) {
+                    html += '<span class="c3-source-ref" onclick="jumpToSourceSlide(' + num + ')">&#128196; Slide ' + num + '</span>';
+                } else {
+                    html += '<span class="c3-source-ref">&#128196; ' + escHtml(n) + '</span>';
+                }
             });
             html += '</div>';
         }
@@ -3491,14 +3514,93 @@ function resultLessonPublicId() {
 }
 
 // ── Utils ────────────────────────────────────────────────────────────────
+// escHtml is used in BOTH text and quoted-attribute positions, so it must
+// neutralise quotes as well as angle brackets. textContent->innerHTML alone
+// only escapes & < >, which left attribute and inline-handler interpolations
+// injectable. Escaping quotes is inert in text nodes (they still render as
+// " and ') so this is safe for the existing text call sites.
 function escHtml(s) {
     if (!s) return '';
     const d = document.createElement('div');
     d.textContent = s;
-    return d.innerHTML;
+    return d.innerHTML
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 function escSvg(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Server-rendered SVG is LLM-derived, so it is treated as untrusted markup.
+// It is parsed in an inert document (DOMParser never executes scripts or loads
+// resources) and only structural/scripting/dangerous elements plus every event
+// handler and script-bearing URL are stripped before the result is re-inserted.
+const SVG_FORBIDDEN_TAGS = new Set([
+    'script', 'foreignobject', 'iframe', 'object', 'embed', 'audio', 'video',
+    'animate', 'animatetransform', 'animatemotion', 'set', 'handler', 'listener'
+]);
+const SVG_URL_ATTRS = ['href', 'xlink:href', 'src', 'from', 'to', 'values', 'begin'];
+
+// Strict allowlist. A single-character "relative path" test is unsafe because
+// it would also match the first letter of a scheme such as `javascript:`.
+function svgUrlIsSafe(value) {
+    const s = String(value == null ? '' : value).trim();
+    if (!s) return true;                                   // empty is inert
+    if (s.charAt(0) === '#') return true;                  // same-document ref
+    if (s.charAt(0) === '/') return true;                  // root-relative
+    if (/^\.{1,2}\//.test(s)) return true;                 // explicitly relative
+    if (/^https?:\/\//i.test(s)) return true;              // remote http(s)
+    if (/^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i.test(s)) {
+        return true;                                       // raster data URI only
+    }
+    return false;                                          // javascript:, vbscript:, data:text/html, ...
+}
+
+function sanitizeSvgMarkup(markup) {
+    if (!markup) return '';
+    let doc;
+    try {
+        doc = new DOMParser().parseFromString(String(markup), 'image/svg+xml');
+    } catch (e) {
+        return '';
+    }
+    if (!doc || !doc.documentElement) return '';
+    // A parse failure nests a <parsererror> report inside the root; never
+    // surface that to the user.
+    if (doc.querySelector('parsererror')) return '';
+    const root = doc.documentElement;
+    if (root.nodeName.toLowerCase() !== 'svg') return '';
+
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    const doomed = [];
+    let node = root;
+    while (node) {
+        const name = node.nodeName.toLowerCase();
+        if (SVG_FORBIDDEN_TAGS.has(name)) {
+            doomed.push(node);
+        } else {
+            const attrs = Array.prototype.slice.call(node.attributes || []);
+            attrs.forEach(function (a) {
+                const an = a.name.toLowerCase();
+                const local = an.indexOf(':') !== -1 ? an.split(':').pop() : an;
+                const av = String(a.value == null ? '' : a.value);
+                if (an.startsWith('on')) {
+                    node.removeAttribute(a.name);
+                    return;
+                }
+                if (an === 'style' && /expression\s*\(|url\s*\(\s*['"]?\s*javascript:/i.test(av)) {
+                    node.removeAttribute(a.name);
+                    return;
+                }
+                if (SVG_URL_ATTRS.indexOf(local) !== -1 && !svgUrlIsSafe(av)) {
+                    node.removeAttribute(a.name);
+                }
+            });
+        }
+        node = walker.nextNode();
+    }
+    doomed.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    return root.outerHTML;
 }
 
 // ── Teaching tools & annotations ─────────────────────────────────────────

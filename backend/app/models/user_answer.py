@@ -48,9 +48,11 @@ class UserAnswer(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
     answer_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    option_ids: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
+    option_ids: Mapped[list[str] | None] = mapped_column(PortableJSONB, nullable=True)
     text_value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    matching_pairs: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
-    order_values: Mapped[list | None] = mapped_column(PortableJSONB, nullable=True)
+    matching_pairs: Mapped[list[dict[str, str]] | None] = mapped_column(
+        PortableJSONB, nullable=True
+    )
+    order_values: Mapped[list[str] | None] = mapped_column(PortableJSONB, nullable=True)
     is_auto_graded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     grading_status: Mapped[str] = mapped_column(String(20), nullable=False, default="auto")

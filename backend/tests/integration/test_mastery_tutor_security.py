@@ -284,6 +284,77 @@ async def test_cross_user_message_listing_isolation() -> None:
         assert resp.status_code == 404
 
 
+async def test_session_scoped_message_listing_returns_history() -> None:
+    """History is addressable by the session id the frontend actually holds.
+
+    Regression guard: ``resumeSession()`` in ``frontend/tutor.html`` fetched
+    ``GET /tutor/conversations/{session_id}/messages`` with a ``tus_`` session id
+    against a route that requires a ``tuc_`` conversation id, so it always 404'd
+    and tutor resume never rendered history.
+    """
+    concept_id = await _seed_learner_a_concept()
+    async with await _make_client() as client:
+        a_headers = _headers(_USER_A_ID)
+        session_obj = await _create_session(client, a_headers)
+
+        send = await client.post(
+            f"/api/v1/tutor/sessions/{session_obj['id']}/messages",
+            json={"content": f"explain {concept_id}"},
+            headers=a_headers,
+        )
+        assert send.status_code == 201, send.text
+
+        resp = await client.get(
+            f"/api/v1/tutor/sessions/{session_obj['id']}/messages",
+            headers=a_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()["data"]
+        roles = {msg["role"] for msg in data}
+        assert roles == {"user", "assistant"}
+        assert resp.json()["pagination"]["total"] == len(data)
+
+
+async def test_session_scoped_history_of_empty_session_is_empty_not_404() -> None:
+    """A session with no conversation yet is an empty history, not an error."""
+    async with await _make_client() as client:
+        a_headers = _headers(_USER_A_ID)
+        session_obj = await _create_session(client, a_headers)
+
+        resp = await client.get(
+            f"/api/v1/tutor/sessions/{session_obj['id']}/messages",
+            headers=a_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["data"] == []
+
+
+async def test_session_scoped_history_is_learner_scoped() -> None:
+    """User B must get 404 for User A's session history (no existence leak)."""
+    concept_id = await _seed_learner_a_concept()
+    async with await _make_client() as client:
+        a_headers = _headers(_USER_A_ID)
+        b_headers = _headers(_USER_B_ID)
+
+        session_obj = await _create_session(client, a_headers)
+        send = await client.post(
+            f"/api/v1/tutor/sessions/{session_obj['id']}/messages",
+            json={"content": f"explain {concept_id}"},
+            headers=a_headers,
+        )
+        assert send.status_code == 201, send.text
+
+        foreign = await client.get(
+            f"/api/v1/tutor/sessions/{session_obj['id']}/messages",
+            headers=b_headers,
+        )
+        missing = await client.get(
+            "/api/v1/tutor/sessions/nope-404/messages", headers=b_headers
+        )
+        assert foreign.status_code == 404
+        assert missing.status_code == 404
+
+
 async def test_cross_user_remediation_isolation() -> None:
     concept_id = await _seed_learner_a_concept()
     async with await _make_client() as client:

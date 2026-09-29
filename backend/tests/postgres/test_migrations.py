@@ -11,6 +11,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from tests.postgres.conftest import expected_migration_head
+
 pytestmark = pytest.mark.postgres
 
 # Columns converted to PortableJSONB in WS1 — each must be a native PG jsonb column.
@@ -57,7 +59,7 @@ EXPECTED_TABLES: set[str] = {
 }
 
 
-EXPECTED_HEAD = "0036_c4_topic_animation_assets"
+EXPECTED_HEAD = expected_migration_head()
 
 
 async def test_alembic_revision_is_single_head(pg_engine: AsyncEngine):
@@ -77,6 +79,70 @@ async def test_all_production_tables_exist(pg_engine: AsyncEngine):
         tables = {name for (name,) in result.all()}
     missing = EXPECTED_TABLES - tables
     assert not missing, f"tables missing after alembic upgrade head: {sorted(missing)}"
+
+
+async def test_orm_tables_are_fully_covered_by_migrations(pg_engine: AsyncEngine):
+    """Every table the ORM can query must exist after ``alembic upgrade head``.
+
+    The default (SQLite) suites build their schema with ``metadata.create_all``,
+    so they derive the schema *from the ORM* and are structurally incapable of
+    detecting ORM/DB drift. Only this suite runs the real migration lineage.
+
+    That blind spot had a concrete cost: ``VisualCanvas.lesson_id`` and the
+    three ``app/models/analytics.py`` tables existed in the ORM but were never
+    created by any migration, and both defects stayed invisible because
+    ``EXPECTED_TABLES`` below was a hand-maintained allowlist of 18 tables that
+    happened to omit them. Deriving the expectation from ORM metadata makes
+    this a real parity gate instead of a spot check.
+    """
+    from app.models import Base  # noqa: PLC0415  (import registers all models)
+
+    orm_tables = set(Base.metadata.tables)
+    async with pg_engine.connect() as conn:
+        result = await conn.execute(
+            text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        )
+        db_tables = {name for (name,) in result.all()}
+
+    missing = orm_tables - db_tables
+    assert not missing, (
+        "ORM declares tables that no migration creates "
+        f"(they will 500 on a fresh database): {sorted(missing)}"
+    )
+
+
+async def test_orm_columns_exist_for_every_table(pg_engine: AsyncEngine):
+    """Catch the narrower ``VisualCanvas.lesson_id`` class of drift.
+
+    A table can exist while one of its ORM columns does not. Because
+    SQLAlchemy always emits the full column list in a ``SELECT``, a single
+    missing column breaks *every* read of that table, not just the code path
+    that happens to use it.
+    """
+    from app.models import Base  # noqa: PLC0415
+
+    async with pg_engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public'"
+            )
+        )
+        db_columns: dict[str, set[str]] = {}
+        for table, column in result.all():
+            db_columns.setdefault(table, set()).add(column)
+
+    problems: list[str] = []
+    for table_name, table in Base.metadata.tables.items():
+        if table_name not in db_columns:
+            continue  # reported by test_orm_tables_are_fully_covered_by_migrations
+        missing = {c.name for c in table.columns} - db_columns[table_name]
+        if missing:
+            problems.append(f"{table_name}: {sorted(missing)}")
+
+    assert not problems, (
+        "ORM columns absent from the migrated schema: " + "; ".join(sorted(problems))
+    )
 
 
 async def test_jsonb_columns_use_native_pg_jsonb(pg_engine: AsyncEngine):

@@ -117,7 +117,40 @@ celery_app.conf.update(
 )
 
 
-@celery_app.task(
+def _assert_routed_queues_are_consumed() -> None:
+    """Fail fast if a routed queue is missing from the worker's ``-Q`` list.
+
+    ``task_routes`` sends tasks to queues such as ``ai``, ``embeddings``,
+    ``analytics``, ``videos`` and ``dead_letter``, but a Celery worker only
+    consumes the queues named by ``-Q``. The container command used to pass no
+    ``-Q`` at all, so the worker consumed only ``default`` and every task routed
+    elsewhere was published to the broker and never executed -- a silent no-op
+    background pipeline.
+
+    The queue list now lives in ``settings.CELERY_WORKER_QUEUES`` and is passed
+    to the worker explicitly, but those two lists can still drift. This check
+    turns that drift into a startup error instead of a stalled queue.
+    """
+    routed = {
+        route["queue"]
+        for route in celery_app.conf.task_routes.values()
+        if isinstance(route, dict) and "queue" in route
+    }
+    consumed = {q.strip() for q in settings.CELERY_WORKER_QUEUES.split(",") if q.strip()}
+    unconsumed = routed - consumed
+    if unconsumed:
+        raise RuntimeError(
+            "CELERY_WORKER_QUEUES does not cover every routed queue: "
+            f"missing {sorted(unconsumed)}; consumed={sorted(consumed)}. "
+            "Add the queue to settings.CELERY_WORKER_QUEUES and to the worker's "
+            "-Q argument, or tasks published to it will never run."
+        )
+
+
+_assert_routed_queues_are_consumed()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
     bind=True,
     name="eduvision.health_check",
     max_retries=settings.CELERY_TASK_MAX_RETRIES,

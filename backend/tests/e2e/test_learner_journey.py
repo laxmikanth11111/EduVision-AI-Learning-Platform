@@ -121,9 +121,12 @@ def test_learner_journey_panel_renders(server_env, page):
         ), "Learner journey panel did not render and no valid fallback state shown"
         return
 
-    assert "Learner Progress" in panel.inner_text()
-    assert "Lesson progress" in panel.inner_text()
-    assert "Assessment" in panel.inner_text()
+    # inner_text() reflects rendered text, and the panel heading is styled with
+    # `text-transform: uppercase`, so compare case-insensitively.
+    panel_text = panel.inner_text().lower()
+    assert "learner progress" in panel_text
+    assert "lesson progress" in panel_text
+    assert "assessment" in panel_text
 
 
 @pytest.mark.e2e

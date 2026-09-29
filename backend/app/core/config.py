@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     CELERY_RESULT_SERIALIZER: str = "json"
     CELERY_ACCEPT_CONTENT: list[str] = ["json"]
     CELERY_TASK_DEFAULT_QUEUE: str = "default"
+    # Every queue the worker must consume. Must stay a superset of the queues
+    # named in ``celery_app.conf.task_routes``; ``celery_app`` asserts that at
+    # import time so a newly routed queue cannot be silently left unconsumed.
+    CELERY_WORKER_QUEUES: str = (
+        "default,ai,uploads,notifications,email,"
+        "embeddings,embedding_batch,analytics,videos,dead_letter"
+    )
     CELERY_TASK_DLQ_ENABLED: bool = False
     CELERY_TASK_MAX_RETRIES: int = 3
     CELERY_TASK_RETRY_DELAY: int = 60
@@ -392,7 +399,7 @@ class Settings(BaseSettings):
     # ── Cookie ────────────────────────────────────────────────────────────────
     COOKIE_DOMAIN: str | None = None
     COOKIE_SECURE: bool = True
-    COOKIE_SAME_SITE: str = "lax"
+    COOKIE_SAME_SITE: Literal["lax", "strict", "none"] = "lax"
     COOKIE_PATH: str = "/"
 
     # ── Upload ────────────────────────────────────────────────────────────────
@@ -459,6 +466,42 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.APP_CORS_ORIGINS.split(",") if o.strip()]
+
+    #: Hosts that must always be accepted so local, in-container, and test
+    #: requests are not rejected by TrustedHostMiddleware.
+    BASE_TRUSTED_HOSTS: list[str] = [
+        "localhost",
+        "127.0.0.1",
+        "[::1]",
+        "backend",
+        "frontend",
+        "test",
+        "testserver",
+    ]
+
+    @property
+    def trusted_hosts_list(self) -> list[str]:
+        """Host-header patterns for TrustedHostMiddleware.
+
+        ``APP_CORS_ORIGINS`` holds full origins such as
+        ``https://app.example.com``, but TrustedHostMiddleware matches the bare
+        hostname from the ``Host`` header (``host == pattern``). Passing the
+        origins through verbatim therefore contributed patterns that could never
+        match: configuring a real production origin would have left it absent
+        from the allow-list and returned ``400 Invalid host header`` on every
+        request. The extra local/container/test hosts are what actually made
+        local development work, which hid the bug.
+
+        Each origin is reduced to its hostname here. ``urlsplit(...).hostname``
+        lowercases and preserves a leading ``*.``, so wildcard origins such as
+        ``https://*.example.com`` correctly become ``*.example.com``.
+        """
+        hosts: list[str] = []
+        for origin in self.cors_origins_list:
+            host = urlsplit(origin).hostname
+            if host:
+                hosts.append(host)
+        return [*dict.fromkeys([*hosts, *self.BASE_TRUSTED_HOSTS])]
 
     @property
     def allowed_extensions_list(self) -> list[str]:

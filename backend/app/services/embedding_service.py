@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import uuid
 from dataclasses import dataclass, field
+from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -158,9 +159,11 @@ class EmbeddingService:
             group = chunks[start : start + resolved_batch]
             group_texts = texts[start : start + resolved_batch]
             try:
+                # partial() binds the batch without a closure, so the callable
+                # is unambiguously typed and cannot capture a stale loop value.
                 response, _ = await run_with_retry(
                     self._embedding_retry_policy(provider),
-                    lambda gt=group_texts: provider.embed(gt),
+                    partial(provider.embed, group_texts),
                     on_retry=self._on_embedding_retry,
                 )
             except Exception as exc:  # noqa: BLE001 - boundary is intentional
