@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.commit_barrier import clear_commit_hook, publish_commit_hook
 from app.core.config import settings
 from app.database.retry import retry_on_db_failure
 from app.database.session import async_session_factory
@@ -90,6 +92,19 @@ class UnitOfWork:
         await self.session.rollback()
 
 
-async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
+async def get_unit_of_work(request: Request) -> AsyncGenerator[UnitOfWork]:
+    """Yield a request-scoped UnitOfWork.
+
+    The commit is published to :class:`~app.core.commit_barrier.CommitBarrierRoute`
+    so it runs *before* the response is sent. FastAPI unwinds dependency
+    teardown only after the response has left the app, so committing there
+    would let a ``201`` reach the client ahead of its own transaction.
+    ``__aexit__`` keeps its commit as a fallback for callers that bypass the
+    barrier (Celery workers, direct use).
+    """
     async with UnitOfWork() as uow:
-        yield uow
+        publish_commit_hook(request, uow.commit)
+        try:
+            yield uow
+        finally:
+            clear_commit_hook(request)

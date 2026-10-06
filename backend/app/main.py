@@ -41,6 +41,7 @@ from app.api.v1.video_projects import video_projects_router
 from app.api.v1.video_router import video_router
 from app.api.v1.video_runtime_router import video_runtime_router
 from app.api.v1.visual_canvases import visual_router
+from app.core.commit_barrier import CommitBarrierMiddleware
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.database.session import close_database_connections
@@ -124,6 +125,15 @@ app = FastAPI(
     license_info={"name": "Proprietary"},
     terms_of_service=None,
 )
+
+# Commits the request transaction before the client observes a successful
+# response. FastAPI unwinds `yield`-dependency teardown (where the UnitOfWork
+# commits) only after `await response(scope, receive, send)`, so without this a
+# client can see a 201 for a resource whose INSERT is still uncommitted and get
+# 404 on an immediate follow-up read. Registered first so it is the innermost
+# user middleware: it commits as late as possible, just before the response head
+# is handed upstream. See app/core/commit_barrier.py.
+app.add_middleware(CommitBarrierMiddleware)
 
 app.add_middleware(
     TrustedHostMiddleware,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from fastapi import Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
 
+from app.core.commit_barrier import clear_commit_hook, publish_commit_hook
 from app.core.config import settings
 from app.core.logging import get_logger
 
@@ -40,8 +42,17 @@ async_session_factory = async_sessionmaker(
 )
 
 
-async def get_session() -> AsyncGenerator[AsyncSession]:
+async def get_session(request: Request) -> AsyncGenerator[AsyncSession]:
+    """Yield a request-scoped session, committing before the response is sent.
+
+    The commit is published to
+    :class:`~app.core.commit_barrier.CommitBarrierRoute` because dependency
+    teardown runs after the response has already been handed to the ASGI
+    server; committing only there lets a successful response be observed
+    before its own transaction is visible elsewhere.
+    """
     async with async_session_factory() as session:
+        publish_commit_hook(request, session.commit)
         try:
             yield session
             await session.commit()
@@ -49,6 +60,7 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
             await session.rollback()
             raise
         finally:
+            clear_commit_hook(request)
             await session.close()
 
 

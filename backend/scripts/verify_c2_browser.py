@@ -15,8 +15,10 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+from typing import Any
+
 import httpx
-from playwright.async_api import async_playwright
+from playwright.async_api import ConsoleMessage, Response, async_playwright
 
 BASE_URL = "http://127.0.0.1:8000"
 PPTX_PATH = os.path.join(os.path.dirname(__file__), "..", "tests", "fixtures", "computer_networks_sample.pptx")
@@ -24,7 +26,7 @@ SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "screensh
 SCREENSHOT_PATH = os.path.join(SCREENSHOT_DIR, "c2_topic_hierarchy_verified.png")
 
 
-async def run_c2_browser_verification():
+async def run_c2_browser_verification() -> None:
     print("=== Starting Checkpoint C2 E2E Browser Verification ===")
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
@@ -136,12 +138,23 @@ async def run_c2_browser_verification():
         context = await browser.new_context(viewport={"width": 1366, "height": 768})
         page = await context.new_page()
 
-        console_errors = []
-        network_errors = []
+        console_errors: list[str] = []
+        network_errors: list[str] = []
 
-        page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
-        page.on("pageerror", lambda err: console_errors.append(str(err)))
-        page.on("response", lambda resp: network_errors.append(f"{resp.status} {resp.url}") if resp.status >= 400 and "/api/v1/auth" not in resp.url else None)
+        def _on_console(msg: ConsoleMessage) -> None:
+            if msg.type == "error":
+                console_errors.append(msg.text)
+
+        def _on_page_error(err: Any) -> None:
+            console_errors.append(str(err))
+
+        def _on_response(resp: Response) -> None:
+            if resp.status >= 400 and "/api/v1/auth" not in resp.url:
+                network_errors.append(f"{resp.status} {resp.url}")
+
+        page.on("console", _on_console)
+        page.on("pageerror", _on_page_error)
+        page.on("response", _on_response)
 
         # Seed localStorage with auth tokens
         await page.goto(f"{BASE_URL}/frontend/signin.html")

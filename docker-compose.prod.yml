@@ -1,0 +1,367 @@
+# =============================================================================
+# EduVision AI — PRODUCTION orchestration
+# =============================================================================
+# This file is the PRODUCTION topology. The original `docker-compose.yml` is
+# left untouched and remains the development stack (host source bind mounts,
+# `--reload`, published database ports). Do not "fix" dev here; deploy this.
+#
+# Intended topology — ONE thing is Internet-facing:
+#
+#                      INTERNET
+#                         |
+#                    HTTPS (TLS terminated
+#                    by the platform or a
+#                    reverse proxy)
+#                         |
+#                         v
+#               EduVision backend  (FastAPI :8000)
+#                   serves /frontend/* AND /api/v1/*
+#                         |
+#        +----------------+----------------+
+#        |                |                |
+#        v                v                v
+#   PostgreSQL         Redis          Storage
+#   PRIVATE            PRIVATE        PERSISTENT
+#   no published       no published   named volume
+#   port               port           storage_data
+#                         |
+#                         v
+#                 Celery worker
+#                 (no ports)
+#
+#   Celery beat        one-shot `migrate` service
+#   (no ports)         runs `alembic upgrade head` ONCE, then exits
+#
+# Exposure contract:
+#   PUBLIC   : backend :8000 (bound to 127.0.0.1 so it is not reachable from the
+#              network; on a PaaS, delete the `ports:` block and let the platform
+#              ingress route to the container port instead)
+#   PRIVATE  : postgres, redis, minio, celery-worker, celery-beat — none publish
+#              a host port, so none is reachable from outside the compose network
+#   ONESHOT  : migrate
+#
+# Usage (see deploy/README.md for the full procedure):
+#   cp .env.production.example .env.production   # then replace every CHANGE-ME
+#   $EDITOR .env.production
+#   docker compose --env-file .env.production -f docker-compose.prod.yml build
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+#   docker compose --env-file .env.production -f docker-compose.prod.yml ps
+#
+# `${VAR:?message}` is deliberate: if a secret is missing from the env file,
+# compose ABORTS with that message instead of silently substituting a default.
+# =============================================================================
+
+# An explicit project name keeps production in its own namespace — separate
+# containers, separate networks, separate volumes — so it can never collide with
+# the development stack, which derives its project name from the directory.
+name: eduvision-prod
+
+# =============================================================================
+# Shared environment
+# =============================================================================
+# Values that must match across every service that opens a connection to the same
+# dependency. Not secrets, so they live here rather than in the env file.
+x-app-env: &app-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER missing}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB missing}
+  DATABASE_SYNC_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+  # Redis is authenticated (see the redis service's requirepass below).
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD missing}@redis:6379/0
+  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/2
+
+  # Local filesystem storage on the persistent `storage_data` volume. This is the
+  # demo-safe choice: the local backend returns app-relative authenticated URLs,
+  # so no internal MinIO hostname can ever reach a browser.
+  STORAGE_PROVIDER: local
+  LOCAL_STORAGE_PATH: /app/storage-data
+
+  # Migrations are a separate one-shot service, so the web/worker processes must
+  # NOT also try to run them at startup (that would race N gunicorn workers
+  # against one schema).
+  AUTO_MIGRATE_ON_STARTUP: "false"
+  LIFESPAN_FAIL_FAST_ON_MIGRATION_ERROR: "true"
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  # PRIVATE. No `ports:` block — reachable only on the internal compose network.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER missing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB missing}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Uses POSTGRES_USER so it tracks the real role instead of hardcoding one.
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [eduvision]
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  # PRIVATE. No `ports:` block. `requirepass` is enabled so a password is
+  # required from every client; REDISCLI_AUTH lets the healthcheck authenticate
+  # without putting the password in the process arguments.
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD missing}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [eduvision]
+
+  # ── Migrations (one-shot) ──────────────────────────────────────────────────
+  # THE SINGLE MIGRATION STEP. Runs `alembic upgrade head` exactly once per
+  # deployment, to completion, before anything else starts. The backend, worker
+  # and beat all declare `depends_on: migrate: service_completed_successfully`,
+  # so the app cannot serve traffic against a schema that has not been migrated,
+  # and no replica ever races another on `alembic upgrade`.
+  # `restart: "no"` matters — this container is expected to exit 0.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - .env.production
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [eduvision]
+
+  # ── Backend (FastAPI + gunicorn) ───────────────────────────────────────────
+  # The ONLY public service. Serves the API under /api/v1 and the frontend under
+  # /frontend from the same origin, which is why the browser never makes a
+  # cross-origin request and needs no CORS preflight.
+  #
+  # `command:` overrides the Dockerfile CMD so the worker count and timeout come
+  # from the environment and stay consistent with the connection-pool sizing:
+  #   DATABASE_POOL_SIZE (5) + DATABASE_MAX_OVERFLOW (2) x WEB_CONCURRENCY (2)
+  #     = at most 14 PostgreSQL connections from this container.
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    restart: unless-stopped
+    command:
+      - gunicorn
+      - app.main:app
+      - --worker-class
+      - uvicorn.workers.UvicornWorker
+      - --bind
+      - 0.0.0.0:8000
+      - --workers
+      - "${WEB_CONCURRENCY:-2}"
+      - --timeout
+      - "${GUNICORN_TIMEOUT:-120}"
+      - --access-logfile
+      - "-"
+      - --error-logfile
+      - "-"
+    # Bound to the loopback interface deliberately: during local production-like
+    # testing this keeps the service off the network. On a PaaS, DELETE this
+    # whole `ports:` block and let the platform ingress reach container port
+    # 8000 — never bind 0.0.0.0 on a public host.
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    env_file:
+      - .env.production
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      # Persistent object storage. STORAGE_PROVIDER=local writes here, so this
+      # volume is what makes uploaded files and generated exports survive a
+      # container replacement.
+      - storage_data:/app/storage-data
+    healthcheck:
+      # `/health/ready` deliberately, not `/health`:
+      #   /health     also probes Celery, and celery-worker waits on THIS
+      #                container being healthy -> circular dependency deadlock.
+      #   /health/ready checks database + redis + storage only.
+      # Both endpoints answer HTTP 200 even when a dependency is down, so the
+      # body is matched explicitly. A container that cannot reach its database is
+      # reported unhealthy instead of being kept in rotation.
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS http://localhost:8000/api/v1/health/ready
+          | grep -q '"status":"ready"'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks: [eduvision]
+
+  # ── Celery worker ──────────────────────────────────────────────────────────
+  # PRIVATE. No ports, so the Celery control interface (broadcast RPC) is never
+  # reachable from outside the network.
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    restart: unless-stopped
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app
+      - worker
+      - -l
+      - info
+      - -c
+      - "${CELERY_WORKER_CONCURRENCY:-2}"
+      # Every routed queue must appear here or tasks are published to the broker
+      # and silently never run. celery_app.py:120-150 enforces this at import.
+      - -Q
+      - "${CELERY_WORKER_QUEUES:?CELERY_WORKER_QUEUES missing}"
+      - --without-gossip
+      - --without-mingle
+    env_file:
+      - .env.production
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      # Same volume as the backend: a worker-generated export must be readable
+      # by the API that serves it.
+      - storage_data:/app/storage-data
+    healthcheck:
+      # A broker round-trip to this node's control channel. Proves the worker is
+      # connected and consuming, which "the container is running" does not.
+      test:
+        - CMD-SHELL
+        - >-
+          celery -A app.workers.celery_app inspect ping
+          -d "celery@$$HOSTNAME" | grep -q pong
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 40s
+    networks: [eduvision]
+
+  # ── Celery beat (periodic scheduler) ───────────────────────────────────────
+  # PRIVATE. A separate always-on process from the worker.
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    restart: unless-stopped
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app
+      - beat
+      - -l
+      - info
+      # Beat state is intentionally in /tmp, not /app. It is regenerated on every
+      # start, so persisting it would only risk replaying stale schedules.
+      - --schedule=/tmp/celerybeat-schedule
+    env_file:
+      - .env.production
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Beat runs no HTTP server and registers no worker node, so liveness is
+      # asserted on the scheduler process, which is PID 1 in this container.
+      test: ["CMD-SHELL", "grep -aq beat /proc/1/cmdline"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks: [eduvision]
+
+  # ── MinIO (OPTIONAL, off by default) ───────────────────────────────────────
+  # Included behind a profile so switching STORAGE_PROVIDER to s3 later does not
+  # require editing this file — but it is NOT started with the default
+  # `docker compose ... up -d`, because the production storage path is
+  # STORAGE_PROVIDER=local on the `storage_data` volume.
+  #
+  # If you ever enable it: it must keep NO published port. Note that MinIO's
+  # console (`9001`) is a full admin surface — never publish it. And be aware
+  # that presigned URLs generated against an internal `minio:9000` endpoint are
+  # unusable by a public browser; use a genuinely public https endpoint instead.
+  #   docker compose --env-file .env.production -f docker-compose.prod.yml --profile minio up -d minio
+  #
+  # The credential check lives in the container's own shell (`$${VAR:?}`), not in
+  # compose interpolation. Compose interpolates every service regardless of
+  # profile, so a `${S3_ACCESS_KEY_ID:?...}` here would make `docker compose
+  # config` fail for a deployment that never enables this profile. The shell check
+  # fires only when the container actually starts.
+  minio:
+    image: minio/minio:latest
+    profiles: ["minio"]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        exec /usr/bin/docker-entrypoint.sh
+        $${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set before enabling the minio profile}
+        $${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set before enabling the minio profile}
+        server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-}
+    volumes:
+      - minio_data:/data
+    networks: [eduvision]
+
+networks:
+  eduvision:
+    driver: bridge
+
+volumes:
+  # Fresh, project-scoped volumes. A production deployment must start from an
+  # empty database and an empty storage bucket — never copy local development
+  # data into these.
+  postgres_data:
+  redis_data:
+  storage_data:
+  minio_data:

@@ -20,8 +20,8 @@ from app.storage.factory import get_storage_backend
 from app.workers.redis_client import get_redis_client
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession]:
-    async for session in get_session():
+async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession]:
+    async for session in get_session(request):
         yield session
 
 

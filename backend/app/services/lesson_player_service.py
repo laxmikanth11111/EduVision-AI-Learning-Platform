@@ -302,7 +302,7 @@ class LessonPlayerService:
             return None
         total = await self._topic_count_for_lesson(lesson_id)
         mode = player_mode or PlayerMode.LEARNING.value
-        source_units = []
+        source_units: list[dict[str, Any]] = []
         source_topic_map: list[int] | None = None
         learning_structure = None
         if mode == PlayerMode.SOURCE.value:
@@ -433,7 +433,7 @@ class LessonPlayerService:
 
         quiz = quizzes[0]
         attempt_repo = QuizAttemptRepository(self._uow.session)
-        attempts = await attempt_repo.list_by_quiz_and_user(quiz.id, uuid.UUID(str(owner_id)))
+        attempts = await attempt_repo.list_by_quiz_and_user(quiz.id, uuid.UUID(owner_id))
         completed = [a for a in attempts if a.status == "completed"]
         latest = completed[0] if completed else None
         latest_summary = None
@@ -491,7 +491,7 @@ class LessonPlayerService:
         )
         from app.services.recommendation_engine import generate_recommendations
 
-        user_str = str(owner_id)
+        user_str = owner_id
         memory = await educational_memory_service.load_from_db(self._uow.session, user_str)
         recommendation = generate_recommendations(user_str, memory)
 
@@ -619,7 +619,9 @@ class LessonPlayerService:
         topic_visuals: dict[str, list[dict[str, Any]]] | None = None,
         topic_animations: dict[str, list[dict[str, Any]]] | None = None,
     ) -> list[dict[str, Any]]:
-        outline_topics = (learning_structure.get("topics") or []) if learning_structure else []
+        outline_topics: list[dict[str, Any]] = (
+            (learning_structure.get("topics") or []) if learning_structure else []
+        )
         outline_map = {
             t["title"].lower(): t for t in outline_topics if isinstance(t, dict) and "title" in t
         }

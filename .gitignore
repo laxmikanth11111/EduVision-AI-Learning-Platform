@@ -15,6 +15,11 @@
 *.env.development
 *.env.staging
 *.env.test
+# Deployment TEMPLATES must be trackable so they can be reviewed and copied, while
+# every real environment file above stays ignored. Only `*.example` files are
+# un-ignored — .env, .env.production and friends remain excluded.
+!.env.*.example
+!**/.env.*.example
 
 # ── 2. Databases & Database Storage ──────────────────────────────────────────
 *.db

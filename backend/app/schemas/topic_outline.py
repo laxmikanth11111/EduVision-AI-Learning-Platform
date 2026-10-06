@@ -139,14 +139,17 @@ def build_outline_response(
     outline: Any | None,
 ) -> dict[str, Any]:
     if outline is None:
-        return TopicOutlineOut(
-            presentation_id=presentation_public_id,
-            title=None,
-            structure_version=2,
-            sections=[],
-            topics=[],
-            status="none",
-        ).model_dump(mode="json")
+        return cast(
+            dict[str, Any],
+            TopicOutlineOut(
+                presentation_id=presentation_public_id,
+                title=None,
+                structure_version=2,
+                sections=[],
+                topics=[],
+                status="none",
+            ).model_dump(mode="json"),
+        )
 
     raw_topics = (
         outline.topics or []
@@ -207,15 +210,18 @@ def build_outline_response(
         else outline.get("updated_at")
     )
 
-    return TopicOutlineOut(
-        presentation_id=presentation_public_id,
-        title=title_val,
-        structure_version=2,
-        sections=sections,
-        topics=parsed_topics,
-        status=status_val,
-        provider=provider_val,
-        model=model_val,
-        created_at=created_val,
-        updated_at=updated_val,
-    ).model_dump(mode="json")
+    return cast(
+        dict[str, Any],
+        TopicOutlineOut(
+            presentation_id=presentation_public_id,
+            title=title_val,
+            structure_version=2,
+            sections=sections,
+            topics=parsed_topics,
+            status=status_val,
+            provider=provider_val,
+            model=model_val,
+            created_at=created_val,
+            updated_at=updated_val,
+        ).model_dump(mode="json"),
+    )

@@ -5,7 +5,7 @@ from pptx import Presentation
 from pptx.util import Inches
 
 
-def build_presentation(out_path: str):
+def build_presentation(out_path: str) -> None:
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     prs = Presentation()
 

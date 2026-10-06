@@ -193,14 +193,14 @@ def _on_task_prerun(task_id: str = "", **kwargs: Any) -> None:
         # never leaks the worker binding into the caller's context.
         tokens = structlog.contextvars.bind_contextvars(request_id=found)
         with _task_state_lock:
-            _task_context_tokens[str(task_id)] = tokens
+            _task_context_tokens[task_id] = tokens
     with _task_state_lock:
-        _task_started_at[str(task_id)] = time.monotonic()
+        _task_started_at[task_id] = time.monotonic()
 
 
 def _task_duration(task_id: str) -> float | None:
     with _task_state_lock:
-        started = _task_started_at.pop(str(task_id), None)
+        started = _task_started_at.pop(task_id, None)
     if started is None:
         return None
     return time.monotonic() - started
@@ -208,8 +208,8 @@ def _task_duration(task_id: str) -> float | None:
 
 def _on_task_postrun(task_id: str = "", **kwargs: Any) -> None:
     with _task_state_lock:
-        _task_started_at.pop(str(task_id), None)
-        tokens = _task_context_tokens.pop(str(task_id), None)
+        _task_started_at.pop(task_id, None)
+        tokens = _task_context_tokens.pop(task_id, None)
     if tokens:
         structlog.contextvars.reset_contextvars(**tokens)
 

@@ -10,8 +10,9 @@ import asyncio
 import json
 import sys
 import time
+from typing import Any
 
-from playwright.async_api import async_playwright
+from playwright.async_api import ConsoleMessage, Request, async_playwright
 
 BASE_URL = "http://127.0.0.1:8000"
 TS = int(time.time())
@@ -26,7 +27,10 @@ USER_B = {
     "name": "Jordan Lee",
 }
 
-RESULTS = {
+console_errors: list[str] = []
+network_errors: list[str] = []
+
+RESULTS: dict[str, Any] = {
     "authentication": "NOT RUN",
     "dashboard": "NOT RUN",
     "upload": "NOT RUN",
@@ -37,12 +41,12 @@ RESULTS = {
     "ai_tutor": "NOT RUN",
     "video_lessons": "NOT RUN",
     "two_user_isolation": "NOT RUN",
-    "console_errors": [],
-    "network_errors": [],
+    "console_errors": console_errors,
+    "network_errors": network_errors,
 }
 
 
-async def main():
+async def main() -> None:
     print(f"Starting browser acceptance showcase against {BASE_URL}...")
 
     async with async_playwright() as p:
@@ -60,20 +64,19 @@ async def main():
         page = await context.new_page()
 
         # Monitor console and failed requests
-        page.on(
-            "console",
-            lambda msg: (
-                RESULTS["console_errors"].append(msg.text)
-                if msg.type == "error"
+        def _on_console(msg: ConsoleMessage) -> None:
+            if (
+                msg.type == "error"
                 and "favicon" not in msg.text
                 and "status of 404" not in msg.text
-                else None
-            ),
-        )
-        page.on(
-            "requestfailed",
-            lambda req: RESULTS["network_errors"].append(f"{req.method} {req.url} - {req.failure}"),
-        )
+            ):
+                console_errors.append(msg.text)
+
+        def _on_request_failed(req: Request) -> None:
+            network_errors.append(f"{req.method} {req.url} - {req.failure}")
+
+        page.on("console", _on_console)
+        page.on("requestfailed", _on_request_failed)
 
         # -------------------------------------------------------------
         # STEP 1: AUTHENTICATION (Register -> Login -> Tokens)

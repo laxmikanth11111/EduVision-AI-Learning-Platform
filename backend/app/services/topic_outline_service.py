@@ -13,7 +13,7 @@ import json
 import re
 import time
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 
@@ -412,18 +412,18 @@ class TopicOutlineService:
     def _parse_payload(cls, text: str) -> TopicOutlinePayload:
         cleaned = cls._extract_json(text)
         try:
-            return TopicOutlinePayload.model_validate_json(cleaned)
+            return cast(TopicOutlinePayload, TopicOutlinePayload.model_validate_json(cleaned))
         except ValidationError:
             try:
                 data = json.loads(cleaned)
                 if "outline" in data and isinstance(data["outline"], dict):
-                    return TopicOutlinePayload.model_validate(data["outline"])
+                    return cast(TopicOutlinePayload, TopicOutlinePayload.model_validate(data["outline"]))
                 if "topics" in data and isinstance(data["topics"], list):
-                    return TopicOutlinePayload.model_validate(data)
+                    return cast(TopicOutlinePayload, TopicOutlinePayload.model_validate(data))
             except Exception:
                 pass
             fixed = cls._repair_json(cleaned)
-            return TopicOutlinePayload.model_validate_json(fixed)
+            return cast(TopicOutlinePayload, TopicOutlinePayload.model_validate_json(fixed))
 
     @staticmethod
     def _extract_json(text: str) -> str:
@@ -755,8 +755,8 @@ class TopicOutlineService:
             if not title:
                 continue
 
-            start = max(1, min(int(topic.slide_ranges[0]), unit_count))
-            end = max(start, min(int(topic.slide_ranges[1]), unit_count))
+            start = max(1, min(topic.slide_ranges[0], unit_count))
+            end = max(start, min(topic.slide_ranges[1], unit_count))
 
             norm_key = _normalize_title(title)
             if norm_key in seen_titles:

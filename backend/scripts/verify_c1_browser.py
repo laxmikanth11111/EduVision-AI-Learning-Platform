@@ -5,12 +5,12 @@ import os
 import uuid
 
 import httpx
-from playwright.async_api import async_playwright
+from playwright.async_api import ConsoleMessage, Response, async_playwright
 
 BASE_URL = "http://127.0.0.1:8000"
 PPTX_PATH = os.path.join(os.path.dirname(__file__), "..", "tests", "fixtures", "computer_networks_sample.pptx")
 
-async def run_c1_browser_verification():
+async def run_c1_browser_verification() -> None:
     print("=== Starting Checkpoint C1 E2E Browser Verification ===")
 
     # 1. Register / Sign in real user
@@ -98,11 +98,19 @@ async def run_c1_browser_verification():
         context = await browser.new_context(viewport={"width": 1366, "height": 768})
         page = await context.new_page()
 
-        console_errors = []
-        network_errors = []
+        console_errors: list[str] = []
+        network_errors: list[str] = []
 
-        page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
-        page.on("response", lambda res: network_errors.append(f"{res.status} {res.url}") if res.status >= 400 else None)
+        def _on_console(msg: ConsoleMessage) -> None:
+            if msg.type == "error":
+                console_errors.append(msg.text)
+
+        def _on_response(res: Response) -> None:
+            if res.status >= 400:
+                network_errors.append(f"{res.status} {res.url}")
+
+        page.on("console", _on_console)
+        page.on("response", _on_response)
 
         # Inject auth tokens into localStorage before loading page
         await page.goto(f"{BASE_URL}/frontend/signin.html")
